@@ -116,7 +116,10 @@ export function AsetTable({ initialData, canDelete }: { initialData: AsetRow[]; 
         body: JSON.stringify(payload),
       });
       const result = await response.json().catch(() => ({ message: "Gagal menyimpan aset" }));
-      if (!response.ok) throw new Error(result.message || "Gagal menyimpan aset");
+      if (!response.ok) {
+        const detail = (result as any).errors ? (result as any).errors.map((e: any) => `${e.path}: ${e.message}`).join(", ") : "";
+        throw new Error(detail ? `${result.message} — ${detail}` : result.message || "Gagal menyimpan aset");
+      }
       setDialogOpen(false);
       setMessage(editingId ? "Aset berhasil diperbarui" : "Aset berhasil ditambahkan");
       await refreshAset();
