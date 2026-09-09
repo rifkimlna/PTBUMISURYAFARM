@@ -49,22 +49,24 @@ export const queryKeuanganSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20).optional(),
 });
 
-// Validasi Aset
+// Validasi Aset - pakai coerce biar string "1" dari form tetap valid
 export const createAsetSchema = z.object({
   id: z
     .string()
-    .regex(/^AST-\d{3,}$/, "ID harus format AST-001"),
-  namaAset: z.string().min(2).max(100),
-  jumlah: z.number().int().min(1, "Jumlah minimal 1"),
-  kondisi: z.string().min(2).max(50), // Baik, Rusak Ringan, etc
-  nilaiAset: z.number().positive().min(1000).max(10_000_000_000),
+    .trim()
+    .toUpperCase()
+    .regex(/^AST-\d{3,}$/, "ID harus format AST-001 (contoh: AST-005)"),
+  namaAset: z.string().min(2, "Nama aset minimal 2 karakter").max(100).trim(),
+  jumlah: z.coerce.number().int().min(1, "Jumlah minimal 1"),
+  kondisi: z.string().min(2, "Kondisi wajib diisi").max(50).trim(),
+  nilaiAset: z.coerce.number().positive("Nilai harus positif").min(1000, "Nilai minimal Rp 1.000").max(10_000_000_000, "Nilai terlalu besar"),
 });
 
 export const updateAsetSchema = z.object({
   namaAset: z.string().min(2).max(100).optional(),
-  jumlah: z.number().int().min(1).optional(),
+  jumlah: z.coerce.number().int().min(1).optional(),
   kondisi: z.string().min(2).max(50).optional(),
-  nilaiAset: z.number().positive().min(1000).max(10_000_000_000).optional(),
+  nilaiAset: z.coerce.number().positive().min(1000).max(10_000_000_000).optional(),
 }).refine((data) => Object.keys(data).length > 0, {
   message: "Minimal satu field harus diisi",
 });
