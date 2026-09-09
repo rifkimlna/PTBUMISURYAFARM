@@ -1,0 +1,159 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ===================== ENUMS =====================
+enum Role {
+  SUPER_ADMIN
+  ADMIN_PERTANIAN
+  ADMIN_KEUANGAN
+}
+
+enum StatusKesehatan {
+  SEHAT
+  PERLU_PERHATIAN
+  SAKIT
+  MATI
+}
+
+enum StatusKaryawan {
+  TETAP
+  KONTRAK
+  HARIAN
+}
+
+enum StatusGaji {
+  SUDAH_DIBAYAR
+  PENDING
+}
+
+enum TipeTransaksi {
+  PEMASUKAN
+  PENGELUARAN
+}
+
+// ===================== MODELS =====================
+
+model User {
+  id        String   @id @default(cuid())
+  nama      String
+  email     String   @unique
+  password  String // hashed with bcrypt
+  role      Role     @default(ADMIN_PERTANIAN)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relasi
+  riwayatDitangani RiwayatKesehatan[] @relation("PetugasRiwayat")
+  transaksiKas     TransaksiKas[]     @relation("AdminKas")
+
+  @@map("users")
+}
+
+model Pohon {
+  id           String            @id // Custom ID ex: PHN-BLK-A01
+  varietas     String
+  lokasiBlok   String
+  tanggalTanam DateTime
+  status       StatusKesehatan   @default(SEHAT)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  riwayat RiwayatKesehatan[]
+
+  @@index([lokasiBlok])
+  @@index([status])
+  @@map("pohon")
+}
+
+model RiwayatKesehatan {
+  id         String   @id @default(cuid())
+  pohonId    String
+  pohon      Pohon    @relation(fields: [pohonId], references: [id], onDelete: Cascade)
+
+  gejala     String   @db.Text
+  tindakan   String   @db.Text
+  fotoUrl    String? // URL publik cloud storage (bukan blob)
+  tanggalCek DateTime @default(now())
+
+  petugasId String
+  petugas   User   @relation("PetugasRiwayat", fields: [petugasId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@index([pohonId])
+  @@index([petugasId])
+  @@index([tanggalCek])
+  @@map("riwayat_kesehatan")
+}
+
+model Karyawan {
+  id           String         @id // Custom ID ex: EMP-001
+  namaLengkap  String
+  jabatan      String
+  statusKerja  StatusKaryawan
+  gajiPokok    Decimal        @db.Decimal(15, 2)
+  tanggalMasuk DateTime
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  riwayatGaji RiwayatGaji[]
+
+  @@index([statusKerja])
+  @@map("karyawan")
+}
+
+model RiwayatGaji {
+  id         String     @id @default(cuid())
+  karyawanId String
+  karyawan   Karyawan   @relation(fields: [karyawanId], references: [id], onDelete: Cascade)
+
+  bulanTahun String // Format: YYYY-MM ex: 2026-09
+  totalGaji  Decimal  @db.Decimal(15, 2)
+  status     StatusGaji @default(PENDING)
+  tanggalBayar DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([karyawanId, bulanTahun])
+  @@index([status])
+  @@map("riwayat_gaji")
+}
+
+model Aset {
+  id        String   @id // Custom ID ex: AST-001
+  namaAset  String
+  jumlah    Int      @default(1)
+  kondisi   String // ex: Baik, Rusak Ringan, Rusak Berat
+  nilaiAset Decimal  @db.Decimal(15, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("aset")
+}
+
+model TransaksiKas {
+  id         String        @id @default(cuid())
+  tipe       TipeTransaksi
+  kategori   String // ex: Penjualan Sawit, Pupuk, Gaji
+  jumlah     Decimal       @db.Decimal(15, 2)
+  keterangan String?       @db.Text
+  tanggal    DateTime      @default(now())
+
+  adminId String
+  admin   User   @relation("AdminKas", fields: [adminId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@index([tipe])
+  @@index([kategori])
+  @@index([tanggal])
+  @@index([adminId])
+  @@map("transaksi_kas")
+}

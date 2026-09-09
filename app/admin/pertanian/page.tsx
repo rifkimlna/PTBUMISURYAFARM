@@ -1,0 +1,67 @@
+import { prisma } from "@/lib/prisma";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
+import { PohonTable } from "@/components/admin/pohon-table";
+import Link from "next/link";
+
+export default async function PertanianDashboard() {
+  const [total, sehat, perhatian, sakit, pohon] = await Promise.all([
+    prisma.pohon.count(),
+    prisma.pohon.count({ where: { status: "SEHAT" } }),
+    prisma.pohon.count({ where: { status: "PERLU_PERHATIAN" } }),
+    prisma.pohon.count({ where: { status: "SAKIT" } }),
+    prisma.pohon.findMany({ orderBy: { createdAt: "desc" }, take: 20 }),
+  ]);
+
+  return (
+    <div className="space-y-8">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+            Pertanian <span className="font-semibold">overview</span>
+          </h1>
+          <p className="mt-1 text-sm text-slate-400">Ringkasan kesehatan — pt_bst</p>
+        </div>
+        <Link href="/admin/pertanian/scan">
+          <Button className="rounded-full px-5">
+            <Plus className="h-3.5 w-3.5" /> Update
+          </Button>
+        </Link>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { label: "Total", value: total, hint: "pohon" },
+          { label: "Sehat", value: sehat, hint: "green", accent: "text-green-800" },
+          { label: "Perhatian", value: perhatian, hint: "amber", accent: "text-amber-600" },
+          { label: "Sakit", value: sakit, hint: "red", accent: "text-red-500" },
+        ].map((s) => (
+          <Card key={s.label} className="border-slate-100">
+            <CardContent className="p-5">
+              <div className="text-xs tracking-wide text-slate-400">{s.label}</div>
+              <div className={`mt-2 text-3xl font-semibold tracking-tight ${s.accent || "text-slate-900"}`}>{s.value}</div>
+              <div className="mt-1 text-xs text-slate-400">{s.hint}</div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card className="overflow-hidden border-slate-100">
+        <div className="flex items-center justify-between border-b border-slate-50 px-6 py-4">
+          <div className="text-sm font-medium tracking-tight text-slate-900">Data Pohon</div>
+          <div className="text-xs text-slate-400">{pohon.length} entri</div>
+        </div>
+        <PohonTable
+          data={pohon.map((p) => ({
+            id: p.id,
+            varietas: p.varietas,
+            lokasiBlok: p.lokasiBlok,
+            status: p.status as string,
+            tanggalTanam: p.tanggalTanam.toISOString(),
+          }))}
+        />
+      </Card>
+    </div>
+  );
+}
