@@ -1,57 +1,34 @@
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { verifyToken } from "@/lib/auth";
+import { AsetTable } from "@/components/admin/aset-table";
 
 export default async function AsetPage() {
-  const aset = await prisma.aset.findMany({ orderBy: { createdAt: "desc" } });
-  const total = aset.reduce((s, a) => s + Number(a.nilaiAset) * a.jumlah, 0);
+  const [aset, cookieStore] = await Promise.all([
+    prisma.aset.findMany({ orderBy: { createdAt: "desc" } }),
+    cookies(),
+  ]);
+
+  const token = cookieStore.get("token")?.value;
+  const session = token ? await verifyToken(token) : null;
+  const canDelete = session?.role === "SUPER_ADMIN";
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div>
         <h1 className="text-xl font-bold text-slate-900">Inventaris Aset</h1>
-        <div className="text-sm text-slate-500">
-          Total Nilai: <span className="font-bold text-slate-900">Rp {total.toLocaleString("id-ID")}</span>
-        </div>
+        <p className="mt-1 text-sm text-slate-500">Daftar alat, traktor, dan gudang PT Bumi Surya Farm.</p>
       </div>
-      <Card className="border-slate-200">
-        <CardHeader>
-          <CardTitle className="text-sm">Daftar Alat / Traktor</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Nama</TableHead>
-                <TableHead>Jumlah</TableHead>
-                <TableHead>Kondisi</TableHead>
-                <TableHead>Nilai</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {aset.map((a) => (
-                <TableRow key={a.id}>
-                  <TableCell className="font-mono text-xs">{a.id}</TableCell>
-                  <TableCell>{a.namaAset}</TableCell>
-                  <TableCell>{a.jumlah}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{a.kondisi}</Badge>
-                  </TableCell>
-                  <TableCell>Rp {Number(a.nilaiAset).toLocaleString("id-ID")}</TableCell>
-                </TableRow>
-              ))}
-              {aset.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-slate-500">
-                    Belum ada aset
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <AsetTable
+        initialData={aset.map((a) => ({
+          id: a.id,
+          namaAset: a.namaAset,
+          jumlah: a.jumlah,
+          kondisi: a.kondisi,
+          nilaiAset: Number(a.nilaiAset),
+        }))}
+        canDelete={canDelete}
+      />
     </div>
   );
 }
