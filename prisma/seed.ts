@@ -25,6 +25,8 @@ async function main() {
     });
   }
 
+  const budi = await prisma.user.findUnique({ where: { email: "budi@ptbst.id" } });
+
   await prisma.pohon.upsert({
     where: { id: "PHN-BLK-A01" },
     update: {
@@ -34,6 +36,13 @@ async function main() {
       hasilPanen: 125.5 as any,
       pemupukan: "NPK 2kg - 2026-01-15",
       pengobatan: "Fungisida 2ml/L - Sehat",
+      fotoGeotagUrl: "https://picsum.photos/seed/phn-a01/600/400",
+      latitude: -2.983,
+      longitude: 104.752,
+      geotagAccuracy: 12,
+      geotagSource: "GPS",
+      geotagTimestamp: new Date("2026-09-09T08:00:00Z"),
+      geotagAdminId: budi?.id,
     },
     create: {
       id: "PHN-BLK-A01",
@@ -46,6 +55,13 @@ async function main() {
       hasilPanen: 125.5 as any,
       pemupukan: "NPK 2kg - 2026-01-15",
       pengobatan: "Fungisida 2ml/L - Sehat",
+      fotoGeotagUrl: "https://picsum.photos/seed/phn-a01/600/400",
+      latitude: -2.983,
+      longitude: 104.752,
+      geotagAccuracy: 12,
+      geotagSource: "GPS",
+      geotagTimestamp: new Date("2026-09-09T08:00:00Z"),
+      geotagAdminId: budi?.id,
       status: "SEHAT",
     },
   });
@@ -60,6 +76,13 @@ async function main() {
       hasilPanen: 98.0 as any,
       pemupukan: "Urea 1.5kg - 2026-02-10",
       pengobatan: "Insektisida - Perlu Perhatian",
+      fotoGeotagUrl: "https://picsum.photos/seed/phn-a02/600/400",
+      latitude: -2.984,
+      longitude: 104.753,
+      geotagAccuracy: 18,
+      geotagSource: "GPS",
+      geotagTimestamp: new Date("2026-09-08T08:00:00Z"),
+      geotagAdminId: budi?.id,
     },
     create: {
       id: "PHN-BLK-A02",
@@ -72,6 +95,13 @@ async function main() {
       hasilPanen: 98.0 as any,
       pemupukan: "Urea 1.5kg - 2026-02-10",
       pengobatan: "Insektisida - Perlu Perhatian",
+      fotoGeotagUrl: "https://picsum.photos/seed/phn-a02/600/400",
+      latitude: -2.984,
+      longitude: 104.753,
+      geotagAccuracy: 18,
+      geotagSource: "GPS",
+      geotagTimestamp: new Date("2026-09-08T08:00:00Z"),
+      geotagAdminId: budi?.id,
       status: "PERLU_PERHATIAN",
     },
   });
@@ -85,6 +115,13 @@ async function main() {
       hasilPanen: 45.2 as any,
       pemupukan: "Kompos 3kg - 2026-03-01",
       pengobatan: "Pestisida - Sakit ringan",
+      fotoGeotagUrl: "https://picsum.photos/seed/phn-b01/600/400",
+      latitude: -2.99,
+      longitude: 104.76,
+      geotagAccuracy: 25,
+      geotagSource: "MANUAL",
+      geotagTimestamp: new Date("2026-09-07T08:00:00Z"),
+      geotagAdminId: budi?.id,
     },
     create: {
       id: "PHN-BLK-B01",
@@ -97,6 +134,13 @@ async function main() {
       hasilPanen: 45.2 as any,
       pemupukan: "Kompos 3kg - 2026-03-01",
       pengobatan: "Pestisida - Sakit ringan",
+      fotoGeotagUrl: "https://picsum.photos/seed/phn-b01/600/400",
+      latitude: -2.99,
+      longitude: 104.76,
+      geotagAccuracy: 25,
+      geotagSource: "MANUAL",
+      geotagTimestamp: new Date("2026-09-07T08:00:00Z"),
+      geotagAdminId: budi?.id,
       status: "SAKIT",
     },
   });

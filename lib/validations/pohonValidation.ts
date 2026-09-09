@@ -2,6 +2,7 @@ import { z } from "zod";
 
 // Enum mirrors for runtime validation
 export const StatusKesehatanEnum = z.enum(["SEHAT", "PERLU_PERHATIAN", "SAKIT", "MATI"]);
+export const GeotagSourceEnum = z.enum(["GPS", "EXIF", "MANUAL"]);
 
 // Custom ID: PHN-BLK-A01, PHN-A01-001, etc - flexible but must PHN- prefix
 const customPohonIdRegex = /^PHN-[A-Z0-9-]+$/;
@@ -100,7 +101,34 @@ export const updateRiwayatKesehatanSchema = z.object({
   tanggalCek: z.coerce.date().optional(),
 });
 
-// Query filter untuk list pohon - 11 field support
+// Geotag wajib - foto terbaru per pohon (single)
+export const createFotoGeotagSchema = z.object({
+  latitude: z.coerce.number().min(-90).max(90),
+  longitude: z.coerce.number().min(-180).max(180),
+  geotagAccuracy: z.coerce.number().min(0).max(10000).optional().nullable(),
+  geotagTimestamp: z.coerce.date().optional().nullable(),
+  geotagSource: GeotagSourceEnum.default("GPS").optional(),
+});
+
+// Untuk PUT /api/pohon/[id]/geotag - overwrite geotag (foto + lat/lng wajib, overwrite)
+export const updatePohonGeotagSchema = z
+  .object({
+    latitude: z.coerce.number().min(-90, "Latitude -90..90").max(90).optional().nullable(),
+    longitude: z.coerce.number().min(-180).max(180).optional().nullable(),
+    geotagAccuracy: z.coerce.number().min(0).max(10000).optional().nullable(),
+    geotagTimestamp: z.coerce.date().optional().nullable(),
+    geotagSource: GeotagSourceEnum.optional().nullable(),
+    koordinat: z.string().max(50).optional().nullable().or(z.literal("")),
+  })
+  .refine((d) => d.latitude != null || d.longitude != null || d.geotagAccuracy != null || d.geotagTimestamp != null || d.koordinat, {
+    message: "Minimal satu field geotag harus diisi",
+  })
+  .refine((d) => (d.latitude == null) === (d.longitude == null), {
+    message: "latitude & longitude harus keduanya diisi atau keduanya kosong",
+    path: ["latitude"],
+  });
+
+// Query filter untuk list pohon - 11 field + geotag
 export const queryPohonSchema = z.object({
   lokasiBlok: z.string().optional(),
   status: StatusKesehatanEnum.optional(),
@@ -108,6 +136,7 @@ export const queryPohonSchema = z.object({
   namaPohon: z.string().optional(),
   jenis: z.string().optional(),
   koordinat: z.string().optional(),
+  hasGeotag: z.enum(["true", "false"]).optional(),
   page: z.coerce.number().int().min(1).default(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20).optional(),
 });
@@ -116,4 +145,6 @@ export type CreatePohonInput = z.infer<typeof createPohonSchema>;
 export type UpdatePohonInput = z.infer<typeof updatePohonSchema>;
 export type UpdatePohonMasterInput = z.infer<typeof updatePohonMasterSchema>;
 export type UpdatePohonLapanganInput = z.infer<typeof updatePohonLapanganSchema>;
+export type UpdatePohonGeotagInput = z.infer<typeof updatePohonGeotagSchema>;
+export type CreateFotoGeotagInput = z.infer<typeof createFotoGeotagSchema>;
 export type CreateRiwayatInput = z.infer<typeof createRiwayatKesehatanSchema>;

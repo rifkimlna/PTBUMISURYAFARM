@@ -37,6 +37,12 @@ enum TipeTransaksi {
   PENGELUARAN
 }
 
+enum GeotagSource {
+  GPS
+  EXIF
+  MANUAL
+}
+
 // ===================== MODELS =====================
 
 model User {
@@ -51,6 +57,7 @@ model User {
   // Relasi
   riwayatDitangani RiwayatKesehatan[] @relation("PetugasRiwayat")
   transaksiKas     TransaksiKas[]     @relation("AdminKas")
+  geotagPohon     Pohon[]            @relation("GeotagAdmin")
 
   @@map("users")
 }
@@ -66,6 +73,16 @@ model Pohon {
   hasilPanen   Decimal? @db.Decimal(10, 2) // HASIL PANEN KG
   pemupukan    String?  @db.Text // PEMUPUKAN - riwayat pupuk terakhir
   pengobatan   String?  @db.Text // PENGOBATAN - riwayat obat terakhir
+  // Geotagging wajib - foto terbaru per pohon
+  fotoGeotagUrl   String?  // URL foto geotag terbaru
+  latitude        Float?   @db.DoublePrecision // -90..90
+  longitude       Float?   @db.DoublePrecision // -180..180
+  geotagAccuracy  Float?   @db.DoublePrecision // meter
+  geotagTimestamp DateTime? // waktu capture geotag
+  geotagSource    GeotagSource? // GPS | EXIF | MANUAL
+  geotagAdminId   String?
+  geotagAdmin     User?    @relation("GeotagAdmin", fields: [geotagAdminId], references: [id], onDelete: SetNull)
+  geotagUpdatedAt DateTime? @updatedAt
   status       StatusKesehatan   @default(SEHAT)
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
@@ -76,6 +93,8 @@ model Pohon {
   @@index([status])
   @@index([jenis])
   @@index([tanggalTanam])
+  @@index([geotagAdminId])
+  @@index([geotagTimestamp])
   @@map("pohon")
 }
 
