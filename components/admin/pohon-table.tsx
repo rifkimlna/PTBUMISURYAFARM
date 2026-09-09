@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { QrCode, Eye, Pencil, MapPin } from "lucide-react";
+import { QrCode, Eye, Pencil, ClipboardList, MapPin } from "lucide-react";
 import { QrModal } from "./qr-modal";
 import Link from "next/link";
 
@@ -140,9 +140,14 @@ export function PohonTable({ data }: { data: Pohon[] }) {
                             <Eye className="h-3 w-3" />
                           </Button>
                         </Link>
-                        <Link href={`/admin/pertanian/scan?id=${p.id}`}>
+                        <Link href={`/admin/pertanian/pohon/${p.id}/edit`} title="Edit Master">
                           <Button variant="ghost" size="sm" className="h-7 w-7 rounded-full" type="button">
                             <Pencil className="h-3 w-3" />
+                          </Button>
+                        </Link>
+                        <Link href={`/admin/pertanian/pohon/${p.id}/lapangan`} title="Data Lapangan">
+                          <Button variant="ghost" size="sm" className="h-7 w-7 rounded-full bg-emerald-50 hover:bg-emerald-100" type="button">
+                            <ClipboardList className="h-3 w-3 text-emerald-700" />
                           </Button>
                         </Link>
                       </div>

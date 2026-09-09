@@ -45,6 +45,39 @@ export const updatePohonSchema = z.object({
   message: "Minimal satu field harus diisi untuk update",
 });
 
+// Edit Master - identitas pohon (jarang berubah)
+export const updatePohonMasterSchema = z
+  .object({
+    namaPohon: z.string().min(2).max(100).optional().nullable().or(z.literal("")),
+    varietas: z.string().min(2).max(100).optional(),
+    jenis: z.string().min(2).max(50).optional().nullable().or(z.literal("")),
+    lokasiBlok: z.string().min(2).max(50).optional(),
+    tanggalTanam: z.coerce.date().optional(),
+    koordinat: z
+      .string()
+      .max(50, "Koordinat maksimal 50 karakter")
+      .regex(/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/, "Format koordinat: -2.983, 104.752")
+      .optional()
+      .nullable()
+      .or(z.literal("")),
+    status: StatusKesehatanEnum.optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "Minimal satu field master harus diisi",
+  });
+
+// Data Lapangan - operasional harian (sering berubah di lapangan)
+export const updatePohonLapanganSchema = z
+  .object({
+    hasilPanen: z.coerce.number().min(0).max(999999).optional().nullable(),
+    pemupukan: z.string().max(2000).optional().nullable().or(z.literal("")),
+    pengobatan: z.string().max(2000).optional().nullable().or(z.literal("")),
+    status: StatusKesehatanEnum.optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "Minimal satu field lapangan harus diisi",
+  });
+
 // Validasi untuk RiwayatKesehatan (input kesehatan pohon)
 export const createRiwayatKesehatanSchema = z.object({
   gejala: z.string().min(5, "Gejala minimal 5 karakter").max(2000),
@@ -81,4 +114,6 @@ export const queryPohonSchema = z.object({
 
 export type CreatePohonInput = z.infer<typeof createPohonSchema>;
 export type UpdatePohonInput = z.infer<typeof updatePohonSchema>;
+export type UpdatePohonMasterInput = z.infer<typeof updatePohonMasterSchema>;
+export type UpdatePohonLapanganInput = z.infer<typeof updatePohonLapanganSchema>;
 export type CreateRiwayatInput = z.infer<typeof createRiwayatKesehatanSchema>;

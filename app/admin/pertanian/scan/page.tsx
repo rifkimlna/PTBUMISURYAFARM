@@ -12,7 +12,19 @@ import { useSearchParams } from "next/navigation";
 
 function ScanForm() {
   const search = useSearchParams();
-  const [pohonId, setPohonId] = useState(search.get("id") || "PHN-BLK-A01");
+  const initialId = search.get("id");
+  // Redirect ke halaman lapangan terpisah jika ada id
+  if (initialId) {
+    if (typeof window !== "undefined") {
+      window.location.replace(`/admin/pertanian/pohon/${initialId}/lapangan`);
+      return (
+        <div className="text-sm text-slate-500">
+          Mengalihkan ke Data Lapangan {initialId}...
+        </div>
+      );
+    }
+  }
+  const [pohonId, setPohonId] = useState(initialId || "PHN-BLK-A01");
   const [status, setStatus] = useState("SEHAT");
   const [gejala, setGejala] = useState("");
   const [tindakan, setTindakan] = useState("");
