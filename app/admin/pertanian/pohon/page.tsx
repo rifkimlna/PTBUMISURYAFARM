@@ -25,7 +25,7 @@ export default async function DataPohonPage() {
             <p className="text-sm text-slate-500">{pohon.length} pohon terdata • Kelola varietas, blok & status</p>
           </div>
         </div>
-        <Link href="/admin/pertanian/scan">
+        <Link href="/admin/pertanian/pohon/tambah">
           <Button className="rounded-full bg-green-700 hover:bg-green-800">
             <Plus className="h-3.5 w-3.5" /> Tambah Pohon
           </Button>
@@ -34,12 +34,19 @@ export default async function DataPohonPage() {
 
       <Card className="overflow-hidden border-slate-100">
         <PohonTable
-          data={pohon.map((p) => ({
+          data={pohon.map((p: any) => ({
             id: p.id,
+            namaPohon: p.namaPohon,
             varietas: p.varietas,
+            jenis: p.jenis,
             lokasiBlok: p.lokasiBlok,
-            status: p.status as string,
             tanggalTanam: p.tanggalTanam.toISOString(),
+            koordinat: p.koordinat,
+            hasilPanen: p.hasilPanen?.toString?.() ?? p.hasilPanen,
+            pemupukan: p.pemupukan,
+            pengobatan: p.pengobatan,
+            status: p.status as string,
+            _count: p._count,
           }))}
         />
       </Card>

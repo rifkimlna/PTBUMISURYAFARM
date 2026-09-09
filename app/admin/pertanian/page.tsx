@@ -11,7 +11,7 @@ export default async function PertanianDashboard() {
     prisma.pohon.count({ where: { status: "SEHAT" } }),
     prisma.pohon.count({ where: { status: "PERLU_PERHATIAN" } }),
     prisma.pohon.count({ where: { status: "SAKIT" } }),
-    prisma.pohon.findMany({ orderBy: { createdAt: "desc" }, take: 20 }),
+    prisma.pohon.findMany({ orderBy: { createdAt: "desc" }, take: 20, include: { _count: { select: { riwayat: true } } } }),
   ]);
 
   return (
@@ -53,12 +53,19 @@ export default async function PertanianDashboard() {
           <div className="text-xs text-slate-400">{pohon.length} entri</div>
         </div>
         <PohonTable
-          data={pohon.map((p) => ({
+          data={pohon.map((p: any) => ({
             id: p.id,
+            namaPohon: p.namaPohon,
             varietas: p.varietas,
+            jenis: p.jenis,
             lokasiBlok: p.lokasiBlok,
-            status: p.status as string,
             tanggalTanam: p.tanggalTanam.toISOString(),
+            koordinat: p.koordinat,
+            hasilPanen: p.hasilPanen?.toString?.() ?? p.hasilPanen,
+            pemupukan: p.pemupukan,
+            pengobatan: p.pengobatan,
+            status: p.status as string,
+            _count: (p as any)._count,
           }))}
         />
       </Card>

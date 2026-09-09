@@ -16,6 +16,9 @@ export async function GET(req: NextRequest) {
       lokasiBlok: searchParams.get("lokasiBlok") || undefined,
       status: searchParams.get("status") || undefined,
       varietas: searchParams.get("varietas") || undefined,
+      namaPohon: searchParams.get("namaPohon") || undefined,
+      jenis: searchParams.get("jenis") || undefined,
+      koordinat: searchParams.get("koordinat") || undefined,
       page: searchParams.get("page") || undefined,
       limit: searchParams.get("limit") || undefined,
     });
@@ -28,6 +31,9 @@ export async function GET(req: NextRequest) {
     if (query.lokasiBlok) where.lokasiBlok = { contains: query.lokasiBlok, mode: "insensitive" };
     if (query.status) where.status = query.status;
     if (query.varietas) where.varietas = { contains: query.varietas, mode: "insensitive" };
+    if (query.namaPohon) where.namaPohon = { contains: query.namaPohon, mode: "insensitive" };
+    if (query.jenis) where.jenis = { contains: query.jenis, mode: "insensitive" };
+    if (query.koordinat) where.koordinat = { contains: query.koordinat, mode: "insensitive" };
 
     const [data, total] = await Promise.all([
       prisma.pohon.findMany({
@@ -65,9 +71,15 @@ export async function POST(req: NextRequest) {
     const pohon = await prisma.pohon.create({
       data: {
         id: parsed.id,
+        namaPohon: (parsed.namaPohon as string) || null,
         varietas: parsed.varietas,
+        jenis: (parsed.jenis as string) || null,
         lokasiBlok: parsed.lokasiBlok,
         tanggalTanam: parsed.tanggalTanam,
+        koordinat: (parsed.koordinat as string) || null,
+        hasilPanen: (parsed.hasilPanen as any) ?? null,
+        pemupukan: (parsed.pemupukan as string) || null,
+        pengobatan: (parsed.pengobatan as string) || null,
         status: parsed.status as any,
       },
     });

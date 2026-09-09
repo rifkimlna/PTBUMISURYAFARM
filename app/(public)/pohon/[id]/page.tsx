@@ -48,7 +48,7 @@ export default async function PublicPohonPage({ params }: { params: Promise<{ id
                 <div>
                   <div className="text-xs tracking-[0.14em] text-slate-400">PT BUMI SURYA FARM • POHON</div>
                   <div className="text-lg font-semibold tracking-tight text-slate-900">{pohon.id}</div>
-                  <div className="text-xs text-slate-500">{pohon.varietas} • {pohon.lokasiBlok}</div>
+                  <div className="text-xs text-slate-500">{(pohon as any).namaPohon || pohon.varietas} • {(pohon as any).jenis || pohon.varietas} • {pohon.lokasiBlok}</div>
                 </div>
               </div>
               {statusBadge(pohon.status as string)}
@@ -57,22 +57,43 @@ export default async function PublicPohonPage({ params }: { params: Promise<{ id
             <div className="mt-6 grid grid-cols-3 gap-3">
               <div className="rounded-2xl bg-slate-50 px-4 py-4">
                 <div className="flex items-center gap-1 text-[11px] tracking-wide text-slate-400">
-                  <Sprout className="h-3 w-3" /> Varietas
+                  <Sprout className="h-3 w-3" /> Jenis
                 </div>
-                <div className="mt-1 text-sm font-medium text-slate-900 leading-tight">{pohon.varietas}</div>
+                <div className="mt-1 text-sm font-medium text-slate-900 leading-tight">{(pohon as any).jenis || pohon.varietas}</div>
+                <div className="text-[11px] text-slate-400">{(pohon as any).namaPohon || "-"}</div>
               </div>
               <div className="rounded-2xl bg-slate-50 px-4 py-4">
                 <div className="flex items-center gap-1 text-[11px] tracking-wide text-slate-400">
                   <MapPinned className="h-3 w-3" /> Blok
                 </div>
                 <div className="mt-1 text-sm font-medium text-slate-900">{pohon.lokasiBlok}</div>
+                {(pohon as any).koordinat && (
+                  <a href={`https://maps.google.com/?q=${encodeURIComponent((pohon as any).koordinat)}`} target="_blank" className="text-[11px] text-emerald-600 hover:underline">
+                    {(pohon as any).koordinat}
+                  </a>
+                )}
               </div>
               <div className="rounded-2xl bg-slate-50 px-4 py-4">
                 <div className="flex items-center gap-1 text-[11px] tracking-wide text-slate-400">
                   <Calendar className="h-3 w-3" /> Usia
                 </div>
                 <div className="mt-1 text-sm font-medium text-slate-900">{usiaTahun} thn</div>
-                <div className="text-[11px] text-slate-400">{usiaHari} hari</div>
+                <div className="text-[11px] text-slate-400">{usiaHari} hari • {new Date(pohon.tanggalTanam).toLocaleDateString("id-ID")}</div>
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-3 gap-3">
+              <div className="rounded-2xl bg-emerald-50 border border-emerald-100 px-4 py-3">
+                <div className="text-[11px] tracking-wide text-emerald-700">Hasil Panen</div>
+                <div className="mt-1 text-sm font-semibold text-emerald-900">{(pohon as any).hasilPanen ? `${Number((pohon as any).hasilPanen).toFixed(1)} KG` : "-"}</div>
+              </div>
+              <div className="rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3">
+                <div className="text-[11px] tracking-wide text-amber-700">Pemupukan</div>
+                <div className="mt-1 text-xs font-medium text-amber-900 line-clamp-2">{(pohon as any).pemupukan || "-"}</div>
+              </div>
+              <div className="rounded-2xl bg-sky-50 border border-sky-100 px-4 py-3">
+                <div className="text-[11px] tracking-wide text-sky-700">Pengobatan</div>
+                <div className="mt-1 text-xs font-medium text-sky-900 line-clamp-2">{(pohon as any).pengobatan || "-"}</div>
               </div>
             </div>
 
