@@ -145,16 +145,56 @@ async function main() {
     },
   });
 
+  await prisma.pohon.upsert({
+    where: { id: "PHN-BLK-C01" },
+    update: {
+      namaPohon: "Pohon Sawit C01",
+      jenis: "Sawit DxP",
+      koordinat: "-2.995, 104.765",
+      hasilPanen: 60.0 as any,
+      pemupukan: "NPK 2kg - 2026-03-10",
+      pengobatan: "Pemantauan rutin - Sehat",
+    },
+    create: {
+      id: "PHN-BLK-C01",
+      namaPohon: "Pohon Sawit C01",
+      varietas: "Sawit DxP",
+      jenis: "Sawit DxP",
+      lokasiBlok: "Blok C",
+      tanggalTanam: new Date("2024-03-05"),
+      koordinat: "-2.995, 104.765",
+      hasilPanen: 60.0 as any,
+      pemupukan: "NPK 2kg - 2026-03-10",
+      pengobatan: "Pemantauan rutin - Sehat",
+      status: "SEHAT",
+    },
+  });
+
   await prisma.karyawan.upsert({
     where: { id: "EMP-001" },
-    update: {},
+    update: {
+      telepon: "081234567890",
+      email: "joko.tani@ptbst.id",
+      alamat: "Perumahan Bumi Surya, Blok A",
+      tanggalLahir: new Date("1985-06-15"),
+      jenisKelamin: "LAKI_LAKI",
+      divisi: "Operasional Kebun",
+      lokasiKerja: "Blok A",
+    },
     create: {
       id: "EMP-001",
       namaLengkap: "Joko Tani",
       jabatan: "Mandor",
       statusKerja: "TETAP",
-      gajiPokok: 3500000 as any,
+      gajiPokok: 3500000,
       tanggalMasuk: new Date("2023-01-10"),
+      telepon: "081234567890",
+      email: "joko.tani@ptbst.id",
+      alamat: "Perumahan Bumi Surya, Blok A",
+      tanggalLahir: new Date("1985-06-15"),
+      jenisKelamin: "LAKI_LAKI",
+      divisi: "Operasional Kebun",
+      lokasiKerja: "Blok A",
     },
   });
 

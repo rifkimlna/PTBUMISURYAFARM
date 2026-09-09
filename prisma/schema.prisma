@@ -32,6 +32,11 @@ enum StatusGaji {
   PENDING
 }
 
+enum JenisKelamin {
+  LAKI_LAKI
+  PEREMPUAN
+}
+
 enum TipeTransaksi {
   PEMASUKAN
   PENGELUARAN
@@ -126,12 +131,21 @@ model Karyawan {
   statusKerja  StatusKaryawan
   gajiPokok    Decimal        @db.Decimal(15, 2)
   tanggalMasuk DateTime
+  telepon      String?
+  email        String?
+  alamat       String?        @db.Text
+  tanggalLahir DateTime?
+  jenisKelamin JenisKelamin?
+  divisi       String?
+  lokasiKerja  String?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
   riwayatGaji RiwayatGaji[]
 
   @@index([statusKerja])
+  @@index([divisi])
+  @@index([lokasiKerja])
   @@map("karyawan")
 }
 

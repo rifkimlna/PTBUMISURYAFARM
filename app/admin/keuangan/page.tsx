@@ -90,10 +90,18 @@ export default async function KeuanganPage() {
           id: k.id,
           namaLengkap: k.namaLengkap,
           jabatan: k.jabatan,
-          statusKerja: k.statusKerja as string,
+          statusKerja: k.statusKerja,
           gajiPokok: Number(k.gajiPokok),
-          bulanGaji: k.riwayatGaji[0]?.bulanTahun || "-",
-          statusGaji: (k.riwayatGaji[0]?.status as string) || "PENDING",
+          tanggalMasuk: k.tanggalMasuk.toISOString(),
+          telepon: k.telepon ?? "",
+          email: k.email ?? "",
+          alamat: k.alamat ?? "",
+          tanggalLahir: k.tanggalLahir?.toISOString() ?? "",
+          jenisKelamin: k.jenisKelamin ?? "",
+          divisi: k.divisi ?? "",
+          lokasiKerja: k.lokasiKerja ?? "",
+          bulanGaji: k.riwayatGaji[0]?.bulanTahun || "",
+          statusGaji: k.riwayatGaji[0]?.status ?? "PENDING",
         }))}
       />
 
