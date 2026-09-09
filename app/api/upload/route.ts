@@ -3,10 +3,8 @@ import { requireAuthAndRole } from "@/lib/auth";
 import { uploadFotoLapangan } from "@/lib/storage";
 import { successResponse, errorResponse } from "@/lib/api-response";
 
-// POST /api/upload - upload foto lapangan (gunakan di form manapun)
+// POST /api/upload - upload foto lapangan (tanpa login demo)
 export async function POST(req: NextRequest) {
-  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_PERTANIAN", "ADMIN_KEUANGAN"]);
-  if (auth instanceof Response) return auth;
 
   try {
     const formData = await req.formData();

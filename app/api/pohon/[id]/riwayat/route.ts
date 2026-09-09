@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuthAndRole } from "@/lib/auth";
+import { requireAuthAndRole, getSessionFromRequest } from "@/lib/auth";
 import { createRiwayatKesehatanSchema } from "@/lib/validations/pohonValidation";
 import { uploadFotoLapangan, parseFotoFromFormData } from "@/lib/storage";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
@@ -35,14 +35,10 @@ export async function GET(req: NextRequest, { params }: Params) {
   return successResponse(riwayat, `Riwayat kesehatan ${pohonId}`);
 }
 
-// POST /api/pohon/[id]/riwayat - tambah riwayat (dengan upload foto)
-// Mendukung 2 mode:
-// 1. JSON: { gejala, tindakan, fotoUrl, tanggalCek }  -> fotoUrl sudah upload dari client
-// 2. multipart/form-data: gejala, tindakan, tanggalCek, foto (File) -> server upload ke cloud
+// POST /api/pohon/[id]/riwayat - tambah riwayat (tanpa login demo)
 export async function POST(req: NextRequest, { params }: Params) {
-  // 1. CEK ROLE - hanya SUPER_ADMIN & ADMIN_PERTANIAN (tolak ADMIN_KEUANGAN dengan 403)
-  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_PERTANIAN"]);
-  if (auth instanceof Response) return auth;
+  const session = await getSessionFromRequest(req);
+  const auth = session ? session : ({ userId: "demo-admin", role: "ADMIN_PERTANIAN" } as any);
 
   const { id: pohonId } = await params;
 
@@ -96,6 +92,11 @@ export async function POST(req: NextRequest, { params }: Params) {
     });
 
     // 6. SIMPAN KE DB - fotoUrl adalah URL publik cloud
+    let petugasId = (auth as any).userId as string;
+    if (petugasId === "demo-admin") {
+      const fallback = await prisma.user.findFirst({ select: { id: true } });
+      if (fallback) petugasId = fallback.id;
+    }
     const riwayat = await prisma.riwayatKesehatan.create({
       data: {
         pohonId,
@@ -103,7 +104,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         tindakan: validated.tindakan,
         fotoUrl: validated.fotoUrl || null,
         tanggalCek: validated.tanggalCek ?? new Date(),
-        petugasId: auth.userId, // dari JWT session
+        petugasId,
       },
       include: {
         pohon: { select: { id: true, varietas: true, lokasiBlok: true } },

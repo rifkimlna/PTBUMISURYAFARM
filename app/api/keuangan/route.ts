@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuthAndRole } from "@/lib/auth";
+import { requireAuthAndRole, getSessionFromRequest } from "@/lib/auth";
 import { createTransaksiKasSchema, queryKeuanganSchema } from "@/lib/validations/keuanganValidation";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 import { ZodError } from "zod";
@@ -64,10 +64,15 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/keuangan - SUPER_ADMIN, ADMIN_KEUANGAN only
+// POST /api/keuangan - tanpa login demo
 export async function POST(req: NextRequest) {
-  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_KEUANGAN"]);
-  if (auth instanceof Response) return auth;
+  const session = await getSessionFromRequest(req);
+  let adminId: string | null = (session as any)?.userId || null;
+  if (!adminId) {
+    const fallback = await prisma.user.findFirst({ select: { id: true } });
+    adminId = fallback?.id || null;
+  }
+  if (!adminId) return errorResponse("Admin tidak ditemukan", 500);
 
   try {
     const body = await req.json();
@@ -80,7 +85,7 @@ export async function POST(req: NextRequest) {
         jumlah: parsed.jumlah as any,
         keterangan: parsed.keterangan ?? null,
         tanggal: parsed.tanggal ?? new Date(),
-        adminId: auth.userId,
+        adminId: adminId!,
       },
       include: { admin: { select: { id: true, nama: true } } },
     });

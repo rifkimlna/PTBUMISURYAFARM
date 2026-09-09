@@ -49,10 +49,8 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/karyawan - SUPER_ADMIN, ADMIN_KEUANGAN only
+// POST /api/karyawan - tanpa login demo
 export async function POST(req: NextRequest) {
-  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_KEUANGAN"]);
-  if (auth instanceof Response) return auth;
 
   try {
     const body = await req.json();

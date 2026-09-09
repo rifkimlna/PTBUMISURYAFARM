@@ -19,6 +19,11 @@ type Pohon = {
   pemupukan?: string | null;
   pengobatan?: string | null;
   status: string;
+  fotoGeotagUrl?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  geotagSource?: string | null;
+  geotagTimestamp?: string | null;
   _count?: { riwayat: number };
   riwayatCount?: number;
 };
@@ -55,6 +60,7 @@ export function PohonTable({ data }: { data: Pohon[] }) {
               <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">TANGGAL TANAM</TableHead>
               <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">BLOK</TableHead>
               <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">KOORDINAT</TableHead>
+              <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">GEOTAG</TableHead>
               <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">HASIL PANEN</TableHead>
               <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">USIA POHON</TableHead>
               <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">PEMUPUKAN</TableHead>
@@ -66,7 +72,7 @@ export function PohonTable({ data }: { data: Pohon[] }) {
           <TableBody>
             {data.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={14} className="text-center text-slate-500 py-8">
+                <TableCell colSpan={15} className="text-center text-slate-500 py-8">
                   Belum ada data pohon
                 </TableCell>
               </TableRow>
@@ -107,6 +113,16 @@ export function PohonTable({ data }: { data: Pohon[] }) {
                         </a>
                       ) : (
                         <span className="text-slate-400">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs whitespace-nowrap">
+                      {p.fotoGeotagUrl ? (
+                        <a href={p.fotoGeotagUrl} target="_blank" className="inline-flex items-center gap-1.5">
+                          <img src={p.fotoGeotagUrl} alt="geotag" className="h-8 w-8 rounded object-cover border border-emerald-200" />
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${p.geotagSource === "GPS" ? "bg-green-100 text-green-700" : p.geotagSource === "EXIF" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>{p.geotagSource || "GPS"}</span>
+                        </a>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600 border border-red-200">✗ Tanpa Geotag</span>
                       )}
                     </TableCell>
                     <TableCell className="text-xs font-medium text-slate-700 whitespace-nowrap">{hasil}</TableCell>

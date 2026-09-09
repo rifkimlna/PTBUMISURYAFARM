@@ -6,11 +6,12 @@ import { PohonTable } from "@/components/admin/pohon-table";
 import Link from "next/link";
 
 export default async function PertanianDashboard() {
-  const [total, sehat, perhatian, sakit, pohon] = await Promise.all([
+  const [total, sehat, perhatian, sakit, tanpaGeotag, pohon] = await Promise.all([
     prisma.pohon.count(),
     prisma.pohon.count({ where: { status: "SEHAT" } }),
     prisma.pohon.count({ where: { status: "PERLU_PERHATIAN" } }),
     prisma.pohon.count({ where: { status: "SAKIT" } }),
+    prisma.pohon.count({ where: { fotoGeotagUrl: null } }),
     prisma.pohon.findMany({ orderBy: { createdAt: "desc" }, take: 20, include: { _count: { select: { riwayat: true } } } }),
   ]);
 
@@ -29,6 +30,13 @@ export default async function PertanianDashboard() {
           </Button>
         </Link>
       </div>
+
+      {tanpaGeotag > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-center justify-between">
+          <div className="text-sm font-medium text-amber-800">⚠️ {tanpaGeotag} pohon tanpa foto geotag wajib</div>
+          <Link href="/admin/pertanian/pohon?hasGeotag=false" className="text-xs font-medium text-amber-800 underline">Lihat →</Link>
+        </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
@@ -65,6 +73,11 @@ export default async function PertanianDashboard() {
             pemupukan: p.pemupukan,
             pengobatan: p.pengobatan,
             status: p.status as string,
+            fotoGeotagUrl: p.fotoGeotagUrl,
+            latitude: p.latitude,
+            longitude: p.longitude,
+            geotagSource: p.geotagSource,
+            geotagTimestamp: p.geotagTimestamp?.toISOString?.() ?? null,
             _count: (p as any)._count,
           }))}
         />
