@@ -1,17 +1,25 @@
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { verifyToken } from "@/lib/auth";
 import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { ExportButton } from "@/components/admin/print-button";
 import { KaryawanTable } from "@/components/admin/karyawan-table";
+import { TransaksiTable } from "@/components/admin/transaksi-table";
+import { AsetTable } from "@/components/admin/aset-table";
 
 export default async function KeuanganPage() {
-  const [transaksi, karyawan, aset, agg] = await Promise.all([
-    prisma.transaksiKas.findMany({ orderBy: { tanggal: "desc" }, take: 20, include: { admin: { select: { nama: true } } } }),
+  const [transaksi, karyawan, aset, agg, totalTransaksi, cookieStore] = await Promise.all([
+    prisma.transaksiKas.findMany({ orderBy: { tanggal: "desc" }, take: 10, include: { admin: { select: { nama: true } } } }),
     prisma.karyawan.findMany({ orderBy: { createdAt: "desc" }, take: 10, include: { riwayatGaji: { orderBy: { bulanTahun: "desc" }, take: 1 } } }),
     prisma.aset.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.transaksiKas.groupBy({ by: ["tipe"], _sum: { jumlah: true } }),
+    prisma.transaksiKas.count(),
+    cookies(),
   ]);
+
+  const token = cookieStore.get("token")?.value;
+  const session = token ? await verifyToken(token) : null;
+  const canDelete = session?.role === "SUPER_ADMIN";
 
   const pemasukan = Number(agg.find((a) => a.tipe === "PEMASUKAN")?._sum.jumlah ?? 0);
   const pengeluaran = Number(agg.find((a) => a.tipe === "PENGELUARAN")?._sum.jumlah ?? 0);
@@ -45,45 +53,19 @@ export default async function KeuanganPage() {
         ))}
       </div>
 
-      <Card className="overflow-hidden border-slate-100">
-        <div className="flex items-center justify-between border-b border-slate-50 px-6 py-4">
-          <div className="text-sm font-medium tracking-tight">Transaksi Terbaru</div>
-          <div className="text-xs text-slate-400">{transaksi.length} entri</div>
-        </div>
-        <Table>
-          <TableHeader>
-            <TableRow className="border-slate-50 hover:bg-transparent">
-              <TableHead className="text-xs tracking-wide text-slate-400">Tanggal</TableHead>
-              <TableHead className="text-xs tracking-wide text-slate-400">Tipe</TableHead>
-              <TableHead className="text-xs tracking-wide text-slate-400">Kategori</TableHead>
-              <TableHead className="text-xs tracking-wide text-slate-400">Jumlah</TableHead>
-              <TableHead className="text-xs tracking-wide text-slate-400">Admin</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {transaksi.map((t) => (
-              <TableRow key={t.id} className="border-slate-50">
-                <TableCell className="text-xs text-slate-500">{new Date(t.tanggal).toLocaleDateString("id-ID")}</TableCell>
-                <TableCell>
-                  <Badge variant={t.tipe === "PEMASUKAN" ? "sehat" : "outline"} className="text-[11px]">
-                    {t.tipe}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-sm text-slate-700">{t.kategori}</TableCell>
-                <TableCell className="text-sm font-medium tracking-tight">Rp {Number(t.jumlah).toLocaleString("id-ID")}</TableCell>
-                <TableCell className="text-xs text-slate-500">{t.admin.nama}</TableCell>
-              </TableRow>
-            ))}
-            {transaksi.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={5} className="py-10 text-center text-sm text-slate-400">
-                  Belum ada transaksi
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+      <TransaksiTable
+        initialData={transaksi.map((t) => ({
+          id: t.id,
+          tanggal: t.tanggal.toISOString(),
+          tipe: t.tipe,
+          kategori: t.kategori,
+          jumlah: Number(t.jumlah),
+          keterangan: t.keterangan,
+          admin: { nama: t.admin.nama },
+        }))}
+        initialTotal={totalTransaksi}
+        canDelete={canDelete}
+      />
 
       <KaryawanTable
         data={karyawan.map((k) => ({
@@ -105,42 +87,16 @@ export default async function KeuanganPage() {
         }))}
       />
 
-      <Card className="overflow-hidden border-slate-100">
-        <div className="border-b border-slate-50 px-6 py-4 text-sm font-medium tracking-tight">Inventaris Aset</div>
-        <Table>
-          <TableHeader>
-            <TableRow className="border-slate-50">
-              <TableHead className="text-xs tracking-wide text-slate-400">ID</TableHead>
-              <TableHead className="text-xs tracking-wide text-slate-400">Nama</TableHead>
-              <TableHead className="text-xs tracking-wide text-slate-400">Jumlah</TableHead>
-              <TableHead className="text-xs tracking-wide text-slate-400">Kondisi</TableHead>
-              <TableHead className="text-xs tracking-wide text-slate-400">Nilai</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {aset.map((a) => (
-              <TableRow key={a.id} className="border-slate-50">
-                <TableCell className="font-mono text-xs tracking-tight">{a.id}</TableCell>
-                <TableCell className="text-sm">{a.namaAset}</TableCell>
-                <TableCell className="text-sm text-slate-500">{a.jumlah}</TableCell>
-                <TableCell>
-                  <Badge variant="outline" className="text-xs">
-                    {a.kondisi}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-sm">Rp {Number(a.nilaiAset).toLocaleString("id-ID")}</TableCell>
-              </TableRow>
-            ))}
-            {aset.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={5} className="py-10 text-center text-sm text-slate-400">
-                  Belum ada aset
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+      <AsetTable
+        initialData={aset.map((a) => ({
+          id: a.id,
+          namaAset: a.namaAset,
+          jumlah: a.jumlah,
+          kondisi: a.kondisi,
+          nilaiAset: Number(a.nilaiAset),
+        }))}
+        canDelete={canDelete}
+      />
     </div>
   );
 }
