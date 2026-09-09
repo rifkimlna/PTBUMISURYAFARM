@@ -34,9 +34,18 @@ export async function PUT(req: NextRequest, { params }: Params) {
     const exists = await prisma.pohon.findUnique({ where: { id } });
     if (!exists) return errorResponse("Pohon tidak ditemukan", 404);
 
+    // Normalize empty strings to null for nullable fields, and Decimal handling
+    const data: any = { ...parsed };
+    for (const k of ["namaPohon", "jenis", "koordinat", "pemupukan", "pengobatan"] as const) {
+      if ((data as any)[k] === "") (data as any)[k] = null;
+    }
+    if (data.hasilPanen === "" || data.hasilPanen === undefined) {
+      if (data.hasilPanen === "") data.hasilPanen = null;
+    }
+
     const updated = await prisma.pohon.update({
       where: { id },
-      data: parsed as any,
+      data,
     });
     return successResponse(updated, "Pohon berhasil diupdate");
   } catch (e) {
