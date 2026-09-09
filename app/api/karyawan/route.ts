@@ -24,14 +24,18 @@ export async function GET(req: NextRequest) {
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
-    if (query.statusKerja) where.statusKerja = query.statusKerja;
-    if (query.jabatan) where.jabatan = { contains: query.jabatan, mode: "insensitive" };
-    if (query.search)
-      where.OR = [
-        { namaLengkap: { contains: query.search, mode: "insensitive" } },
-        { id: { contains: query.search, mode: "insensitive" } },
-      ];
+    const where = {
+      ...(query.statusKerja ? { statusKerja: query.statusKerja } : {}),
+      ...(query.jabatan ? { jabatan: { contains: query.jabatan, mode: "insensitive" as const } } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              { namaLengkap: { contains: query.search, mode: "insensitive" as const } },
+              { id: { contains: query.search, mode: "insensitive" as const } },
+            ],
+          }
+        : {}),
+    };
 
     const [data, total] = await Promise.all([
       prisma.karyawan.findMany({ where, skip, take: limit, orderBy: { createdAt: "desc" } }),
@@ -63,8 +67,15 @@ export async function POST(req: NextRequest) {
         namaLengkap: parsed.namaLengkap,
         jabatan: parsed.jabatan,
         statusKerja: parsed.statusKerja,
-        gajiPokok: parsed.gajiPokok as any,
+        gajiPokok: parsed.gajiPokok,
         tanggalMasuk: parsed.tanggalMasuk,
+        telepon: parsed.telepon,
+        email: parsed.email,
+        alamat: parsed.alamat,
+        tanggalLahir: parsed.tanggalLahir,
+        jenisKelamin: parsed.jenisKelamin,
+        divisi: parsed.divisi,
+        lokasiKerja: parsed.lokasiKerja,
       },
     });
 

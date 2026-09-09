@@ -2,24 +2,31 @@ import { z } from "zod";
 
 export const StatusKaryawanEnum = z.enum(["TETAP", "KONTRAK", "HARIAN"]);
 export const StatusGajiEnum = z.enum(["SUDAH_DIBAYAR", "PENDING"]);
+export const JenisKelaminEnum = z.enum(["LAKI_LAKI", "PEREMPUAN"]);
 
-// Custom ID EMP-001
 const customKaryawanIdRegex = /^EMP-\d{3,}$/;
-const bulanTahunRegex = /^\d{4}-(0[1-9]|1[0-2])$/; // YYYY-MM
+const bulanTahunRegex = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+const emptyToUndefined = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess(
+    (value) => value === "" || value === null || value === undefined ? undefined : value,
+    schema.optional()
+  );
 
 export const createKaryawanSchema = z.object({
-  id: z
-    .string()
-    .regex(customKaryawanIdRegex, "ID harus format EMP-001"),
+  id: z.string().regex(customKaryawanIdRegex, "ID harus format EMP-001"),
   namaLengkap: z.string().min(3, "Nama minimal 3 karakter").max(100),
   jabatan: z.string().min(2, "Jabatan wajib diisi").max(50),
   statusKerja: StatusKaryawanEnum,
-  gajiPokok: z
-    .number({ message: "Gaji pokok harus angka" })
-    .positive("Gaji harus positif")
-    .min(100000, "Gaji minimal Rp 100.000")
-    .max(100_000_000, "Gaji terlalu besar"),
+  gajiPokok: z.number({ message: "Gaji pokok harus angka" }).positive("Gaji harus positif").min(100000, "Gaji minimal Rp 100.000").max(100_000_000, "Gaji terlalu besar"),
   tanggalMasuk: z.coerce.date({ message: "Tanggal masuk tidak valid" }),
+  telepon: emptyToUndefined(z.string().trim().max(20, "Telepon maksimal 20 karakter")),
+  email: emptyToUndefined(z.string().trim().email("Email tidak valid")),
+  alamat: emptyToUndefined(z.string().trim().max(500, "Alamat maksimal 500 karakter")),
+  tanggalLahir: emptyToUndefined(z.coerce.date({ message: "Tanggal lahir tidak valid" })),
+  jenisKelamin: emptyToUndefined(JenisKelaminEnum),
+  divisi: emptyToUndefined(z.string().trim().max(100)),
+  lokasiKerja: emptyToUndefined(z.string().trim().max(100)),
 });
 
 export const updateKaryawanSchema = z.object({
@@ -28,20 +35,21 @@ export const updateKaryawanSchema = z.object({
   statusKerja: StatusKaryawanEnum.optional(),
   gajiPokok: z.number().positive().min(100000).max(100_000_000).optional(),
   tanggalMasuk: z.coerce.date().optional(),
+  telepon: emptyToUndefined(z.string().trim().max(20)),
+  email: emptyToUndefined(z.string().trim().email()),
+  alamat: emptyToUndefined(z.string().trim().max(500)),
+  tanggalLahir: emptyToUndefined(z.coerce.date()),
+  jenisKelamin: emptyToUndefined(JenisKelaminEnum),
+  divisi: emptyToUndefined(z.string().trim().max(100)),
+  lokasiKerja: emptyToUndefined(z.string().trim().max(100)),
 }).refine((data) => Object.keys(data).length > 0, {
   message: "Minimal satu field harus diisi",
 });
 
 export const createRiwayatGajiSchema = z.object({
   karyawanId: z.string().regex(customKaryawanIdRegex),
-  bulanTahun: z
-    .string()
-    .regex(bulanTahunRegex, "Format harus YYYY-MM (contoh: 2026-09)"),
-  totalGaji: z
-    .number()
-    .positive("Total gaji harus positif")
-    .min(100000)
-    .max(100_000_000),
+  bulanTahun: z.string().regex(bulanTahunRegex, "Format harus YYYY-MM (contoh: 2026-09)"),
+  totalGaji: z.number().positive("Total gaji harus positif").min(100000).max(100_000_000),
   status: StatusGajiEnum.default("PENDING").optional(),
   tanggalBayar: z.coerce.date().optional().nullable(),
 });

@@ -33,7 +33,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
       where: { id },
       data: {
         ...parsed,
-        gajiPokok: parsed.gajiPokok as any,
+        gajiPokok: parsed.gajiPokok,
       },
     });
     return successResponse(updated, "Karyawan diupdate");
