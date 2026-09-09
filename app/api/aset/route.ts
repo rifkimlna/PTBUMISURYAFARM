@@ -17,8 +17,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_KEUANGAN"]);
-  if (auth instanceof Response) return auth;
+  // tanpa login demo
+  const { getSessionFromRequest } = await import("@/lib/auth");
+  await getSessionFromRequest(req);
 
   try {
     const body = await req.json();

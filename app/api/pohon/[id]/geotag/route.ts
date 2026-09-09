@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuthAndRole } from "@/lib/auth";
+import { requireAuthAndRole, getSessionFromRequest } from "@/lib/auth";
 import { updatePohonGeotagSchema } from "@/lib/validations/pohonValidation";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 import { uploadFotoLapangan, parseFotoFromFormData, deleteFotoLapangan } from "@/lib/storage";
@@ -38,10 +38,10 @@ export async function GET(req: NextRequest, { params }: Params) {
   return successResponse({ ...pohon, geotagAdmin: admin });
 }
 
-// PUT /api/pohon/[id]/geotag - overwrite foto geotag wajib (GPS/EXIF/MANUAL)
+// PUT /api/pohon/[id]/geotag - overwrite foto geotag wajib (tanpa login untuk demo)
 export async function PUT(req: NextRequest, { params }: Params) {
-  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_PERTANIAN"]);
-  if (auth instanceof Response) return auth;
+  const session = await getSessionFromRequest(req);
+  const auth = session ? session : null;
   const { id } = await params;
 
   try {
@@ -112,7 +112,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
         geotagAccuracy: parsed.geotagAccuracy != null ? Number(parsed.geotagAccuracy) : null,
         geotagTimestamp: parsed.geotagTimestamp ? new Date(parsed.geotagTimestamp as any) : new Date(),
         geotagSource: (parsed.geotagSource as any) || "GPS",
-        geotagAdminId: (auth as any).userId,
+        geotagAdminId: (auth as any)?.userId || null,
         geotagUpdatedAt: new Date(),
       } as any,
     });

@@ -26,6 +26,10 @@ async function main() {
   }
 
   const budi = await prisma.user.findUnique({ where: { email: "budi@ptbst.id" } });
+  const adminKeuangan = await prisma.user.findUniqueOrThrow({
+    where: { email: "siti@ptbst.id" },
+    select: { id: true },
+  });
 
   await prisma.pohon.upsert({
     where: { id: "PHN-BLK-A01" },
@@ -211,6 +215,70 @@ async function main() {
       lokasiKerja: "Blok A",
     },
   });
+
+  await prisma.riwayatGaji.upsert({
+    where: { karyawanId_bulanTahun: { karyawanId: "EMP-001", bulanTahun: "2026-08" } },
+    update: {
+      totalGaji: 3500000,
+      status: "SUDAH_DIBAYAR",
+      tanggalBayar: new Date("2026-08-31"),
+    },
+    create: {
+      karyawanId: "EMP-001",
+      bulanTahun: "2026-08",
+      totalGaji: 3500000,
+      status: "SUDAH_DIBAYAR",
+      tanggalBayar: new Date("2026-08-31"),
+    },
+  });
+
+  await prisma.transaksiKas.deleteMany({ where: { id: { startsWith: "SEED-" } } });
+  await prisma.transaksiKas.createMany({
+    data: [
+      {
+        id: "SEED-TRX-001",
+        adminId: adminKeuangan.id,
+        tipe: "PEMASUKAN",
+        kategori: "Penjualan Sawit",
+        jumlah: 5000000,
+        keterangan: "Panen sawit Blok A",
+        tanggal: new Date("2026-08-05"),
+      },
+      {
+        id: "SEED-TRX-002",
+        adminId: adminKeuangan.id,
+        tipe: "PEMASUKAN",
+        kategori: "Penjualan Durian",
+        jumlah: 2500000,
+        keterangan: "Panen durian Blok B",
+        tanggal: new Date("2026-08-12"),
+      },
+      {
+        id: "SEED-TRX-003",
+        adminId: adminKeuangan.id,
+        tipe: "PENGELUARAN",
+        kategori: "Pembayaran Gaji Karyawan",
+        jumlah: 3500000,
+        keterangan: "Gaji karyawan bulan Agustus 2026",
+        tanggal: new Date("2026-08-31"),
+      },
+    ],
+  });
+
+  const daftarAset = [
+    { id: "AST-001", namaAset: "Truk Pengangkut Sawit", jumlah: 1, kondisi: "Baik", nilaiAset: 250000000 },
+    { id: "AST-002", namaAset: "Mesin Genset", jumlah: 1, kondisi: "Baik", nilaiAset: 35000000 },
+    { id: "AST-003", namaAset: "Traktor", jumlah: 1, kondisi: "Baik", nilaiAset: 180000000 },
+    { id: "AST-004", namaAset: "Gudang Penyimpanan", jumlah: 1, kondisi: "Baik", nilaiAset: 90000000 },
+  ];
+  for (const aset of daftarAset) {
+    const { id, ...payload } = aset;
+    await prisma.aset.upsert({
+      where: { id },
+      update: payload,
+      create: { id, ...payload },
+    });
+  }
 
   console.log("✅ Seed selesai. Login dengan password: Admin123!");
 }

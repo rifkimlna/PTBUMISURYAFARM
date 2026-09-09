@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuthAndRole } from "@/lib/auth";
+import { requireAuthAndRole, getSessionFromRequest } from "@/lib/auth";
 import { createPohonSchema, queryPohonSchema } from "@/lib/validations/pohonValidation";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 import { uploadFotoLapangan, parseFotoFromFormData } from "@/lib/storage";
@@ -60,10 +60,10 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/pohon - create (SUPER_ADMIN, ADMIN_PERTANIAN)
+// POST /api/pohon - create (tanpa login untuk demo - tambah data bebas)
 export async function POST(req: NextRequest) {
-  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_PERTANIAN"]);
-  if (auth instanceof Response) return auth;
+  const session = await getSessionFromRequest(req); // optional, tanpa login tetap boleh
+  const auth = session ? session : null;
 
   try {
     const contentType = req.headers.get("content-type") || "";
@@ -163,7 +163,7 @@ export async function POST(req: NextRequest) {
               geotagAccuracy,
               geotagSource: geotagSource as any,
               geotagTimestamp,
-              geotagAdminId: (auth as any).userId,
+              geotagAdminId: (auth as any)?.userId || null,
             }
           : {}),
       } as any,
