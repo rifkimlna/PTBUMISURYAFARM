@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { formatRupiah } from "@/lib/utils";
 
 type Tipe = "PEMASUKAN" | "PENGELUARAN";
 
@@ -220,7 +221,7 @@ export function TransaksiTable({
   };
 
   const deleteTransaksi = async (row: TransaksiRow) => {
-    if (!window.confirm(`Hapus transaksi ${row.kategori} Rp ${Number(row.jumlah).toLocaleString("id-ID")}?`)) return;
+    if (!window.confirm(`Hapus transaksi ${row.kategori} Rp ${formatRupiah(row.jumlah)}?`)) return;
     setMessage("");
     try {
       const response = await fetch(`/api/keuangan/${encodeURIComponent(row.id)}`, { method: "DELETE" });
@@ -291,7 +292,7 @@ export function TransaksiTable({
                       </TableCell>
                       <TableCell className="text-sm text-slate-700">{row.kategori}</TableCell>
                       <TableCell className="text-sm font-medium tracking-tight">
-                        Rp {Number(row.jumlah).toLocaleString("id-ID")}
+                        Rp {formatRupiah(row.jumlah)}
                       </TableCell>
                       <TableCell className="text-xs text-slate-500">{row.admin.nama}</TableCell>
                       <TableCell>

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { CalendarRange, RotateCcw } from "lucide-react";
 import { TransaksiTable } from "@/components/admin/transaksi-table";
 import type { TransaksiRow } from "@/components/admin/transaksi-table";
+import { formatRupiah } from "@/lib/utils";
 
 type Summary = { pemasukan: number; pengeluaran: number; saldo: number };
 
@@ -26,7 +27,7 @@ function SummaryCard({
       <CardContent className="p-5">
         <div className="text-xs tracking-wide text-slate-400">{label}</div>
         <div className={`mt-2 text-2xl font-semibold tracking-tight ${tone || "text-slate-900"}`}>
-          Rp {value.toLocaleString("id-ID")}
+          Rp {formatRupiah(value)}
         </div>
         <div className="mt-1 text-xs text-slate-400">{note}</div>
       </CardContent>
@@ -55,7 +56,11 @@ export function KeuanganContent({
   const isFiltered = Boolean(appliedStart || appliedEnd);
 
   const handleSummaryChange = useCallback((next: Summary) => {
-    setSummary(next);
+    setSummary({
+      pemasukan: Number(next.pemasukan) || 0,
+      pengeluaran: Number(next.pengeluaran) || 0,
+      saldo: Number(next.saldo) || 0,
+    });
   }, []);
 
   const applyFilter = () => {
