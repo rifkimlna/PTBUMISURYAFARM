@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from "@/components/ui/table";
@@ -75,7 +75,25 @@ function Field({ label, children, className }: { label: string; children: ReactN
   );
 }
 
-export function TransaksiTable({ initialData, initialTotal, canDelete }: { initialData: TransaksiRow[]; initialTotal: number; canDelete: boolean }) {
+type Summary = { pemasukan: number; pengeluaran: number; saldo: number };
+
+export function TransaksiTable({
+  initialData,
+  initialTotal,
+  canDelete,
+  startDate,
+  endDate,
+  isFiltered,
+  onSummaryChange,
+}: {
+  initialData: TransaksiRow[];
+  initialTotal: number;
+  canDelete: boolean;
+  startDate?: string;
+  endDate?: string;
+  isFiltered?: boolean;
+  onSummaryChange?: (summary: Summary) => void;
+}) {
   const router = useRouter();
   const [rows, setRows] = useState<TransaksiRow[]>(initialData);
   const [total, setTotal] = useState(initialTotal);
@@ -91,9 +109,25 @@ export function TransaksiTable({ initialData, initialTotal, canDelete }: { initi
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
+  // Jaga callback tetap stabil agar tidak memicu refetch
+  const onSummaryChangeRef = useRef(onSummaryChange);
+  useEffect(() => {
+    onSummaryChangeRef.current = onSummaryChange;
+  }, [onSummaryChange]);
+
+  // Kembali ke halaman 1 ketika periode filter berubah
+  const dateRange = `${startDate}|${endDate}`;
+  const [prevDateRange, setPrevDateRange] = useState(dateRange);
+  if (prevDateRange !== dateRange) {
+    setPrevDateRange(dateRange);
+    setPage(1);
+  }
+
   useEffect(() => {
     const params = new URLSearchParams({ page: String(page), limit: String(limit) });
     if (tipe) params.set("tipe", tipe);
+    if (startDate) params.set("startDate", startDate);
+    if (endDate) params.set("endDate", endDate);
     let cancelled = false;
     fetch(`/api/keuangan?${params.toString()}`)
       .then((res) => res.json())
@@ -102,6 +136,7 @@ export function TransaksiTable({ initialData, initialTotal, canDelete }: { initi
         if (result.success) {
           setRows(result.data.data);
           setTotal(result.data.pagination.total);
+          onSummaryChangeRef.current?.(result.data.summary);
         }
       })
       .catch(() => {
@@ -113,7 +148,7 @@ export function TransaksiTable({ initialData, initialTotal, canDelete }: { initi
     return () => {
       cancelled = true;
     };
-  }, [page, limit, tipe]);
+  }, [page, limit, tipe, startDate, endDate]);
 
   const goToPage = (next: number) => {
     setLoading(true);
@@ -242,7 +277,7 @@ export function TransaksiTable({ initialData, initialTotal, canDelete }: { initi
                 {rows.length === 0 && !loading ? (
                   <TableRow>
                     <TableCell colSpan={6} className="py-8 text-center text-slate-500">
-                      Belum ada transaksi
+                      {isFiltered ? "Tidak ada transaksi pada periode ini" : "Belum ada transaksi"}
                     </TableCell>
                   </TableRow>
                 ) : (

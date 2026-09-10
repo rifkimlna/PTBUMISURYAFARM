@@ -30,8 +30,17 @@ export async function GET(req: NextRequest) {
     if (query.kategori) where.kategori = { contains: query.kategori, mode: "insensitive" };
     if (query.startDate || query.endDate) {
       where.tanggal = {};
-      if (query.startDate) where.tanggal.gte = query.startDate;
-      if (query.endDate) where.tanggal.lte = query.endDate;
+      // Periode mencakup seluruh hari yang dipilih (dari 00:00 sampai 23:59:59)
+      if (query.startDate) {
+        const start = new Date(query.startDate);
+        start.setHours(0, 0, 0, 0);
+        where.tanggal.gte = start;
+      }
+      if (query.endDate) {
+        const end = new Date(query.endDate);
+        end.setHours(23, 59, 59, 999);
+        where.tanggal.lte = end;
+      }
     }
 
     const [data, total, summary] = await Promise.all([

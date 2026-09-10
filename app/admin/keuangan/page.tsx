@@ -1,9 +1,8 @@
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { verifyToken } from "@/lib/auth";
-import { Card, CardContent } from "@/components/ui/card";
 import { ExportButton } from "@/components/admin/print-button";
-import { TransaksiTable } from "@/components/admin/transaksi-table";
+import { KeuanganContent } from "@/components/admin/keuangan-content";
 
 export default async function KeuanganPage() {
   const [transaksi, agg, totalTransaksi, cookieStore] = await Promise.all([
@@ -19,7 +18,6 @@ export default async function KeuanganPage() {
 
   const pemasukan = Number(agg.find((a) => a.tipe === "PEMASUKAN")?._sum.jumlah ?? 0);
   const pengeluaran = Number(agg.find((a) => a.tipe === "PENGELUARAN")?._sum.jumlah ?? 0);
-  const saldo = pemasukan - pengeluaran;
 
   return (
     <div className="space-y-8">
@@ -33,23 +31,7 @@ export default async function KeuanganPage() {
         <ExportButton />
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
-        {[
-          { label: "Pemasukan", value: pemasukan, note: "PEMASUKAN" },
-          { label: "Pengeluaran", value: pengeluaran, note: "PENGELUARAN", tone: "text-slate-500" },
-          { label: "Saldo", value: saldo, note: "Pemasukan − Pengeluaran", tone: saldo < 0 ? "text-red-500" : "text-slate-900" },
-        ].map((c) => (
-          <Card key={c.label} className="border-slate-100">
-            <CardContent className="p-5">
-              <div className="text-xs tracking-wide text-slate-400">{c.label}</div>
-              <div className={`mt-2 text-2xl font-semibold tracking-tight ${c.tone || "text-slate-900"}`}>Rp {c.value.toLocaleString("id-ID")}</div>
-              <div className="mt-1 text-xs text-slate-400">{c.note}</div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <TransaksiTable
+      <KeuanganContent
         initialData={transaksi.map((t) => ({
           id: t.id,
           tanggal: t.tanggal.toISOString(),
@@ -61,6 +43,11 @@ export default async function KeuanganPage() {
         }))}
         initialTotal={totalTransaksi}
         canDelete={canDelete}
+        initialSummary={{
+          pemasukan,
+          pengeluaran,
+          saldo: pemasukan - pengeluaran,
+        }}
       />
     </div>
   );
