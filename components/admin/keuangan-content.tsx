@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { CalendarRange, RotateCcw } from "lucide-react";
 import { TransaksiTable } from "@/components/admin/transaksi-table";
 import type { TransaksiRow } from "@/components/admin/transaksi-table";
+import { ArusKasChart } from "@/components/admin/arus-kas-chart";
 import { formatRupiah } from "@/lib/utils";
 
 type Summary = { pemasukan: number; pengeluaran: number; saldo: number };
@@ -52,6 +53,7 @@ export function KeuanganContent({
   const [appliedEnd, setAppliedEnd] = useState("");
   const [filterError, setFilterError] = useState("");
   const [summary, setSummary] = useState<Summary>(initialSummary);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const isFiltered = Boolean(appliedStart || appliedEnd);
 
@@ -62,6 +64,8 @@ export function KeuanganContent({
       saldo: Number(next.saldo) || 0,
     });
   }, []);
+
+  const handleDataChange = useCallback(() => setRefreshKey((key) => key + 1), []);
 
   const applyFilter = () => {
     if (startDate && endDate && new Date(endDate) < new Date(startDate)) {
@@ -140,6 +144,8 @@ export function KeuanganContent({
         />
       </div>
 
+      <ArusKasChart refreshKey={refreshKey} />
+
       <TransaksiTable
         initialData={initialData}
         initialTotal={initialTotal}
@@ -148,6 +154,7 @@ export function KeuanganContent({
         endDate={appliedEnd}
         isFiltered={isFiltered}
         onSummaryChange={handleSummaryChange}
+        onDataChange={handleDataChange}
       />
     </div>
   );
