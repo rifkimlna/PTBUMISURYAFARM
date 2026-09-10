@@ -5,20 +5,17 @@ import { createAsetSchema } from "@/lib/validations/keuanganValidation";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 import { ZodError } from "zod";
 
-// Aset - bisa diakses semua role yang login (atau sesuaikan)
+// Aset - public untuk demo tanpa login
 export async function GET(req: NextRequest) {
-  const { getSessionFromRequest } = await import("@/lib/auth");
-  const session = await getSessionFromRequest(req);
-  if (!session) return errorResponse("Unauthorized", 401);
-
   const data = await prisma.aset.findMany({ orderBy: { createdAt: "desc" } });
   const totalNilai = data.reduce((sum, a) => sum + Number(a.nilaiAset) * a.jumlah, 0);
   return successResponse({ data, totalNilai });
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_KEUANGAN"]);
-  if (auth instanceof Response) return auth;
+  // tanpa login demo
+  const { getSessionFromRequest } = await import("@/lib/auth");
+  await getSessionFromRequest(req);
 
   try {
     const body = await req.json();

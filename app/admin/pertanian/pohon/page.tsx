@@ -46,6 +46,11 @@ export default async function DataPohonPage() {
             pemupukan: p.pemupukan,
             pengobatan: p.pengobatan,
             status: p.status as string,
+            fotoGeotagUrl: p.fotoGeotagUrl,
+            latitude: p.latitude,
+            longitude: p.longitude,
+            geotagSource: p.geotagSource,
+            geotagTimestamp: p.geotagTimestamp?.toISOString?.() ?? null,
             _count: p._count,
           }))}
         />

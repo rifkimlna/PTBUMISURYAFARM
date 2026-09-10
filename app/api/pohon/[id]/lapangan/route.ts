@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuthAndRole } from "@/lib/auth";
+import { requireAuthAndRole, getSessionFromRequest } from "@/lib/auth";
 import { updatePohonLapanganSchema } from "@/lib/validations/pohonValidation";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 import { ZodError } from "zod";
@@ -33,10 +33,10 @@ export async function GET(req: NextRequest, { params }: Params) {
   return successResponse(pohon);
 }
 
-// PUT /api/pohon/[id]/lapangan - update hasilPanen, pemupukan, pengobatan, status (snapshot)
+// PUT /api/pohon/[id]/lapangan - update (tanpa login demo)
 export async function PUT(req: NextRequest, { params }: Params) {
-  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_PERTANIAN"]);
-  if (auth instanceof Response) return auth;
+  // tanpa login untuk demo tambah data
+  await getSessionFromRequest(req);
   const { id } = await params;
   try {
     const body = await req.json();

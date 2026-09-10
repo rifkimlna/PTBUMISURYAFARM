@@ -12,12 +12,61 @@ const PUBLIC_PATHS = [
 // Prefix yang wajib auth (sesuai spec: /api/admin/*)
 const PROTECTED_PREFIXES = ["/api/admin", "/api/pohon", "/api/karyawan", "/api/keuangan", "/api/aset"];
 
+// Tambah data tanpa login (demo) - POST di beberapa endpoint jadi public
+const PUBLIC_POST_PATHS = [
+  "/api/pohon", // POST /api/pohon dan POST /api/pohon/[id]/geotag, /riwayat
+  "/api/karyawan",
+  "/api/keuangan",
+  "/api/aset",
+  "/api/upload",
+];
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const method = req.method;
 
   // Skip non-API atau public
   if (!pathname.startsWith("/api")) return NextResponse.next();
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
+    return NextResponse.next();
+  }
+
+  // Demo: allow POST tanpa login untuk tambah data
+  if (method === "POST" && PUBLIC_POST_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
+    // tetap coba inject user jika ada token, tapi jangan block jika tidak ada
+    const authHeader = req.headers.get("authorization");
+    const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+    const cookieToken = req.cookies.get("token")?.value || req.cookies.get("auth-token")?.value;
+    const token = bearer || cookieToken || null;
+    if (token) {
+      const payload = await verifyToken(token);
+      if (payload) {
+        const requestHeaders = new Headers(req.headers);
+        requestHeaders.set("x-user-id", payload.userId);
+        requestHeaders.set("x-user-role", payload.role);
+        requestHeaders.set("x-user-email", payload.email);
+        return NextResponse.next({ request: { headers: requestHeaders } });
+      }
+    }
+    return NextResponse.next();
+  }
+
+  // PUT geotag & lapangan juga boleh tanpa login untuk demo lapangan
+  if (method === "PUT" && (pathname.includes("/geotag") || pathname.includes("/lapangan"))) {
+    const authHeader = req.headers.get("authorization");
+    const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+    const cookieToken = req.cookies.get("token")?.value || req.cookies.get("auth-token")?.value;
+    const token = bearer || cookieToken || null;
+    if (token) {
+      const payload = await verifyToken(token);
+      if (payload) {
+        const requestHeaders = new Headers(req.headers);
+        requestHeaders.set("x-user-id", payload.userId);
+        requestHeaders.set("x-user-role", payload.role);
+        requestHeaders.set("x-user-email", payload.email);
+        return NextResponse.next({ request: { headers: requestHeaders } });
+      }
+    }
     return NextResponse.next();
   }
 

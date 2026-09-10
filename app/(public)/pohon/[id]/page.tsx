@@ -97,6 +97,33 @@ export default async function PublicPohonPage({ params }: { params: Promise<{ id
               </div>
             </div>
 
+            {(pohon as any).fotoGeotagUrl && (
+              <div className="mt-4 overflow-hidden rounded-2xl border border-emerald-100">
+                <img src={(pohon as any).fotoGeotagUrl} alt="geotag" className="h-64 w-full object-cover" />
+                <div className="bg-emerald-50 px-4 py-3 flex items-center justify-between">
+                  <div className="text-xs">
+                    <div className="font-medium text-emerald-800 flex items-center gap-1.5">
+                      <MapPinned className="h-3 w-3" /> Geotag Verified • {(pohon as any).geotagSource || "GPS"}
+                    </div>
+                    <div className="text-emerald-700/70">
+                      {(pohon as any).latitude?.toFixed(6)}, {(pohon as any).longitude?.toFixed(6)} • { (pohon as any).geotagTimestamp ? new Date((pohon as any).geotagTimestamp).toLocaleDateString("id-ID") : ""} { (pohon as any).geotagAccuracy ? `±${Math.round((pohon as any).geotagAccuracy)}m` : ""}
+                    </div>
+                  </div>
+                  <a href={`https://maps.google.com/?q=${(pohon as any).latitude},${(pohon as any).longitude}`} target="_blank" className="text-xs font-medium text-emerald-700 hover:underline">Maps →</a>
+                </div>
+                {(pohon as any).latitude && (pohon as any).longitude && (
+                  <iframe
+                    title="map"
+                    width="100%"
+                    height="200"
+                    style={{ border: 0 }}
+                    loading="lazy"
+                    src={`https://maps.google.com/maps?q=${(pohon as any).latitude},${(pohon as any).longitude}&z=16&output=embed`}
+                  />
+                )}
+              </div>
+            )}
+
             <div className="mt-4 flex items-center gap-2 rounded-full bg-green-50 px-3 py-2 text-xs border border-green-300">
               <ShieldCheck className="h-3.5 w-3.5 text-green-800" />
               <span className="font-medium text-green-800">QR Verified</span>
