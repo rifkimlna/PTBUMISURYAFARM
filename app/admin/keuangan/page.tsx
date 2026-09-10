@@ -3,15 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { verifyToken } from "@/lib/auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { ExportButton } from "@/components/admin/print-button";
-import { KaryawanTable } from "@/components/admin/karyawan-table";
 import { TransaksiTable } from "@/components/admin/transaksi-table";
-import { AsetTable } from "@/components/admin/aset-table";
 
 export default async function KeuanganPage() {
-  const [transaksi, karyawan, aset, agg, totalTransaksi, cookieStore] = await Promise.all([
+  const [transaksi, agg, totalTransaksi, cookieStore] = await Promise.all([
     prisma.transaksiKas.findMany({ orderBy: { tanggal: "desc" }, take: 10, include: { admin: { select: { nama: true } } } }),
-    prisma.karyawan.findMany({ orderBy: { createdAt: "desc" }, take: 10, include: { riwayatGaji: { orderBy: { bulanTahun: "desc" }, take: 1 } } }),
-    prisma.aset.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.transaksiKas.groupBy({ by: ["tipe"], _sum: { jumlah: true } }),
     prisma.transaksiKas.count(),
     cookies(),
@@ -30,9 +26,9 @@ export default async function KeuanganPage() {
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-            Keuangan <span className="font-semibold">overview</span>
+            Keuangan <span className="font-semibold">kas</span>
           </h1>
-          <p className="mt-1 text-sm text-slate-400">Kas • Karyawan • Aset — minimal, real-time</p>
+          <p className="mt-1 text-sm text-slate-400">Ringkasan pemasukan, pengeluaran, dan saldo</p>
         </div>
         <ExportButton />
       </div>
@@ -64,37 +60,6 @@ export default async function KeuanganPage() {
           admin: { nama: t.admin.nama },
         }))}
         initialTotal={totalTransaksi}
-        canDelete={canDelete}
-      />
-
-      <KaryawanTable
-        data={karyawan.map((k) => ({
-          id: k.id,
-          namaLengkap: k.namaLengkap,
-          jabatan: k.jabatan,
-          statusKerja: k.statusKerja,
-          gajiPokok: Number(k.gajiPokok),
-          tanggalMasuk: k.tanggalMasuk.toISOString(),
-          telepon: k.telepon ?? "",
-          email: k.email ?? "",
-          alamat: k.alamat ?? "",
-          tanggalLahir: k.tanggalLahir?.toISOString() ?? "",
-          jenisKelamin: k.jenisKelamin ?? "",
-          divisi: k.divisi ?? "",
-          lokasiKerja: k.lokasiKerja ?? "",
-          bulanGaji: k.riwayatGaji[0]?.bulanTahun || "",
-          statusGaji: k.riwayatGaji[0]?.status ?? "PENDING",
-        }))}
-      />
-
-      <AsetTable
-        initialData={aset.map((a) => ({
-          id: a.id,
-          namaAset: a.namaAset,
-          jumlah: a.jumlah,
-          kondisi: a.kondisi,
-          nilaiAset: Number(a.nilaiAset),
-        }))}
         canDelete={canDelete}
       />
     </div>
