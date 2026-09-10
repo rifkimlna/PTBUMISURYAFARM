@@ -6,7 +6,11 @@ import { KeuanganContent } from "@/components/admin/keuangan-content";
 
 export default async function KeuanganPage() {
   const [transaksi, agg, totalTransaksi, cookieStore] = await Promise.all([
-    prisma.transaksiKas.findMany({ orderBy: { tanggal: "desc" }, take: 10, include: { admin: { select: { nama: true } } } }),
+    prisma.transaksiKas.findMany({
+      orderBy: { tanggal: "desc" },
+      take: 10,
+      include: { admin: { select: { nama: true } }, _count: { select: { bukti: true } } },
+    }),
     prisma.transaksiKas.groupBy({ by: ["tipe"], _sum: { jumlah: true } }),
     prisma.transaksiKas.count(),
     cookies(),
@@ -40,6 +44,7 @@ export default async function KeuanganPage() {
           jumlah: Number(t.jumlah),
           keterangan: t.keterangan,
           admin: { nama: t.admin.nama },
+          buktiCount: t._count.bukti,
         }))}
         initialTotal={totalTransaksi}
         canDelete={canDelete}

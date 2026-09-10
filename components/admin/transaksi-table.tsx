@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from "@/components/ui/table";
@@ -11,8 +11,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, Paperclip, X, Loader2 } from "lucide-react";
 import { formatRupiah } from "@/lib/utils";
+import { BuktiTransaksiDialog } from "@/components/admin/bukti-transaksi-dialog";
 
 type Tipe = "PEMASUKAN" | "PENGELUARAN";
 
@@ -24,7 +25,17 @@ export type TransaksiRow = {
   jumlah: number;
   keterangan: string | null;
   admin: { nama: string };
+  buktiCount?: number;
 };
+
+type PendingBukti = {
+  fileName: string;
+  fileUrl: string;
+  fileType: string;
+  fileSize: number;
+};
+
+type BuktiDialogTransaksi = { id: string; kategori: string; jumlah: number };
 
 type FormValues = {
   tipe: Tipe;
@@ -86,6 +97,7 @@ export function TransaksiTable({
   endDate,
   isFiltered,
   onSummaryChange,
+  onDataChange,
 }: {
   initialData: TransaksiRow[];
   initialTotal: number;
@@ -94,6 +106,7 @@ export function TransaksiTable({
   endDate?: string;
   isFiltered?: boolean;
   onSummaryChange?: (summary: Summary) => void;
+  onDataChange?: () => void;
 }) {
   const router = useRouter();
   const [rows, setRows] = useState<TransaksiRow[]>(initialData);
@@ -107,6 +120,17 @@ export function TransaksiTable({
   const [form, setForm] = useState<FormValues>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [rowsVersion, setRowsVersion] = useState(0);
+  const [pendingBukti, setPendingBukti] = useState<PendingBukti[]>([]);
+  const [pendingBuktiErrors, setPendingBuktiErrors] = useState<string[]>([]);
+  const [uploadingBukti, setUploadingBukti] = useState(false);
+  const [buktiDialogTransaksi, setBuktiDialogTransaksi] = useState<BuktiDialogTransaksi | null>(null);
+  const buktiInputRef = useRef<HTMLInputElement>(null);
+
+  const bumpRows = useCallback(() => {
+    setLoading(true);
+    setRowsVersion((v) => v + 1);
+  }, []);
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
@@ -135,7 +159,12 @@ export function TransaksiTable({
       .then((result) => {
         if (cancelled) return;
         if (result.success) {
-          setRows(result.data.data);
+          setRows(
+            (result.data.data ?? []).map((row: TransaksiRow & { _count?: { bukti: number } }) => ({
+              ...row,
+              buktiCount: row._count?.bukti ?? row.buktiCount ?? 0,
+            }))
+          );
           setTotal(result.data.pagination.total);
           onSummaryChangeRef.current?.(result.data.summary);
         }
@@ -149,7 +178,7 @@ export function TransaksiTable({
     return () => {
       cancelled = true;
     };
-  }, [page, limit, tipe, startDate, endDate]);
+  }, [page, limit, tipe, startDate, endDate, rowsVersion]);
 
   const goToPage = (next: number) => {
     setLoading(true);
@@ -170,6 +199,8 @@ export function TransaksiTable({
     setEditingId(null);
     setForm(emptyForm);
     setMessage("");
+    setPendingBukti([]);
+    setPendingBuktiErrors([]);
     setDialogOpen(true);
   };
 
@@ -183,7 +214,47 @@ export function TransaksiTable({
       tanggal: formatDateInput(row.tanggal),
     });
     setMessage("");
+    setPendingBukti([]);
+    setPendingBuktiErrors([]);
     setDialogOpen(true);
+  };
+
+  const handleBuktiFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0 || uploadingBukti) return;
+    setUploadingBukti(true);
+    setPendingBuktiErrors([]);
+    const formData = new FormData();
+    Array.from(files).forEach((file) => formData.append("files", file));
+    try {
+      const res = await fetch("/api/keuangan/bukti", { method: "POST", body: formData });
+      const result = await res.json().catch(() => ({ message: "Gagal upload bukti" }));
+      if (result.success) {
+        const uploaded = (result.data?.items ?? []) as PendingBukti[];
+        const failed = (result.data?.errors ?? []) as { fileName?: string; message?: string }[];
+        if (uploaded.length > 0) {
+          setPendingBukti((current) => [...current, ...uploaded]);
+        }
+        if (failed.length > 0) {
+          setPendingBuktiErrors((current) => [
+            ...current,
+            ...failed.map((e) => e.message || e.fileName || "File ditolak"),
+          ]);
+        } else if (uploaded.length === 0) {
+          setPendingBuktiErrors((current) => [...current, "Tidak ada file yang berhasil ditambahkan"]);
+        }
+      } else {
+        setPendingBuktiErrors((current) => [...current, result.message || "Gagal upload bukti"]);
+      }
+    } catch {
+      setPendingBuktiErrors((current) => [...current, "Gagal upload bukti"]);
+    } finally {
+      setUploadingBukti(false);
+      if (buktiInputRef.current) buktiInputRef.current.value = "";
+    }
+  };
+
+  const removePendingBukti = (index: number) => {
+    setPendingBukti((current) => current.filter((_, i) => i !== index));
   };
 
   const saveTransaksi = async (event: FormEvent<HTMLFormElement>) => {
@@ -197,6 +268,7 @@ export function TransaksiTable({
       jumlah: Number(form.jumlah),
       keterangan: form.keterangan.trim() || undefined,
       tanggal: form.tanggal || undefined,
+      ...(pendingBukti.length > 0 ? { bukti: pendingBukti } : {}),
     };
 
     try {
@@ -212,6 +284,8 @@ export function TransaksiTable({
       setMessage(editingId ? "Transaksi berhasil diperbarui" : "Transaksi berhasil ditambahkan");
       setLoading(true);
       setPage(1);
+      setRowsVersion((v) => v + 1);
+      onDataChange?.();
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Gagal menyimpan transaksi");
@@ -228,9 +302,11 @@ export function TransaksiTable({
       const result = await response.json().catch(() => ({ message: "Gagal menghapus transaksi" }));
       if (!response.ok) throw new Error(result.message || "Gagal menghapus transaksi");
       setMessage("Transaksi berhasil dihapus");
+      onDataChange?.();
       if (rows.length === 1 && page > 1) goToPage(page - 1);
       else {
         setLoading(true);
+        setRowsVersion((v) => v + 1);
         router.refresh();
       }
     } catch (error) {
@@ -271,13 +347,14 @@ export function TransaksiTable({
                   <TableHead>Kategori</TableHead>
                   <TableHead>Jumlah</TableHead>
                   <TableHead>Admin</TableHead>
+                  <TableHead className="text-center">Bukti</TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.length === 0 && !loading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-8 text-center text-slate-500">
+                    <TableCell colSpan={7} className="py-8 text-center text-slate-500">
                       {isFiltered ? "Tidak ada transaksi pada periode ini" : "Belum ada transaksi"}
                     </TableCell>
                   </TableRow>
@@ -295,6 +372,29 @@ export function TransaksiTable({
                         Rp {formatRupiah(row.jumlah)}
                       </TableCell>
                       <TableCell className="text-xs text-slate-500">{row.admin.nama}</TableCell>
+                      <TableCell className="text-center">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setBuktiDialogTransaksi({
+                              id: row.id,
+                              kategori: row.kategori,
+                              jumlah: row.jumlah,
+                            })
+                          }
+                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                          title="Lihat bukti transaksi"
+                        >
+                          {(row.buktiCount ?? 0) > 0 ? (
+                            <>
+                              <Paperclip className="h-3.5 w-3.5 text-slate-400" />
+                              <span className="font-medium">{row.buktiCount}</span>
+                            </>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </button>
+                      </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">
                           <Button variant="ghost" size="sm" className="h-7 w-7 rounded-full" onClick={() => openEdit(row)}>
@@ -380,6 +480,66 @@ export function TransaksiTable({
               <Field label="Keterangan" className="sm:col-span-2">
                 <Textarea value={form.keterangan} onChange={(event) => updateForm("keterangan", event.target.value)} placeholder="Opsional" />
               </Field>
+              <div className="sm:col-span-2">
+                <span className="text-xs font-medium text-slate-600">Bukti Transaksi (Opsional)</span>
+                <input
+                  ref={buktiInputRef}
+                  type="file"
+                  multiple
+                  accept=".pdf,.jpg,.jpeg,.png,.webp"
+                  className="hidden"
+                  onChange={(event) => handleBuktiFiles(event.target.files)}
+                />
+                {pendingBukti.length > 0 && (
+                  <ul className="mt-2 space-y-1.5">
+                    {pendingBukti.map((item, index) => (
+                      <li
+                        key={`${item.fileName}-${index}`}
+                        className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50/50 px-3 py-2"
+                      >
+                        <div className="flex min-w-0 items-center gap-2 text-xs text-slate-600">
+                          <Paperclip className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                          <span className="truncate">{item.fileName}</span>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 shrink-0 rounded-full p-0 text-slate-400 hover:text-red-600"
+                          onClick={() => removePendingBukti(index)}
+                          title="Hapus dari daftar"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {pendingBuktiErrors.length > 0 && (
+                  <div className="mt-2 rounded-md bg-red-50 p-2 text-xs text-red-600">
+                    <ul className="list-disc space-y-0.5 pl-4">
+                      {pendingBuktiErrors.map((error) => (
+                        <li key={error}>{error}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  disabled={uploadingBukti}
+                  onClick={() => buktiInputRef.current?.click()}
+                >
+                  {uploadingBukti ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Paperclip className="h-3.5 w-3.5" />
+                  )}
+                  {uploadingBukti ? "Mengupload..." : "+ Tambah Bukti"}
+                </Button>
+              </div>
             </div>
             {message && <p className="text-sm text-red-600">{message}</p>}
             <div className="flex justify-end gap-2">
@@ -393,6 +553,18 @@ export function TransaksiTable({
           </form>
         </DialogContent>
       </Dialog>
+
+      <BuktiTransaksiDialog
+        open={Boolean(buktiDialogTransaksi)}
+        transaksi={buktiDialogTransaksi}
+        onOpenChange={(openNext) => {
+          if (!openNext) setBuktiDialogTransaksi(null);
+        }}
+        onDataChange={() => {
+          onDataChange?.();
+          bumpRows();
+        }}
+      />
     </>
   );
 }
