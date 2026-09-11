@@ -11,30 +11,53 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Plus, Pencil, Trash2 } from "lucide-react";
+import { KATEGORI_ASET, STATUS_ASET } from "@/lib/aset";
 
 export type AsetRow = {
   id: string;
   namaAset: string;
   jumlah: number;
+  kategori: string;
   kondisi: string;
+  status: string;
   nilaiAset: number;
+  tanggalPerolehan: string | null;
 };
 
 type FormValues = {
   id: string;
   namaAset: string;
   jumlah: string;
+  kategori: string;
   kondisi: string;
+  status: string;
   nilaiAset: string;
+  tanggalPerolehan: string;
 };
 
 const emptyForm: FormValues = {
   id: "",
   namaAset: "",
   jumlah: "1",
+  kategori: "Tanah",
   kondisi: "Baik",
+  status: "Aktif",
   nilaiAset: "",
+  tanggalPerolehan: "",
 };
+
+function formatDate(value: string | null) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString("id-ID");
+}
+
+function formatDateInput(value: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
 
 function Field({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (
@@ -78,8 +101,11 @@ export function AsetTable({ initialData, canDelete }: { initialData: AsetRow[]; 
       id: row.id,
       namaAset: row.namaAset,
       jumlah: String(row.jumlah),
+      kategori: row.kategori,
       kondisi: row.kondisi,
+      status: row.status,
       nilaiAset: String(row.nilaiAset),
+      tanggalPerolehan: formatDateInput(row.tanggalPerolehan),
     });
     setMessage("");
     setDialogOpen(true);
@@ -104,8 +130,11 @@ export function AsetTable({ initialData, canDelete }: { initialData: AsetRow[]; 
       id: form.id.trim(),
       namaAset: form.namaAset.trim(),
       jumlah: Number(form.jumlah),
+      kategori: form.kategori,
       kondisi: form.kondisi.trim(),
+      status: form.status,
       nilaiAset: Number(form.nilaiAset),
+      tanggalPerolehan: form.tanggalPerolehan || null,
     };
 
     try {
@@ -168,17 +197,20 @@ export function AsetTable({ initialData, canDelete }: { initialData: AsetRow[]; 
                 <TableRow>
                   <TableHead>ID</TableHead>
                   <TableHead>Nama</TableHead>
+                  <TableHead>Kategori</TableHead>
+                  <TableHead>Tanggal Perolehan</TableHead>
                   <TableHead>Jumlah</TableHead>
-                  <TableHead>Kondisi</TableHead>
                   <TableHead>Nilai</TableHead>
                   <TableHead>Total</TableHead>
+                  <TableHead>Kondisi</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-8 text-center text-slate-500">
+                    <TableCell colSpan={10} className="py-8 text-center text-slate-500">
                       Belum ada aset
                     </TableCell>
                   </TableRow>
@@ -187,15 +219,25 @@ export function AsetTable({ initialData, canDelete }: { initialData: AsetRow[]; 
                     <TableRow key={row.id}>
                       <TableCell className="font-mono text-xs">{row.id}</TableCell>
                       <TableCell className="text-sm font-medium">{row.namaAset}</TableCell>
+                      <TableCell className="text-xs text-slate-500">{row.kategori}</TableCell>
+                      <TableCell className="text-xs text-slate-500">{formatDate(row.tanggalPerolehan)}</TableCell>
                       <TableCell className="text-sm text-slate-500">{row.jumlah}</TableCell>
+                      <TableCell className="text-sm">Rp {Number(row.nilaiAset).toLocaleString("id-ID")}</TableCell>
+                      <TableCell className="text-sm font-medium">
+                        Rp {(Number(row.nilaiAset) * row.jumlah).toLocaleString("id-ID")}
+                      </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs">
                           {row.kondisi}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm">Rp {Number(row.nilaiAset).toLocaleString("id-ID")}</TableCell>
-                      <TableCell className="text-sm font-medium">
-                        Rp {(Number(row.nilaiAset) * row.jumlah).toLocaleString("id-ID")}
+                      <TableCell>
+                        <Badge
+                          variant={row.status === "Aktif" ? "sehat" : "outline"}
+                          className="text-xs"
+                        >
+                          {row.status}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">
@@ -254,6 +296,24 @@ export function AsetTable({ initialData, canDelete }: { initialData: AsetRow[]; 
                   required
                 />
               </Field>
+              <Field label="Kategori">
+                <Select value={form.kategori} onChange={(event) => updateForm("kategori", event.target.value)}>
+                  {KATEGORI_ASET.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Status">
+                <Select value={form.status} onChange={(event) => updateForm("status", event.target.value)}>
+                  {STATUS_ASET.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
               <Field label="Jumlah">
                 <Input
                   type="number"
@@ -269,6 +329,13 @@ export function AsetTable({ initialData, canDelete }: { initialData: AsetRow[]; 
                   <option value="Rusak Ringan">Rusak Ringan</option>
                   <option value="Rusak Berat">Rusak Berat</option>
                 </Select>
+              </Field>
+              <Field label="Tanggal Perolehan">
+                <Input
+                  type="date"
+                  value={form.tanggalPerolehan}
+                  onChange={(event) => updateForm("tanggalPerolehan", event.target.value)}
+                />
               </Field>
               <Field label="Nilai Aset (Rp)" className="sm:col-span-2">
                 <Input

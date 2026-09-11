@@ -271,12 +271,13 @@ async function main() {
     ],
   });
 
-  const daftarAset = [
-    { id: "AST-001", namaAset: "Truk Pengangkut Sawit", jumlah: 1, kondisi: "Baik", nilaiAset: 250000000 },
-    { id: "AST-002", namaAset: "Mesin Genset", jumlah: 1, kondisi: "Baik", nilaiAset: 35000000 },
-    { id: "AST-003", namaAset: "Traktor", jumlah: 1, kondisi: "Baik", nilaiAset: 180000000 },
-    { id: "AST-004", namaAset: "Gudang Penyimpanan", jumlah: 1, kondisi: "Baik", nilaiAset: 90000000 },
-  ];
+const daftarAset = [
+  { id: "AST-001", namaAset: "Truk Pengangkut Sawit", jumlah: 1, kategori: "Mesin & Peralatan Pertanian/Peternakan", kondisi: "Baik", status: "Aktif", nilaiAset: 250000000, tanggalPerolehan: new Date("2026-01-15") },
+  { id: "AST-002", namaAset: "Mesin Genset", jumlah: 1, kategori: "Mesin & Peralatan Pertanian/Peternakan", kondisi: "Baik", status: "Aktif", nilaiAset: 35000000, tanggalPerolehan: new Date("2026-02-01") },
+  { id: "AST-003", namaAset: "Traktor", jumlah: 1, kategori: "Mesin & Peralatan Pertanian/Peternakan", kondisi: "Baik", status: "Aktif", nilaiAset: 180000000, tanggalPerolehan: new Date("2026-01-20") },
+  { id: "AST-004", namaAset: "Gudang Penyimpanan", jumlah: 1, kategori: "Bangunan & Instalasi", kondisi: "Baik", status: "Aktif", nilaiAset: 90000000, tanggalPerolehan: new Date("2025-12-10") },
+  { id: "AST-005", namaAset: "Kursi", jumlah: 1, kategori: "Perabotan & Peralatan Kantor/Villa", kondisi: "Rusak Ringan", status: "Tidak Digunakan", nilaiAset: 2300000, tanggalPerolehan: new Date("2026-09-09") },
+];
   for (const aset of daftarAset) {
     const { id, ...payload } = aset;
     await prisma.aset.upsert({

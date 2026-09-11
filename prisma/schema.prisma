@@ -179,13 +179,16 @@ model RiwayatGaji {
 }
 
 model Aset {
-  id        String   @id // Custom ID ex: AST-001
-  namaAset  String
-  jumlah    Int      @default(1)
-  kondisi   String // ex: Baik, Rusak Ringan, Rusak Berat
-  nilaiAset Decimal  @db.Decimal(15, 2)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String   @id // Custom ID ex: AST-001
+  namaAset          String
+  jumlah            Int      @default(1)
+  kategori          String // kategori COA aset, ex: Tanah, Mesin & Peralatan Pertanian/Peternakan
+  kondisi           String // ex: Baik, Rusak Ringan, Rusak Berat
+  status            String   @default("Aktif") // status penggunaan/keberadaan aset
+  nilaiAset         Decimal  @db.Decimal(15, 2)
+  tanggalPerolehan  DateTime? // tanggal perolehan aset
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@map("aset")
 }

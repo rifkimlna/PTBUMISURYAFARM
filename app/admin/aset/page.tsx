@@ -24,8 +24,11 @@ export default async function AsetPage() {
           id: a.id,
           namaAset: a.namaAset,
           jumlah: a.jumlah,
+          kategori: a.kategori,
           kondisi: a.kondisi,
+          status: a.status,
           nilaiAset: Number(a.nilaiAset),
+          tanggalPerolehan: a.tanggalPerolehan ? a.tanggalPerolehan.toISOString() : null,
         }))}
         canDelete={canDelete}
       />
