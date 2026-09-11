@@ -128,16 +128,16 @@ export default function TambahPohonPage() {
   const koordinatToMap = latitude && longitude ? `${latitude},${longitude}` : form.koordinat ? form.koordinat.replace(/\s/g, "") : null;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div className="flex items-center gap-3">
-        <Link href="/admin/pertanian/pohon">
-          <Button variant="ghost" size="icon" className="rounded-full">
+    <div className="mx-auto max-w-3xl space-y-6 min-w-0 px-0">
+      <div className="flex items-start sm:items-center gap-3">
+        <Link href="/admin/pertanian/pohon" className="shrink-0">
+          <Button variant="ghost" size="icon" className="rounded-full cursor-pointer shrink-0">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-slate-900">Tambah Data Pohon — Wajib Geotag</h1>
-          <p className="text-sm text-slate-500">11 field + Foto Geotag terbaru (GPS/EXIF/MANUAL) wajib setiap pohon</p>
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-slate-900">Tambah Data Pohon — Wajib Geotag</h1>
+          <p className="text-xs sm:text-sm text-slate-500">11 field + Foto Geotag terbaru (GPS/EXIF/MANUAL) wajib setiap pohon</p>
         </div>
       </div>
 

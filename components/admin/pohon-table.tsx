@@ -44,136 +44,182 @@ function hitungUsia(tanggalTanam: string) {
   return `${tahun} thn`;
 }
 
+// Mobile card for HP / tablet portrait - prevents 15-col table from breaking layout
+function PohonCard({ p, onQr }: { p: Pohon; onQr: (id: string) => void }) {
+  const usia = hitungUsia(p.tanggalTanam);
+  const tgl = new Date(p.tanggalTanam).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
+  const hasil = p.hasilPanen != null && p.hasilPanen !== "" ? `${Number(p.hasilPanen).toFixed(1)} KG` : "-";
+  const riwayatCount = p._count?.riwayat ?? p.riwayatCount ?? 0;
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-mono text-xs font-bold tracking-tight text-slate-900">{p.id}</div>
+          <div className="text-sm font-medium text-slate-800 truncate">{p.namaPohon || p.jenis || p.varietas}</div>
+          <div className="text-xs text-slate-500">{p.lokasiBlok} • {tgl} • {usia}</div>
+        </div>
+        <StatusBadge s={p.status} />
+      </div>
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className="rounded-lg bg-slate-50 px-3 py-2">
+          <div className="text-[11px] text-slate-400">Jenis</div>
+          <div className="font-medium text-slate-700 truncate">{p.jenis || p.varietas}</div>
+        </div>
+        <div className="rounded-lg bg-slate-50 px-3 py-2">
+          <div className="text-[11px] text-slate-400">Hasil</div>
+          <div className="font-medium text-slate-700">{hasil}</div>
+        </div>
+        <div className="rounded-lg bg-slate-50 px-3 py-2 col-span-2">
+          <div className="text-[11px] text-slate-400">Koordinat</div>
+          {p.koordinat ? (
+            <a href={`https://maps.google.com/?q=${encodeURIComponent(p.koordinat)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-emerald-600 font-medium">
+              <MapPin className="h-3 w-3" /> {p.koordinat}
+            </a>
+          ) : <span className="text-slate-400">-</span>}
+        </div>
+        <div className="rounded-lg bg-slate-50 px-3 py-2 col-span-2 flex items-center justify-between">
+          <span className="text-[11px] text-slate-400">{riwayatCount} riwayat</span>
+          {p.fotoGeotagUrl ? (
+            <a href={p.fotoGeotagUrl} target="_blank" className="inline-flex items-center gap-1.5">
+              <img src={p.fotoGeotagUrl} alt="geotag" className="h-6 w-6 rounded object-cover border border-emerald-200" />
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${p.geotagSource === "GPS" ? "bg-green-100 text-green-700" : p.geotagSource === "EXIF" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>{p.geotagSource || "GPS"}</span>
+            </a>
+          ) : <span className="text-[11px] font-medium text-red-600">✗ Tanpa Geotag</span>}
+        </div>
+      </div>
+      {(p.pemupukan || p.pengobatan) && (
+        <div className="text-xs text-slate-500 space-y-1 border-t border-slate-100 pt-2">
+          {p.pemupukan && <div><span className="font-medium">Pupuk:</span> {p.pemupukan}</div>}
+          {p.pengobatan && <div><span className="font-medium">Obat:</span> {p.pengobatan}</div>}
+        </div>
+      )}
+      <div className="grid grid-cols-4 gap-2 pt-1">
+        <Button type="button" variant="outline" size="sm" className="rounded-full text-xs h-9 cursor-pointer" onClick={() => onQr(p.id)}>
+          <QrCode className="h-3.5 w-3.5" /> QR
+        </Button>
+        <Link href={`/pohon/${p.id}`} target="_blank" className="block">
+          <Button variant="outline" size="sm" className="w-full rounded-full h-9 cursor-pointer" type="button">
+            <Eye className="h-3.5 w-3.5" />
+          </Button>
+        </Link>
+        <Link href={`/admin/pertanian/pohon/${p.id}/edit`} className="block">
+          <Button variant="outline" size="sm" className="w-full rounded-full h-9 cursor-pointer" type="button">
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+        </Link>
+        <Link href={`/admin/pertanian/pohon/${p.id}/lapangan`} className="block">
+          <Button variant="outline" size="sm" className="w-full rounded-full h-9 bg-emerald-50 hover:bg-emerald-100 cursor-pointer" type="button">
+            <ClipboardList className="h-3.5 w-3.5 text-emerald-700" />
+          </Button>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 export function PohonTable({ data }: { data: Pohon[] }) {
   const [qrId, setQrId] = useState<string | null>(null);
   return (
     <>
-      <div className="overflow-x-auto rounded-lg border border-slate-100">
-        <Table>
-          <TableHeader>
-            <TableRow className="border-slate-100 bg-slate-50/50 hover:bg-slate-50/50">
-              <TableHead className="sticky left-0 bg-slate-50 text-xs font-medium text-slate-500 whitespace-nowrap">NO</TableHead>
-              <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">ID</TableHead>
-              <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">NAMA POHON</TableHead>
-              <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">JENIS</TableHead>
-              <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">RIWAYAT PENYAKIT</TableHead>
-              <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">TANGGAL TANAM</TableHead>
-              <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">BLOK</TableHead>
-              <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">KOORDINAT</TableHead>
-              <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">GEOTAG</TableHead>
-              <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">HASIL PANEN</TableHead>
-              <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">USIA POHON</TableHead>
-              <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">PEMUPUKAN</TableHead>
-              <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">PENGOBATAN</TableHead>
-              <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">STATUS</TableHead>
-              <TableHead className="text-right text-xs font-medium text-slate-500 whitespace-nowrap sticky right-0 bg-slate-50">AKSI</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={15} className="text-center text-slate-500 py-8">
-                  Belum ada data pohon
-                </TableCell>
+      {/* Mobile: card list (<768px) - auto layout perfect di HP */}
+      <div className="grid gap-3 md:hidden p-3">
+        {data.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Belum ada data pohon</div>
+        ) : (
+          data.map((p) => <PohonCard key={p.id} p={p} onQr={setQrId} />)
+        )}
+      </div>
+
+      {/* Desktop/Tablet landscape: scrollable table */}
+      <div className="hidden md:block overflow-x-auto rounded-lg border border-slate-100 -mx-0">
+        <div className="min-w-[1100px]">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-slate-100 bg-slate-50/50 hover:bg-slate-50/50">
+                <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">NO</TableHead>
+                <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">ID</TableHead>
+                <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">NAMA POHON</TableHead>
+                <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">JENIS</TableHead>
+                <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">RIWAYAT</TableHead>
+                <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">TGL TANAM</TableHead>
+                <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">BLOK</TableHead>
+                <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">KOORDINAT</TableHead>
+                <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">GEOTAG</TableHead>
+                <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">HASIL</TableHead>
+                <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">USIA</TableHead>
+                <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">STATUS</TableHead>
+                <TableHead className="text-right text-xs font-medium text-slate-500 whitespace-nowrap">AKSI</TableHead>
               </TableRow>
-            ) : (
-              data.map((p, idx) => {
-                const no = idx + 1;
-                const usia = hitungUsia(p.tanggalTanam);
-                const tgl = new Date(p.tanggalTanam).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
-                const hasil = p.hasilPanen != null && p.hasilPanen !== "" ? `${Number(p.hasilPanen).toFixed(1)} KG` : "-";
-                const riwayatCount = p._count?.riwayat ?? p.riwayatCount ?? 0;
-                const koordinat = p.koordinat || "-";
-                return (
-                  <TableRow key={p.id} className="border-slate-50 hover:bg-slate-50/50">
-                    <TableCell className="sticky left-0 bg-white text-xs font-medium text-slate-600">{no}</TableCell>
-                    <TableCell className="font-mono text-xs font-medium tracking-tight whitespace-nowrap">{p.id}</TableCell>
-                    <TableCell className="text-sm text-slate-700 whitespace-nowrap max-w-[160px] truncate" title={p.namaPohon || p.varietas}>
-                      {p.namaPohon || "-"}
-                    </TableCell>
-                    <TableCell className="text-sm text-slate-700 whitespace-nowrap">{p.jenis || p.varietas || "-"}</TableCell>
-                    <TableCell className="text-xs text-slate-600 whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1.5">
+            </TableHeader>
+            <TableBody>
+              {data.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={13} className="text-center text-slate-500 py-8">
+                    Belum ada data pohon
+                  </TableCell>
+                </TableRow>
+              ) : (
+                data.map((p, idx) => {
+                  const no = idx + 1;
+                  const usia = hitungUsia(p.tanggalTanam);
+                  const tgl = new Date(p.tanggalTanam).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
+                  const hasil = p.hasilPanen != null && p.hasilPanen !== "" ? `${Number(p.hasilPanen).toFixed(1)} KG` : "-";
+                  const riwayatCount = p._count?.riwayat ?? p.riwayatCount ?? 0;
+                  const koordinat = p.koordinat || "-";
+                  return (
+                    <TableRow key={p.id} className="border-slate-50 hover:bg-slate-50/50">
+                      <TableCell className="text-xs font-medium text-slate-600">{no}</TableCell>
+                      <TableCell className="font-mono text-xs font-medium tracking-tight whitespace-nowrap">{p.id}</TableCell>
+                      <TableCell className="text-sm text-slate-700 whitespace-nowrap max-w-[140px] truncate" title={p.namaPohon || p.varietas}>
+                        {p.namaPohon || "-"}
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-700 whitespace-nowrap">{p.jenis || p.varietas || "-"}</TableCell>
+                      <TableCell className="text-xs text-slate-600 whitespace-nowrap">
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium">{riwayatCount} riwayat</span>
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-600 whitespace-nowrap">{tgl}</TableCell>
-                    <TableCell className="text-sm text-slate-500 whitespace-nowrap">{p.lokasiBlok}</TableCell>
-                    <TableCell className="text-xs whitespace-nowrap">
-                      {p.koordinat ? (
-                        <a
-                          href={`https://maps.google.com/?q=${encodeURIComponent(p.koordinat)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-700 hover:underline"
-                          title={p.koordinat}
-                        >
-                          <MapPin className="h-3 w-3" />
-                          {koordinat}
-                        </a>
-                      ) : (
-                        <span className="text-slate-400">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs whitespace-nowrap">
-                      {p.fotoGeotagUrl ? (
-                        <a href={p.fotoGeotagUrl} target="_blank" className="inline-flex items-center gap-1.5">
-                          <img src={p.fotoGeotagUrl} alt="geotag" className="h-8 w-8 rounded object-cover border border-emerald-200" />
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${p.geotagSource === "GPS" ? "bg-green-100 text-green-700" : p.geotagSource === "EXIF" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>{p.geotagSource || "GPS"}</span>
-                        </a>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600 border border-red-200">✗ Tanpa Geotag</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs font-medium text-slate-700 whitespace-nowrap">{hasil}</TableCell>
-                    <TableCell className="text-xs text-slate-600 whitespace-nowrap">{usia}</TableCell>
-                    <TableCell className="text-xs text-slate-600 max-w-[180px] truncate whitespace-nowrap" title={p.pemupukan || ""}>
-                      {p.pemupukan ? <span className="truncate">{p.pemupukan}</span> : <span className="text-slate-400">-</span>}
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-600 max-w-[180px] truncate whitespace-nowrap" title={p.pengobatan || ""}>
-                      {p.pengobatan ? <span className="truncate">{p.pengobatan}</span> : <span className="text-slate-400">-</span>}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge s={p.status} />
-                    </TableCell>
-                    <TableCell className="text-right sticky right-0 bg-white">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 rounded-full px-3 text-xs cursor-pointer"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setQrId(p.id);
-                          }}
-                        >
-                          <QrCode className="h-3 w-3" /> QR
-                        </Button>
-                        <Link href={`/pohon/${p.id}`} target="_blank">
-                          <Button variant="ghost" size="sm" className="h-7 w-7 rounded-full" type="button">
-                            <Eye className="h-3 w-3" />
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-600 whitespace-nowrap">{tgl}</TableCell>
+                      <TableCell className="text-sm text-slate-500 whitespace-nowrap">{p.lokasiBlok}</TableCell>
+                      <TableCell className="text-xs whitespace-nowrap">
+                        {p.koordinat ? (
+                          <a href={`https://maps.google.com/?q=${encodeURIComponent(p.koordinat)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-700 hover:underline cursor-pointer" title={p.koordinat}>
+                            <MapPin className="h-3 w-3" /> {koordinat.length > 18 ? koordinat.slice(0,18)+"…" : koordinat}
+                          </a>
+                        ) : <span className="text-slate-400">-</span>}
+                      </TableCell>
+                      <TableCell className="text-xs whitespace-nowrap">
+                        {p.fotoGeotagUrl ? (
+                          <a href={p.fotoGeotagUrl} target="_blank" className="inline-flex items-center gap-1.5 cursor-pointer">
+                            <img src={p.fotoGeotagUrl} alt="geotag" className="h-8 w-8 rounded object-cover border border-emerald-200" />
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${p.geotagSource === "GPS" ? "bg-green-100 text-green-700" : p.geotagSource === "EXIF" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>{p.geotagSource || "GPS"}</span>
+                          </a>
+                        ) : <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600 border border-red-200">✗ Tanpa Geotag</span>}
+                      </TableCell>
+                      <TableCell className="text-xs font-medium text-slate-700 whitespace-nowrap">{hasil}</TableCell>
+                      <TableCell className="text-xs text-slate-600 whitespace-nowrap">{usia}</TableCell>
+                      <TableCell><StatusBadge s={p.status} /></TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button type="button" variant="ghost" size="sm" className="h-8 rounded-full px-3 text-xs cursor-pointer touch-manipulation" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setQrId(p.id); }}>
+                            <QrCode className="h-3.5 w-3.5" /> QR
                           </Button>
-                        </Link>
-                        <Link href={`/admin/pertanian/pohon/${p.id}/edit`} title="Edit Master">
-                          <Button variant="ghost" size="sm" className="h-7 w-7 rounded-full" type="button">
-                            <Pencil className="h-3 w-3" />
-                          </Button>
-                        </Link>
-                        <Link href={`/admin/pertanian/pohon/${p.id}/lapangan`} title="Data Lapangan">
-                          <Button variant="ghost" size="sm" className="h-7 w-7 rounded-full bg-emerald-50 hover:bg-emerald-100" type="button">
-                            <ClipboardList className="h-3 w-3 text-emerald-700" />
-                          </Button>
-                        </Link>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
+                          <Link href={`/pohon/${p.id}`} target="_blank">
+                            <Button variant="ghost" size="sm" className="h-8 w-8 rounded-full cursor-pointer touch-manipulation" type="button"><Eye className="h-3.5 w-3.5" /></Button>
+                          </Link>
+                          <Link href={`/admin/pertanian/pohon/${p.id}/edit`} title="Edit Master">
+                            <Button variant="ghost" size="sm" className="h-8 w-8 rounded-full cursor-pointer touch-manipulation" type="button"><Pencil className="h-3.5 w-3.5" /></Button>
+                          </Link>
+                          <Link href={`/admin/pertanian/pohon/${p.id}/lapangan`} title="Data Lapangan">
+                            <Button variant="ghost" size="sm" className="h-8 w-8 rounded-full bg-emerald-50 hover:bg-emerald-100 cursor-pointer touch-manipulation" type="button"><ClipboardList className="h-3.5 w-3.5 text-emerald-700" /></Button>
+                          </Link>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
       <QrModal open={!!qrId} onOpenChange={(o) => !o && setQrId(null)} pohonId={qrId || ""} />
     </>

@@ -204,29 +204,47 @@ export function TransaksiTable({ initialData, initialTotal, canDelete }: { initi
 
   return (
     <>
-      <Card className="border-slate-200">
-        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
+      <Card className="border-slate-200 overflow-hidden">
+        <CardHeader className="flex flex-col gap-3 sm:gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <CardTitle className="text-sm">Transaksi Kas</CardTitle>
             <p className="mt-1 text-xs text-slate-500">{total} entri</p>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <select
-              value={tipe}
-              onChange={(event) => changeTipe(event.target.value as "" | Tipe)}
-              className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-600 outline-none focus:border-slate-300"
-            >
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center w-full sm:w-auto">
+            <select value={tipe} onChange={(event) => changeTipe(event.target.value as "" | Tipe)} className="h-9 rounded-full border border-slate-200 bg-white px-3 text-xs text-slate-600 outline-none focus:border-slate-300 w-full sm:w-auto cursor-pointer">
               <option value="">Semua Tipe</option>
               <option value="PEMASUKAN">PEMASUKAN</option>
               <option value="PENGELUARAN">PENGELUARAN</option>
             </select>
-            <Button size="sm" onClick={openCreate}>
-              <Plus className="h-3 w-3" /> Tambah Transaksi
-            </Button>
+            <Button size="sm" onClick={openCreate} className="w-full sm:w-auto cursor-pointer"><Plus className="h-3 w-3" /> Tambah Transaksi</Button>
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          {/* Mobile cards */}
+          <div className="grid gap-3 p-3 sm:hidden">
+            {rows.length === 0 && !loading ? (
+              <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">Belum ada transaksi</div>
+            ) : (
+              rows.map((row) => (
+                <div key={row.id} className="rounded-xl border border-slate-200 bg-white p-4 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-slate-500">{formatDate(row.tanggal)}</span>
+                    <Badge variant={row.tipe === "PEMASUKAN" ? "sehat" : "outline"} className="text-[11px]">{row.tipe}</Badge>
+                  </div>
+                  <div className="text-sm font-medium text-slate-900">{row.kategori}</div>
+                  <div className="text-sm font-semibold">Rp {Number(row.jumlah).toLocaleString("id-ID")}</div>
+                  <div className="text-xs text-slate-500">Admin: {row.admin.nama}</div>
+                  {row.keterangan && <div className="text-xs text-slate-600 bg-slate-50 rounded-lg px-3 py-2">{row.keterangan}</div>}
+                  <div className="flex gap-2 pt-1">
+                    <Button variant="outline" size="sm" className="flex-1 rounded-full h-9 cursor-pointer" onClick={() => openEdit(row)}><Pencil className="h-3.5 w-3.5" /> Edit</Button>
+                    {canDelete && <Button variant="destructive" size="sm" className="flex-1 rounded-full h-9 cursor-pointer" onClick={() => deleteTransaksi(row)}><Trash2 className="h-3.5 w-3.5" /> Hapus</Button>}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          {/* Desktop table */}
+          <div className="hidden sm:block overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -241,39 +259,20 @@ export function TransaksiTable({ initialData, initialTotal, canDelete }: { initi
               <TableBody>
                 {rows.length === 0 && !loading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-8 text-center text-slate-500">
-                      Belum ada transaksi
-                    </TableCell>
+                    <TableCell colSpan={6} className="py-8 text-center text-slate-500">Belum ada transaksi</TableCell>
                   </TableRow>
                 ) : (
                   rows.map((row) => (
                     <TableRow key={row.id}>
-                      <TableCell className="text-xs text-slate-500">{formatDate(row.tanggal)}</TableCell>
-                      <TableCell>
-                        <Badge variant={row.tipe === "PEMASUKAN" ? "sehat" : "outline"} className="text-[11px]">
-                          {row.tipe}
-                        </Badge>
-                      </TableCell>
+                      <TableCell className="text-xs text-slate-500 whitespace-nowrap">{formatDate(row.tanggal)}</TableCell>
+                      <TableCell><Badge variant={row.tipe === "PEMASUKAN" ? "sehat" : "outline"} className="text-[11px]">{row.tipe}</Badge></TableCell>
                       <TableCell className="text-sm text-slate-700">{row.kategori}</TableCell>
-                      <TableCell className="text-sm font-medium tracking-tight">
-                        Rp {Number(row.jumlah).toLocaleString("id-ID")}
-                      </TableCell>
+                      <TableCell className="text-sm font-medium tracking-tight whitespace-nowrap">Rp {Number(row.jumlah).toLocaleString("id-ID")}</TableCell>
                       <TableCell className="text-xs text-slate-500">{row.admin.nama}</TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="sm" className="h-7 w-7 rounded-full" onClick={() => openEdit(row)}>
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          {canDelete && (
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              className="h-7 w-7 rounded-full"
-                              onClick={() => deleteTransaksi(row)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
+                          <Button variant="ghost" size="sm" className="h-8 w-8 rounded-full cursor-pointer touch-manipulation" onClick={() => openEdit(row)}><Pencil className="h-3.5 w-3.5" /></Button>
+                          {canDelete && <Button variant="destructive" size="sm" className="h-8 w-8 rounded-full cursor-pointer touch-manipulation" onClick={() => deleteTransaksi(row)}><Trash2 className="h-3.5 w-3.5" /></Button>}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -283,17 +282,11 @@ export function TransaksiTable({ initialData, initialTotal, canDelete }: { initi
             </Table>
           </div>
         </CardContent>
-        <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
-          <span className="text-xs text-slate-400">
-            Halaman {page} / {totalPages}
-          </span>
-          <div className="flex gap-1">
-            <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => goToPage(page - 1)}>
-              <ChevronLeft className="h-3.5 w-3.5" /> Sebelumnya
-            </Button>
-            <Button variant="outline" size="sm" disabled={page >= totalPages || loading} onClick={() => goToPage(page + 1)}>
-              Berikutnya <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-slate-100 px-4 py-3">
+          <span className="text-xs text-slate-400">Halaman {page} / {totalPages}</span>
+          <div className="flex gap-1 w-full sm:w-auto">
+            <Button variant="outline" size="sm" className="flex-1 sm:flex-none cursor-pointer" disabled={page <= 1 || loading} onClick={() => goToPage(page - 1)}><ChevronLeft className="h-3.5 w-3.5" /> Sebelumnya</Button>
+            <Button variant="outline" size="sm" className="flex-1 sm:flex-none cursor-pointer" disabled={page >= totalPages || loading} onClick={() => goToPage(page + 1)}>Berikutnya <ChevronRight className="h-3.5 w-3.5" /></Button>
           </div>
         </div>
       </Card>

@@ -16,29 +16,29 @@ export default async function PertanianDashboard() {
   ]);
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+    <div className="space-y-6 sm:space-y-8 min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 sm:gap-4">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900">
             Pertanian <span className="font-semibold">overview</span>
           </h1>
           <p className="mt-1 text-sm text-slate-400">Ringkasan kesehatan — pt_bst</p>
         </div>
-        <Link href="/admin/pertanian/scan">
-          <Button className="rounded-full px-5">
+        <Link href="/admin/pertanian/scan" className="shrink-0">
+          <Button className="rounded-full px-5 w-full sm:w-auto cursor-pointer">
             <Plus className="h-3.5 w-3.5" /> Update
           </Button>
         </Link>
       </div>
 
       {tanpaGeotag > 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-center justify-between">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 sm:px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="text-sm font-medium text-amber-800">⚠️ {tanpaGeotag} pohon tanpa foto geotag wajib</div>
-          <Link href="/admin/pertanian/pohon?hasGeotag=false" className="text-xs font-medium text-amber-800 underline">Lihat →</Link>
+          <Link href="/admin/pertanian/pohon?hasGeotag=false" className="text-xs font-medium text-amber-800 underline shrink-0">Lihat →</Link>
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         {[
           { label: "Total", value: total, hint: "pohon" },
           { label: "Sehat", value: sehat, hint: "green", accent: "text-green-800" },
@@ -56,9 +56,9 @@ export default async function PertanianDashboard() {
       </div>
 
       <Card className="overflow-hidden border-slate-100">
-        <div className="flex items-center justify-between border-b border-slate-50 px-6 py-4">
+        <div className="flex items-center justify-between border-b border-slate-50 px-4 sm:px-6 py-4 gap-2">
           <div className="text-sm font-medium tracking-tight text-slate-900">Data Pohon</div>
-          <div className="text-xs text-slate-400">{pohon.length} entri</div>
+          <div className="text-xs text-slate-400 shrink-0">{pohon.length} entri</div>
         </div>
         <PohonTable
           data={pohon.map((p: any) => ({

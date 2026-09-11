@@ -26,18 +26,18 @@ export default async function KeuanganPage() {
   const saldo = pemasukan - pengeluaran;
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+    <div className="space-y-6 sm:space-y-8 min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900">
             Keuangan <span className="font-semibold">overview</span>
           </h1>
           <p className="mt-1 text-sm text-slate-400">Kas • Karyawan • Aset — minimal, real-time</p>
         </div>
-        <ExportButton />
+        <div className="shrink-0"><ExportButton /></div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         {[
           { label: "Pemasukan", value: pemasukan, note: "PEMASUKAN" },
           { label: "Pengeluaran", value: pengeluaran, note: "PENGELUARAN", tone: "text-slate-500" },

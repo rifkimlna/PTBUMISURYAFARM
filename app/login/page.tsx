@@ -43,8 +43,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#FCFCFD] px-4 py-10">
-      <Card className="w-full max-w-md border-slate-200 shadow-sm">
+    <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-[#FCFCFD] px-4 py-6 sm:py-10">
+      <Card className="w-full max-w-md border-slate-200 shadow-sm mx-auto">
         <CardHeader className="text-center">
           <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-green-700 text-white">
             <Leaf className="h-5 w-5" />

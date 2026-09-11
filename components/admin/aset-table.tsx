@@ -146,23 +146,36 @@ export function AsetTable({ initialData, canDelete }: { initialData: AsetRow[]; 
 
   return (
     <>
-      <Card className="border-slate-200">
-        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
+      <Card className="border-slate-200 overflow-hidden">
+        <CardHeader className="flex flex-col gap-3 sm:gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <CardTitle className="text-sm">Daftar Aset</CardTitle>
-            <p className="mt-1 text-xs text-slate-500">
-              {rows.length} item • Total Nilai{" "}
-              <span className="font-semibold">Rp {totalNilai.toLocaleString("id-ID")}</span>
-            </p>
+            <p className="mt-1 text-xs text-slate-500">{rows.length} item • Total Nilai <span className="font-semibold">Rp {totalNilai.toLocaleString("id-ID")}</span></p>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button size="sm" onClick={openCreate}>
-              <Plus className="h-3 w-3" /> Tambah Aset
-            </Button>
-          </div>
+          <Button size="sm" onClick={openCreate} className="w-full sm:w-auto cursor-pointer"><Plus className="h-3 w-3" /> Tambah Aset</Button>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          {/* Mobile cards */}
+          <div className="grid gap-3 p-3 sm:hidden">
+            {rows.length === 0 ? <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">Belum ada aset</div> : rows.map((row) => (
+              <div key={row.id} className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0"><div className="font-mono text-xs font-bold">{row.id}</div><div className="text-sm font-medium truncate">{row.namaAset}</div><div className="text-xs text-slate-500">Jumlah: {row.jumlah}</div></div>
+                  <Badge variant="outline" className="text-xs shrink-0">{row.kondisi}</Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-lg bg-slate-50 px-3 py-2"><div className="text-[11px] text-slate-400">Nilai</div><div className="font-medium">Rp {Number(row.nilaiAset).toLocaleString("id-ID")}</div></div>
+                  <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2"><div className="text-[11px] text-emerald-700">Total</div><div className="font-semibold text-emerald-900">Rp {(Number(row.nilaiAset)*row.jumlah).toLocaleString("id-ID")}</div></div>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="flex-1 rounded-full h-9 cursor-pointer" onClick={() => openEdit(row)}><Pencil className="h-3.5 w-3.5" /> Edit</Button>
+                  {canDelete && <Button variant="destructive" size="sm" className="flex-1 rounded-full h-9 cursor-pointer" onClick={() => deleteAset(row)}><Trash2 className="h-3.5 w-3.5" /> Hapus</Button>}
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Desktop */}
+          <div className="hidden sm:block overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -177,41 +190,20 @@ export function AsetTable({ initialData, canDelete }: { initialData: AsetRow[]; 
               </TableHeader>
               <TableBody>
                 {rows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="py-8 text-center text-slate-500">
-                      Belum ada aset
-                    </TableCell>
-                  </TableRow>
+                  <TableRow><TableCell colSpan={7} className="py-8 text-center text-slate-500">Belum ada aset</TableCell></TableRow>
                 ) : (
                   rows.map((row) => (
                     <TableRow key={row.id}>
                       <TableCell className="font-mono text-xs">{row.id}</TableCell>
                       <TableCell className="text-sm font-medium">{row.namaAset}</TableCell>
                       <TableCell className="text-sm text-slate-500">{row.jumlah}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {row.kondisi}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm">Rp {Number(row.nilaiAset).toLocaleString("id-ID")}</TableCell>
-                      <TableCell className="text-sm font-medium">
-                        Rp {(Number(row.nilaiAset) * row.jumlah).toLocaleString("id-ID")}
-                      </TableCell>
+                      <TableCell><Badge variant="outline" className="text-xs">{row.kondisi}</Badge></TableCell>
+                      <TableCell className="text-sm whitespace-nowrap">Rp {Number(row.nilaiAset).toLocaleString("id-ID")}</TableCell>
+                      <TableCell className="text-sm font-medium whitespace-nowrap">Rp {(Number(row.nilaiAset) * row.jumlah).toLocaleString("id-ID")}</TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="sm" className="h-7 w-7 rounded-full" onClick={() => openEdit(row)}>
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          {canDelete && (
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              className="h-7 w-7 rounded-full"
-                              onClick={() => deleteAset(row)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
+                          <Button variant="ghost" size="sm" className="h-8 w-8 rounded-full cursor-pointer touch-manipulation" onClick={() => openEdit(row)}><Pencil className="h-3.5 w-3.5" /></Button>
+                          {canDelete && <Button variant="destructive" size="sm" className="h-8 w-8 rounded-full cursor-pointer touch-manipulation" onClick={() => deleteAset(row)}><Trash2 className="h-3.5 w-3.5" /></Button>}
                         </div>
                       </TableCell>
                     </TableRow>

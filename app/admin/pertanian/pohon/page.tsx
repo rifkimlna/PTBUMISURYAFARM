@@ -12,21 +12,21 @@ export default async function DataPohonPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Link href="/admin/pertanian">
-            <Button variant="ghost" size="icon" className="rounded-full">
+    <div className="space-y-6 min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link href="/admin/pertanian" className="shrink-0">
+            <Button variant="ghost" size="icon" className="rounded-full cursor-pointer">
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight text-slate-900">Data Pohon</h1>
-            <p className="text-sm text-slate-500">{pohon.length} pohon terdata • Kelola varietas, blok & status</p>
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-slate-900">Data Pohon</h1>
+            <p className="text-xs sm:text-sm text-slate-500 truncate">{pohon.length} pohon terdata • Kelola varietas, blok & status</p>
           </div>
         </div>
-        <Link href="/admin/pertanian/pohon/tambah">
-          <Button className="rounded-full bg-green-700 hover:bg-green-800">
+        <Link href="/admin/pertanian/pohon/tambah" className="shrink-0">
+          <Button className="rounded-full bg-green-700 hover:bg-green-800 w-full sm:w-auto cursor-pointer">
             <Plus className="h-3.5 w-3.5" /> Tambah Pohon
           </Button>
         </Link>
