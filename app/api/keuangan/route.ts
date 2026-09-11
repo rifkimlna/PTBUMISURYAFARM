@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuthAndRole, getSessionFromRequest } from "@/lib/auth";
 import { createTransaksiKasSchema, queryKeuanganSchema } from "@/lib/validations/keuanganValidation";
+import { kodeAkunByNama } from "@/lib/coa";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 import { ZodError } from "zod";
 
@@ -15,6 +16,7 @@ export async function GET(req: NextRequest) {
     const query = queryKeuanganSchema.parse({
       tipe: searchParams.get("tipe") || undefined,
       kategori: searchParams.get("kategori") || undefined,
+      sumberDana: searchParams.get("sumberDana") || undefined,
       startDate: searchParams.get("startDate") || undefined,
       endDate: searchParams.get("endDate") || undefined,
       page: searchParams.get("page") || undefined,
@@ -28,6 +30,7 @@ export async function GET(req: NextRequest) {
     const where: any = {};
     if (query.tipe) where.tipe = query.tipe;
     if (query.kategori) where.kategori = { contains: query.kategori, mode: "insensitive" };
+    if (query.sumberDana) where.sumberDana = query.sumberDana;
     if (query.startDate || query.endDate) {
       where.tanggal = {};
       // Periode mencakup seluruh hari yang dipilih (dari 00:00 sampai 23:59:59)
@@ -92,6 +95,8 @@ export async function POST(req: NextRequest) {
         data: {
           tipe: parsed.tipe as any,
           kategori: parsed.kategori,
+          kodeAkun: kodeAkunByNama(parsed.tipe, parsed.kategori),
+          sumberDana: parsed.sumberDana ?? "KAS",
           jumlah: parsed.jumlah as any,
           keterangan: parsed.keterangan ?? null,
           tanggal: parsed.tanggal ?? new Date(),

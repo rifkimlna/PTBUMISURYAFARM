@@ -43,6 +43,17 @@ enum TipeTransaksi {
   PENGELUARAN
 }
 
+enum SumberDana {
+  KAS
+  BANK
+  TABUNGAN
+}
+
+enum JenisStok {
+  MASUK
+  KELUAR
+}
+
 enum GeotagSource {
   GPS
   EXIF
@@ -171,13 +182,16 @@ model RiwayatGaji {
 }
 
 model Aset {
-  id        String   @id // Custom ID ex: AST-001
-  namaAset  String
-  jumlah    Int      @default(1)
-  kondisi   String // ex: Baik, Rusak Ringan, Rusak Berat
-  nilaiAset Decimal  @db.Decimal(15, 2)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String   @id // Custom ID ex: AST-001
+  namaAset          String
+  jumlah            Int      @default(1)
+  kategori          String // kategori COA aset, ex: Tanah, Mesin & Peralatan Pertanian/Peternakan
+  kondisi           String // ex: Baik, Rusak Ringan, Rusak Berat
+  status            String   @default("Aktif") // status penggunaan/keberadaan aset
+  nilaiAset         Decimal  @db.Decimal(15, 2)
+  tanggalPerolehan  DateTime? // tanggal perolehan aset
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@map("aset")
 }
@@ -185,7 +199,9 @@ model Aset {
 model TransaksiKas {
   id         String        @id @default(cuid())
   tipe       TipeTransaksi
-  kategori   String // ex: Penjualan Sawit, Pupuk, Gaji
+  kategori   String // ex: Pendapatan Penjualan Hasil Kebun, Beban Pupuk dan Obat-obatan
+  kodeAkun   String? // kode akun COA, ex: 4101 (nullable utk data lama)
+  sumberDana SumberDana   @default(KAS)
   jumlah     Decimal       @db.Decimal(15, 2)
   keterangan String?       @db.Text
   tanggal    DateTime      @default(now())
@@ -199,6 +215,7 @@ model TransaksiKas {
 
   @@index([tipe])
   @@index([kategori])
+  @@index([sumberDana])
   @@index([tanggal])
   @@index([adminId])
   @@map("transaksi_kas")
@@ -216,6 +233,38 @@ model BuktiTransaksi {
 
   @@index([transaksiId])
   @@map("bukti_transaksi")
+}
+
+model PersediaanBarang {
+  id          String   @id // Kode barang, ex: BRG-001 (unik)
+  namaBarang  String
+  kategori    String // Bibit/Benih | Pupuk & Obat-obatan | Pakan Ternak/Ikan
+  stokAwal    Int      @default(0)
+  satuan      String // kg, liter, pcs, karung
+  hargaSatuan Decimal  @db.Decimal(15, 2)
+  keterangan  String? @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  riwayat RiwayatStok[]
+
+  @@index([kategori])
+  @@map("persediaan_barang")
+}
+
+model RiwayatStok {
+  id         String         @id @default(cuid())
+  barangId   String
+  barang     PersediaanBarang @relation(fields: [barangId], references: [id], onDelete: Cascade)
+  jenis      JenisStok
+  jumlah     Int
+  keterangan String?        @db.Text
+  tanggal    DateTime       @default(now())
+  createdAt  DateTime       @default(now())
+
+  @@index([barangId])
+  @@index([tanggal])
+  @@map("riwayat_stok")
 }
 
 model Panen {

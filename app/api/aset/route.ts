@@ -28,8 +28,11 @@ export async function POST(req: NextRequest) {
         id: parsed.id,
         namaAset: parsed.namaAset,
         jumlah: parsed.jumlah,
+        kategori: parsed.kategori,
         kondisi: parsed.kondisi,
+        status: parsed.status ?? "Aktif",
         nilaiAset: parsed.nilaiAset as any,
+        tanggalPerolehan: parsed.tanggalPerolehan ?? null,
       },
     });
     return successResponse(aset, "Aset ditambahkan", 201);

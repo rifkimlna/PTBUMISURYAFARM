@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Trees, QrCode, ClipboardList, Wallet, Users, Package, LogOut, Leaf } from "lucide-react";
+import { LayoutDashboard, Trees, QrCode, ClipboardList, Wallet, Users, Package, Boxes, LogOut, Leaf } from "lucide-react";
 
 const pertanianMenu = [
   { label: "Dashboard", href: "/admin/pertanian", icon: LayoutDashboard },
@@ -15,6 +15,7 @@ const internalMenu = [
   { label: "Keuangan Kas", href: "/admin/keuangan", icon: Wallet },
   { label: "Data Karyawan", href: "/admin/keuangan/karyawan", icon: Users },
   { label: "Inventaris Aset", href: "/admin/aset", icon: Package },
+  { label: "Persediaan Barang", href: "/admin/persediaan", icon: Boxes },
 ];
 
 function NavItem({ href, icon: Icon, label }: { href: string; icon: any; label: string }) {

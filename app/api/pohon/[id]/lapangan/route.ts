@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuthAndRole, getSessionFromRequest } from "@/lib/auth";
+import { requireAuthAndRole } from "@/lib/auth";
 import { updatePohonLapanganSchema } from "@/lib/validations/pohonValidation";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 import { ZodError } from "zod";
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 
 // PUT /api/pohon/[id]/lapangan - update khusus lapangan (petugas)
 export async function PUT(req: NextRequest, { params }: Params) {
-  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_PERTANIAN", "PETUGAS_LAPANGAN"]);
+const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_PERTANIAN", "PETUGAS_LAPANGAN"]);
   if (auth instanceof Response) return auth;
   const session = auth;
   const { id } = await params;

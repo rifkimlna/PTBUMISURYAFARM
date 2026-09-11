@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Fix ngrok "tidak bisa klik" -> HMR cross-origin blocked kalau via ngrok
+// Fix ngrok "tidak bisa klik" -> HMR cross-origin blocked kalau via ngrok
   // Next 16: allowedDevOrigins harus include host ngrok, wildcard * di depan didukung
   allowedDevOrigins: [
     "192.168.56.1",

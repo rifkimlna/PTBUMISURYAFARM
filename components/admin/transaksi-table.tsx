@@ -13,6 +13,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, Paperclip, X, Loader2 } from "lucide-react";
 import { formatRupiah } from "@/lib/utils";
+import { kategoriByTipe, labelSumberDana, SUMBER_DANA_KEYS } from "@/lib/coa";
 import { BuktiTransaksiDialog } from "@/components/admin/bukti-transaksi-dialog";
 
 type Tipe = "PEMASUKAN" | "PENGELUARAN";
@@ -22,6 +23,8 @@ export type TransaksiRow = {
   tanggal: string;
   tipe: Tipe;
   kategori: string;
+  kodeAkun?: string | null;
+  sumberDana?: string | null;
   jumlah: number;
   keterangan: string | null;
   admin: { nama: string };
@@ -40,6 +43,7 @@ type BuktiDialogTransaksi = { id: string; kategori: string; jumlah: number };
 type FormValues = {
   tipe: Tipe;
   kategori: string;
+  sumberDana: string;
   jumlah: string;
   keterangan: string;
   tanggal: string;
@@ -47,24 +51,16 @@ type FormValues = {
 
 const emptyForm: FormValues = {
   tipe: "PEMASUKAN",
-  kategori: "Penjualan Sawit",
+  kategori: "Pendapatan Penjualan Hasil Kebun",
+  sumberDana: "KAS",
   jumlah: "",
   keterangan: "",
   tanggal: "",
 };
 
-const kategoriList = [
-  "Penjualan Sawit",
-  "Penjualan Bibit",
-  "Gaji Karyawan",
-  "Pupuk",
-  "Pestisida",
-  "Perawatan Alat",
-  "Bahan Bakar",
-  "Pembelian Aset",
-  "Operasional",
-  "Lainnya",
-];
+function kategoriOptionsFor(tipe: Tipe) {
+  return kategoriByTipe(tipe);
+}
 
 function formatDate(value: string) {
   const date = new Date(value);
@@ -114,6 +110,7 @@ export function TransaksiTable({
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
   const [tipe, setTipe] = useState<"" | Tipe>("");
+  const [sumberDana, setSumberDana] = useState<"" | (typeof SUMBER_DANA_KEYS)[number]>("");
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -151,6 +148,7 @@ export function TransaksiTable({
   useEffect(() => {
     const params = new URLSearchParams({ page: String(page), limit: String(limit) });
     if (tipe) params.set("tipe", tipe);
+    if (sumberDana) params.set("sumberDana", sumberDana);
     if (startDate) params.set("startDate", startDate);
     if (endDate) params.set("endDate", endDate);
     let cancelled = false;
@@ -178,7 +176,7 @@ export function TransaksiTable({
     return () => {
       cancelled = true;
     };
-  }, [page, limit, tipe, startDate, endDate, rowsVersion]);
+  }, [page, limit, tipe, sumberDana, startDate, endDate, rowsVersion]);
 
   const goToPage = (next: number) => {
     setLoading(true);
@@ -189,6 +187,12 @@ export function TransaksiTable({
     setLoading(true);
     setPage(1);
     setTipe(next);
+  };
+
+  const changeSumberDana = (next: "" | (typeof SUMBER_DANA_KEYS)[number]) => {
+    setLoading(true);
+    setPage(1);
+    setSumberDana(next);
   };
 
   const updateForm = <K extends keyof FormValues>(key: K, value: FormValues[K]) => {
@@ -209,6 +213,9 @@ export function TransaksiTable({
     setForm({
       tipe: row.tipe,
       kategori: row.kategori,
+      sumberDana: (SUMBER_DANA_KEYS as string[]).includes(row.sumberDana ?? "")
+        ? (row.sumberDana as (typeof SUMBER_DANA_KEYS)[number])
+        : "KAS",
       jumlah: String(row.jumlah),
       keterangan: row.keterangan ?? "",
       tanggal: formatDateInput(row.tanggal),
@@ -265,6 +272,7 @@ export function TransaksiTable({
     const payload = {
       tipe: form.tipe,
       kategori: form.kategori.trim(),
+      sumberDana: form.sumberDana,
       jumlah: Number(form.jumlah),
       keterangan: form.keterangan.trim() || undefined,
       tanggal: form.tanggal || undefined,
@@ -332,6 +340,18 @@ export function TransaksiTable({
               <option value="PEMASUKAN">PEMASUKAN</option>
               <option value="PENGELUARAN">PENGELUARAN</option>
             </select>
+            <select
+              value={sumberDana}
+              onChange={(event) => changeSumberDana(event.target.value as typeof sumberDana)}
+              className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-600 outline-none focus:border-slate-300"
+            >
+              <option value="">Semua Sumber Dana</option>
+              {SUMBER_DANA_KEYS.map((key) => (
+                <option key={key} value={key}>
+                  {labelSumberDana(key)}
+                </option>
+              ))}
+            </select>
             <Button size="sm" onClick={openCreate}>
               <Plus className="h-3 w-3" /> Tambah Transaksi
             </Button>
@@ -346,6 +366,7 @@ export function TransaksiTable({
                   <TableHead>Tipe</TableHead>
                   <TableHead>Kategori</TableHead>
                   <TableHead>Jumlah</TableHead>
+                  <TableHead>Sumber Dana</TableHead>
                   <TableHead>Admin</TableHead>
                   <TableHead className="text-center">Bukti</TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
@@ -354,7 +375,7 @@ export function TransaksiTable({
               <TableBody>
                 {rows.length === 0 && !loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-8 text-center text-slate-500">
+                    <TableCell colSpan={8} className="py-8 text-center text-slate-500">
                       {isFiltered ? "Tidak ada transaksi pada periode ini" : "Belum ada transaksi"}
                     </TableCell>
                   </TableRow>
@@ -371,6 +392,7 @@ export function TransaksiTable({
                       <TableCell className="text-sm font-medium tracking-tight">
                         Rp {formatRupiah(row.jumlah)}
                       </TableCell>
+                      <TableCell className="text-xs text-slate-500">{labelSumberDana(row.sumberDana)}</TableCell>
                       <TableCell className="text-xs text-slate-500">{row.admin.nama}</TableCell>
                       <TableCell className="text-center">
                         <button
@@ -449,16 +471,58 @@ export function TransaksiTable({
           <form onSubmit={saveTransaksi} className="grid gap-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Tipe">
-                <Select value={form.tipe} onChange={(event) => updateForm("tipe", event.target.value as Tipe)}>
+                <Select
+                  value={form.tipe}
+                  onChange={(event) => {
+                    const nextTipe = event.target.value as Tipe;
+                    const stillValid = kategoriByTipe(nextTipe).some((a) => a.nama === form.kategori);
+                    updateForm("tipe", nextTipe);
+                    if (!stillValid) {
+                      updateForm(
+                        "kategori",
+                        nextTipe === "PEMASUKAN"
+                          ? "Pendapatan Penjualan Hasil Kebun"
+                          : "Beban Upah dan Gaji Pekerja"
+                      );
+                    }
+                  }}
+                >
                   <option value="PEMASUKAN">PEMASUKAN</option>
                   <option value="PENGELUARAN">PENGELUARAN</option>
                 </Select>
               </Field>
               <Field label="Kategori">
-                <Select value={form.kategori} onChange={(event) => updateForm("kategori", event.target.value)}>
-                  {kategoriList.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
+                <div className="grid gap-1">
+                  <Select
+                    value={form.kategori}
+                    onChange={(event) => updateForm("kategori", event.target.value)}
+                  >
+                    {kategoriOptionsFor(form.tipe).map((item) => (
+                      <option key={item.kode} value={item.nama}>
+                        {item.nama}
+                      </option>
+                    ))}
+                    {form.kategori &&
+                      !kategoriOptionsFor(form.tipe).some((item) => item.nama === form.kategori) && (
+                        <option value={form.kategori}>Kategori lama: {form.kategori}</option>
+                      )}
+                  </Select>
+                  {(() => {
+                    const akun = kategoriByTipe(form.tipe).find((a) => a.nama === form.kategori);
+                    return akun ? (
+                      <span className="text-[11px] text-slate-400">Kode akun: {akun.kode}</span>
+                    ) : null;
+                  })()}
+                </div>
+              </Field>
+              <Field label="Sumber Dana">
+                <Select
+                  value={form.sumberDana}
+                  onChange={(event) => updateForm("sumberDana", event.target.value)}
+                >
+                  {SUMBER_DANA_KEYS.map((key) => (
+                    <option key={key} value={key}>
+                      {labelSumberDana(key)}
                     </option>
                   ))}
                 </Select>
