@@ -17,36 +17,56 @@ export default function PetugasScanPage() {
   const scannerRef = useRef<any>(null);
   const divRef = useRef<HTMLDivElement>(null);
 
-  // Start scanner
+  // Start scanner - fixed black block & not working
   const startScan = async () => {
     setError(null);
     setSuccess(null);
     if (typeof window === "undefined") return;
     try {
       const { Html5Qrcode } = await import("html5-qrcode");
-      if (!divRef.current) return;
       const id = "petugas-qr-reader";
-      // ensure div exists
-      let el = document.getElementById(id);
-      if (!el) {
-        el = document.createElement("div");
-        el.id = id;
-        divRef.current.appendChild(el);
+      const el = document.getElementById(id);
+      if (!el) throw new Error("Elemen scanner tidak ditemukan");
+      // Clear previous instance
+      if (scannerRef.current) {
+        try {
+          await scannerRef.current.stop();
+          await scannerRef.current.clear();
+        } catch {}
       }
-      const html5QrCode = new Html5Qrcode(id);
+      const html5QrCode = new Html5Qrcode(id, { verbose: false });
       scannerRef.current = html5QrCode;
       setScanning(true);
+      // delay to ensure DOM ready
+      await new Promise((r) => setTimeout(r, 100));
       await html5QrCode.start(
         { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1 },
+        {
+          fps: 10,
+          qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+            const size = Math.min(250, Math.floor(minEdge * 0.7));
+            return { width: size, height: size };
+          },
+          aspectRatio: 1.0,
+          disableFlip: false,
+        },
         (decodedText) => {
           handleDecoded(decodedText);
         },
         () => {}
       );
     } catch (e: any) {
+      console.error("[Scan]", e);
+      const msg = e?.message || "";
+      if (msg.includes("NotAllowedError") || msg.includes("Permission")) {
+        setError("Izin kamera ditolak. Aktifkan di pengaturan browser & pastikan HTTPS.");
+      } else if (msg.includes("NotFoundError")) {
+        setError("Kamera tidak ditemukan di HP ini.");
+      } else {
+        setError(msg || "Kamera tidak tersedia. Gunakan input manual.");
+      }
       setHasCamera(false);
-      setError(e?.message || "Kamera tidak tersedia. Gunakan input manual.");
       setScanning(false);
     }
   };
@@ -136,16 +156,23 @@ export default function PetugasScanPage() {
         <CardContent className="space-y-4">
           <div
             ref={divRef}
-            className="relative rounded-2xl border border-slate-200 bg-black overflow-hidden min-h-[280px] sm:min-h-[360px]"
+            className="relative rounded-2xl border border-slate-200 bg-slate-900 overflow-hidden"
+            style={{ minHeight: scanning ? 360 : 280 }}
           >
-            <div id="petugas-qr-reader" className="w-full h-full [&_video]:w-full [&_video]:h-full [&_video]:object-cover" />
+            <style>{`
+              #petugas-qr-reader { width: 100% !important; height: 100% !important; min-height: 280px; }
+              #petugas-qr-reader video { width: 100% !important; height: 360px !important; object-fit: cover !important; border-radius: 0 !important; }
+              #petugas-qr-reader canvas { display: none !important; }
+              @media (min-width: 640px) { #petugas-qr-reader video { height: 360px !important; } }
+            `}</style>
+            <div id="petugas-qr-reader" className="w-full h-full" />
             {!scanning && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center bg-slate-50">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white border border-slate-200 shadow-sm">
                   <ScanLine className="h-8 w-8 text-slate-400" />
                 </div>
                 <div className="text-sm font-medium text-slate-700">Kamera siap</div>
-                <div className="text-xs text-slate-500 max-w-[260px]">Tekan Mulai Scan, izinkan akses kamera. Posisikan QR di tengah kotak 250x250.</div>
+                <div className="text-xs text-slate-500 max-w-[260px]">Tekan Mulai Scan, izinkan akses kamera. Posisikan QR di tengah kotak.</div>
                 {hasCamera ? (
                   <Button onClick={startScan} className="mt-2 bg-green-700 hover:bg-green-800 h-11 px-6 rounded-full">
                     <Camera className="h-4 w-4" /> Mulai Scan
@@ -158,7 +185,7 @@ export default function PetugasScanPage() {
               </div>
             )}
             {scanning && (
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/60 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none">
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/70 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none backdrop-blur">
                 Arahkan QR ke kotak hijau
               </div>
             )}
