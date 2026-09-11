@@ -245,91 +245,118 @@ export function KaryawanTable({ data }: { data: Row[] }) {
 
   return (
     <>
-      <Card className="border-slate-200">
-        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
+      <Card className="border-slate-200 overflow-hidden">
+        <CardHeader className="flex flex-col gap-3 sm:gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <CardTitle className="text-sm">Manajemen Karyawan</CardTitle>
             <p className="mt-1 text-xs text-slate-500">{data.length} total • {filteredRows.length} ditampilkan</p>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <div className="relative">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center w-full sm:w-auto">
+            <div className="relative flex-1 sm:flex-none sm:w-[220px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <Input
-                className="pl-9"
-                placeholder="Cari nama, ID, divisi..."
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
+              <Input className="pl-9 w-full" placeholder="Cari nama, ID, divisi..." value={search} onChange={(event) => setSearch(event.target.value)} />
             </div>
-            <Button size="sm" variant="outline" onClick={exportCsv}>
-              <FileSpreadsheet className="h-3 w-3" /> Export Excel
-            </Button>
-            <Button size="sm" onClick={openCreate}>
-              <Plus className="h-3 w-3" /> Tambah Karyawan
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={exportCsv} className="flex-1 sm:flex-none cursor-pointer">
+                <FileSpreadsheet className="h-3 w-3" /> <span className="hidden sm:inline">Export Excel</span><span className="sm:hidden">Export</span>
+              </Button>
+              <Button size="sm" onClick={openCreate} className="flex-1 sm:flex-none cursor-pointer">
+                <Plus className="h-3 w-3" /> Tambah
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Nama</TableHead>
-                  <TableHead>Jabatan</TableHead>
-                  <TableHead>Divisi</TableHead>
-                  <TableHead>Lokasi Kerja</TableHead>
-                  <TableHead>Telepon</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Tanggal Masuk</TableHead>
-                  <TableHead>Gaji Pokok</TableHead>
-                  <TableHead>Gaji Terakhir</TableHead>
-                  <TableHead className="text-right">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredRows.length === 0 ? (
+          {/* Mobile cards - HP/Tablet */}
+          <div className="grid gap-3 p-3 md:hidden">
+            {filteredRows.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
+                {data.length === 0 ? "Belum ada karyawan" : "Data karyawan tidak ditemukan"}
+              </div>
+            ) : (
+              filteredRows.map((k) => (
+                <div key={k.id} className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-mono text-xs font-bold text-slate-900">{k.id}</div>
+                      <div className="text-sm font-medium text-slate-900 truncate">{k.namaLengkap}</div>
+                      <div className="text-xs text-slate-500">{k.jabatan} • {k.divisi || "-"}</div>
+                    </div>
+                    <StatusBadge value={k.statusKerja} variant="outline" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-lg bg-slate-50 px-3 py-2"><div className="text-[11px] text-slate-400">Lokasi</div><div className="font-medium truncate">{k.lokasiKerja || "-"}</div></div>
+                    <div className="rounded-lg bg-slate-50 px-3 py-2"><div className="text-[11px] text-slate-400">Masuk</div><div className="font-medium">{formatDate(k.tanggalMasuk)}</div></div>
+                    <div className="rounded-lg bg-slate-50 px-3 py-2 col-span-2"><div className="text-[11px] text-slate-400">Kontak</div><div className="font-medium truncate">{k.telepon || "-"} • {k.email || "-"}</div></div>
+                    <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 col-span-2 flex items-center justify-between">
+                      <div><div className="text-[11px] text-emerald-700">Gaji Pokok</div><div className="font-semibold text-emerald-900">Rp {k.gajiPokok.toLocaleString("id-ID")}</div></div>
+                      <div className="text-right"><div className="text-[11px] text-slate-400">{k.bulanGaji || "-"}</div><StatusBadge value={k.statusGaji} variant={k.statusGaji === "SUDAH_DIBAYAR" ? "sehat" : "perhatian"} /></div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" className="flex-1 rounded-full h-9 cursor-pointer" onClick={() => openEdit(k)}><Pencil className="h-3.5 w-3.5" /> Edit</Button>
+                    <Button variant="destructive" size="sm" className="flex-1 rounded-full h-9 cursor-pointer" onClick={() => deleteKaryawan(k.id, k.namaLengkap)}><Trash2 className="h-3.5 w-3.5" /> Hapus</Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-x-auto">
+            <div className="min-w-[900px]">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={11} className="py-8 text-center text-slate-500">
-                      {data.length === 0 ? "Belum ada karyawan" : "Data karyawan tidak ditemukan"}
-                    </TableCell>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Nama</TableHead>
+                    <TableHead>Jabatan</TableHead>
+                    <TableHead>Divisi</TableHead>
+                    <TableHead>Lokasi</TableHead>
+                    <TableHead>Telepon</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Tgl Masuk</TableHead>
+                    <TableHead>Gaji</TableHead>
+                    <TableHead>Gaji Terakhir</TableHead>
+                    <TableHead className="text-right">Aksi</TableHead>
                   </TableRow>
-                ) : (
-                  filteredRows.map((k) => (
-                    <TableRow key={k.id}>
-                      <TableCell className="font-mono text-xs">{k.id}</TableCell>
-                      <TableCell className="text-sm font-medium">{k.namaLengkap}</TableCell>
-                      <TableCell className="text-sm">{k.jabatan}</TableCell>
-                      <TableCell className="text-sm">{k.divisi || "-"}</TableCell>
-                      <TableCell className="text-sm">{k.lokasiKerja || "-"}</TableCell>
-                      <TableCell className="text-sm">{k.telepon || "-"}</TableCell>
-                      <TableCell className="text-sm">{k.email || "-"}</TableCell>
-                      <TableCell className="text-sm">{formatDate(k.tanggalMasuk)}</TableCell>
-                      <TableCell className="text-sm font-medium">Rp {k.gajiPokok.toLocaleString("id-ID")}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
-                          <span className="text-xs text-slate-500">{k.bulanGaji || "-"}</span>
-                          <StatusBadge
-                            value={k.statusGaji}
-                            variant={k.statusGaji === "SUDAH_DIBAYAR" ? "sehat" : "perhatian"}
-                          />
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="sm" className="h-7 w-7 rounded-full" onClick={() => openEdit(k)}>
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button variant="destructive" size="sm" className="h-7 w-7 rounded-full" onClick={() => deleteKaryawan(k.id, k.namaLengkap)}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
+                </TableHeader>
+                <TableBody>
+                  {filteredRows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={11} className="py-8 text-center text-slate-500">
+                        {data.length === 0 ? "Belum ada karyawan" : "Data karyawan tidak ditemukan"}
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    filteredRows.map((k) => (
+                      <TableRow key={k.id}>
+                        <TableCell className="font-mono text-xs">{k.id}</TableCell>
+                        <TableCell className="text-sm font-medium">{k.namaLengkap}</TableCell>
+                        <TableCell className="text-sm">{k.jabatan}</TableCell>
+                        <TableCell className="text-sm">{k.divisi || "-"}</TableCell>
+                        <TableCell className="text-sm">{k.lokasiKerja || "-"}</TableCell>
+                        <TableCell className="text-sm">{k.telepon || "-"}</TableCell>
+                        <TableCell className="text-sm max-w-[160px] truncate" title={k.email}>{k.email || "-"}</TableCell>
+                        <TableCell className="text-sm whitespace-nowrap">{formatDate(k.tanggalMasuk)}</TableCell>
+                        <TableCell className="text-sm font-medium whitespace-nowrap">Rp {k.gajiPokok.toLocaleString("id-ID")}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-xs text-slate-500">{k.bulanGaji || "-"}</span>
+                            <StatusBadge value={k.statusGaji} variant={k.statusGaji === "SUDAH_DIBAYAR" ? "sehat" : "perhatian"} />
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-1">
+                            <Button variant="ghost" size="sm" className="h-8 w-8 rounded-full cursor-pointer touch-manipulation" onClick={() => openEdit(k)}><Pencil className="h-3.5 w-3.5" /></Button>
+                            <Button variant="destructive" size="sm" className="h-8 w-8 rounded-full cursor-pointer touch-manipulation" onClick={() => deleteKaryawan(k.id, k.namaLengkap)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         </CardContent>
       </Card>

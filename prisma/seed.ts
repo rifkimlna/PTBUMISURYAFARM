@@ -36,6 +36,7 @@ async function main() {
     update: {
       namaPohon: "Pohon Sawit Induk A01",
       jenis: "Sawit DxP",
+      lokasiBlok: "Blok A",
       koordinat: "-2.983, 104.752",
       hasilPanen: 125.5 as any,
       pemupukan: "NPK 2kg - 2026-01-15",
@@ -47,6 +48,7 @@ async function main() {
       geotagSource: "GPS",
       geotagTimestamp: new Date("2026-09-09T08:00:00Z"),
       geotagAdminId: budi?.id,
+      status: "SEHAT",
     },
     create: {
       id: "PHN-BLK-A01",
@@ -76,6 +78,7 @@ async function main() {
     update: {
       namaPohon: "Pohon Sawit A02",
       jenis: "Sawit DxP",
+      lokasiBlok: "Blok A",
       koordinat: "-2.984, 104.753",
       hasilPanen: 98.0 as any,
       pemupukan: "Urea 1.5kg - 2026-02-10",
@@ -87,6 +90,7 @@ async function main() {
       geotagSource: "GPS",
       geotagTimestamp: new Date("2026-09-08T08:00:00Z"),
       geotagAdminId: budi?.id,
+      status: "PERLU_PERHATIAN",
     },
     create: {
       id: "PHN-BLK-A02",
@@ -115,6 +119,7 @@ async function main() {
     update: {
       namaPohon: "Pohon Durian B01",
       jenis: "Durian Montong",
+      lokasiBlok: "Blok B",
       koordinat: "-2.990, 104.760",
       hasilPanen: 45.2 as any,
       pemupukan: "Kompos 3kg - 2026-03-01",
@@ -126,6 +131,7 @@ async function main() {
       geotagSource: "MANUAL",
       geotagTimestamp: new Date("2026-09-07T08:00:00Z"),
       geotagAdminId: budi?.id,
+      status: "SAKIT",
     },
     create: {
       id: "PHN-BLK-B01",
@@ -154,6 +160,7 @@ async function main() {
     update: {
       namaPohon: "Pohon Sawit C01",
       jenis: "Sawit DxP",
+      lokasiBlok: "Blok C",
       koordinat: "-2.995, 104.765",
       hasilPanen: 60.0 as any,
       pemupukan: "NPK 2kg - 2026-03-10",
@@ -165,6 +172,7 @@ async function main() {
       geotagSource: "GPS",
       geotagTimestamp: new Date("2026-09-06T08:00:00Z"),
       geotagAdminId: budi?.id,
+      status: "SEHAT",
     },
     create: {
       id: "PHN-BLK-C01",
@@ -285,6 +293,25 @@ const daftarAset = [
       update: payload,
       create: { id, ...payload },
     });
+  }
+
+  // Seed Panen histori untuk chart trend (6 bulan terakhir)
+  const budiId = budi?.id ?? null;
+  const panenData = [
+    { pohonId: "PHN-BLK-A01", tanggalPanen: new Date("2026-04-10"), jumlahKg: 110 as any, petugasId: budiId, catatan: "Panen April" },
+    { pohonId: "PHN-BLK-A01", tanggalPanen: new Date("2026-05-12"), jumlahKg: 118 as any, petugasId: budiId, catatan: "Panen Mei" },
+    { pohonId: "PHN-BLK-A01", tanggalPanen: new Date("2026-06-15"), jumlahKg: 122 as any, petugasId: budiId, catatan: "Panen Juni" },
+    { pohonId: "PHN-BLK-A01", tanggalPanen: new Date("2026-07-10"), jumlahKg: 130 as any, petugasId: budiId, catatan: "Panen Juli" },
+    { pohonId: "PHN-BLK-A01", tanggalPanen: new Date("2026-08-10"), jumlahKg: 125.5 as any, petugasId: budiId, catatan: "Panen Agustus" },
+    { pohonId: "PHN-BLK-A02", tanggalPanen: new Date("2026-06-20"), jumlahKg: 92 as any, petugasId: budiId, catatan: "Panen Juni" },
+    { pohonId: "PHN-BLK-A02", tanggalPanen: new Date("2026-08-08"), jumlahKg: 98 as any, petugasId: budiId, catatan: "Panen Agustus" },
+    { pohonId: "PHN-BLK-B01", tanggalPanen: new Date("2026-07-05"), jumlahKg: 40 as any, petugasId: budiId, catatan: "Panen Juli" },
+    { pohonId: "PHN-BLK-B01", tanggalPanen: new Date("2026-08-07"), jumlahKg: 45.2 as any, petugasId: budiId, catatan: "Panen Agustus" },
+    { pohonId: "PHN-BLK-C01", tanggalPanen: new Date("2026-08-06"), jumlahKg: 60 as any, petugasId: budiId, catatan: "Panen Agustus" },
+  ];
+  for (const p of panenData) {
+    const exists = await prisma.panen.findFirst({ where: { pohonId: p.pohonId, tanggalPanen: p.tanggalPanen } });
+    if (!exists) await prisma.panen.create({ data: p });
   }
 
   console.log("✅ Seed selesai. Login dengan password: Admin123!");

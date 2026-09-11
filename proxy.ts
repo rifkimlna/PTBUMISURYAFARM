@@ -14,14 +14,14 @@ const PROTECTED_PREFIXES = ["/api/admin", "/api/pohon", "/api/karyawan", "/api/k
 
 // Tambah data tanpa login (demo) - POST di beberapa endpoint jadi public
 const PUBLIC_POST_PATHS = [
-  "/api/pohon", // POST /api/pohon dan POST /api/pohon/[id]/geotag, /riwayat
+  "/api/pohon",
   "/api/karyawan",
   "/api/keuangan",
   "/api/aset",
   "/api/upload",
 ];
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const method = req.method;
 
@@ -33,7 +33,6 @@ export async function middleware(req: NextRequest) {
 
   // Demo: allow POST tanpa login untuk tambah data
   if (method === "POST" && PUBLIC_POST_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
-    // tetap coba inject user jika ada token, tapi jangan block jika tidak ada
     const authHeader = req.headers.get("authorization");
     const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
     const cookieToken = req.cookies.get("token")?.value || req.cookies.get("auth-token")?.value;
@@ -74,7 +73,6 @@ export async function middleware(req: NextRequest) {
   const isProtected =
     PROTECTED_PREFIXES.some((p) => pathname.startsWith(p)) || pathname.startsWith("/api/admin");
 
-  // Jika bukan protected prefix (misal /api/other yang belum ada), tetap allow tapi bisa di-guard di route
   if (!isProtected) return NextResponse.next();
 
   // Ambil token dari Authorization atau Cookie
@@ -98,7 +96,6 @@ export async function middleware(req: NextRequest) {
     );
   }
 
-  // Inject user info ke header untuk dipakai di route handler (optional)
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-user-id", payload.userId);
   requestHeaders.set("x-user-role", payload.role);

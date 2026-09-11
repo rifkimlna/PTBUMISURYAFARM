@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Poppins, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -19,10 +19,18 @@ export const metadata: Metadata = {
   description: "Sistem Manajemen Perkebunan PT BUMI SURYA FARM (pt_bst)",
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+  themeColor: "#15803d",
+};
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="id" className={`${poppins.variable} ${jetbrainsMono.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+    <html lang="id" className={`${poppins.variable} ${jetbrainsMono.variable} h-full antialiased scroll-smooth`}>
+      <body className="min-h-full flex flex-col font-sans overflow-x-hidden bg-[#FCFCFD] text-slate-900">{children}</body>
     </html>
   );
 }
