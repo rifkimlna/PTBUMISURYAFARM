@@ -1,21 +1,12 @@
 import { z } from "zod";
+import { KATEGORI_ASET, STATUS_ASET } from "@/lib/aset";
 
 export const TipeTransaksiEnum = z.enum(["PEMASUKAN", "PENGELUARAN"]);
+export const SumberDanaEnum = z.enum(["KAS", "BANK", "TABUNGAN"]);
 export const StatusGajiEnum = z.enum(["SUDAH_DIBAYAR", "PENDING"]);
 
-// Kategori umum - bisa di-extend
-export const kategoriKeuanganList = [
-  "Penjualan Sawit",
-  "Penjualan Bibit",
-  "Gaji Karyawan",
-  "Pupuk",
-  "Pestisida",
-  "Perawatan Alat",
-  "Bahan Bakar",
-  "Pembelian Aset",
-  "Operasional",
-  "Lainnya",
-] as const;
+export type TipeTransaksi = z.infer<typeof TipeTransaksiEnum>;
+export type SumberDana = z.infer<typeof SumberDanaEnum>;
 
 export const createBuktiTransaksiSchema = z.object({
   fileName: z.string().min(1, "Nama file wajib").max(200),
@@ -26,7 +17,8 @@ export const createBuktiTransaksiSchema = z.object({
 
 export const createTransaksiKasSchema = z.object({
   tipe: TipeTransaksiEnum,
-  kategori: z.string().min(2, "Kategori minimal 2 karakter").max(50),
+  kategori: z.string().min(2, "Kategori minimal 2 karakter").max(100),
+  sumberDana: SumberDanaEnum.default("KAS"),
   jumlah: z
     .number({ message: "Jumlah harus angka" })
     .positive("Jumlah harus positif")
@@ -40,7 +32,8 @@ export const createTransaksiKasSchema = z.object({
 
 export const updateTransaksiKasSchema = z.object({
   tipe: TipeTransaksiEnum.optional(),
-  kategori: z.string().min(2).max(50).optional(),
+  kategori: z.string().min(2).max(100).optional(),
+  sumberDana: SumberDanaEnum.optional(),
   jumlah: z.number().positive().min(1000).max(10_000_000_000).optional(),
   keterangan: z.string().max(1000).optional().nullable(),
   tanggal: z.coerce.date().optional(),
@@ -52,6 +45,7 @@ export const updateTransaksiKasSchema = z.object({
 export const queryKeuanganSchema = z.object({
   tipe: TipeTransaksiEnum.optional(),
   kategori: z.string().optional(),
+  sumberDana: SumberDanaEnum.optional(),
   startDate: z.coerce.date().optional(),
   endDate: z.coerce.date().optional(),
   page: z.coerce.number().int().min(1).default(1).optional(),
@@ -67,15 +61,21 @@ export const createAsetSchema = z.object({
     .regex(/^AST-\d{3,}$/, "ID harus format AST-001 (contoh: AST-005)"),
   namaAset: z.string().min(2, "Nama aset minimal 2 karakter").max(100).trim(),
   jumlah: z.coerce.number().int().min(1, "Jumlah minimal 1"),
+  kategori: z.enum(KATEGORI_ASET, { message: "Kategori harus dari daftar COA" }),
   kondisi: z.string().min(2, "Kondisi wajib diisi").max(50).trim(),
+  status: z.enum(STATUS_ASET, { message: "Status harus dari daftar yang tersedia" }).default("Aktif"),
   nilaiAset: z.coerce.number().positive("Nilai harus positif").min(1000, "Nilai minimal Rp 1.000").max(10_000_000_000, "Nilai terlalu besar"),
+  tanggalPerolehan: z.coerce.date().optional().nullable(),
 });
 
 export const updateAsetSchema = z.object({
   namaAset: z.string().min(2).max(100).optional(),
   jumlah: z.coerce.number().int().min(1).optional(),
+  kategori: z.enum(KATEGORI_ASET, { message: "Kategori harus dari daftar COA" }).optional(),
   kondisi: z.string().min(2).max(50).optional(),
+  status: z.enum(STATUS_ASET, { message: "Status harus dari daftar yang tersedia" }).optional(),
   nilaiAset: z.coerce.number().positive().min(1000).max(10_000_000_000).optional(),
+  tanggalPerolehan: z.coerce.date().optional().nullable(),
 }).refine((data) => Object.keys(data).length > 0, {
   message: "Minimal satu field harus diisi",
 });

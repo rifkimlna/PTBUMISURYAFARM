@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuthAndRole } from "@/lib/auth";
-import { updateTransaksiKasSchema } from "@/lib/validations/keuanganValidation";
+import { updateTransaksiKasSchema, type TipeTransaksi } from "@/lib/validations/keuanganValidation";
+import { kodeAkunByNama } from "@/lib/coa";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 import { deleteBuktiFile } from "@/lib/storage";
 import { ZodError } from "zod";
@@ -36,13 +37,23 @@ export async function PUT(req: NextRequest, { params }: Params) {
     if (!exists) return errorResponse("Transaksi tidak ditemukan", 404);
 
     const updated = await prisma.$transaction(async (tx) => {
-      const { bukti, ...fields } = parsed;
+      const { bukti, tipe, kategori, ...rest } = parsed;
+      const resolvedTipe = tipe ?? (exists.tipe as TipeTransaksi);
       const result = await tx.transaksiKas.update({
         where: { id },
         data: {
-          ...fields,
-          jumlah: fields.jumlah as any,
-        } as any,
+          ...(rest.tanggal !== undefined ? { tanggal: rest.tanggal } : {}),
+          ...(rest.keterangan !== undefined ? { keterangan: rest.keterangan } : {}),
+          ...(rest.jumlah !== undefined ? { jumlah: rest.jumlah } : {}),
+          ...(rest.sumberDana !== undefined ? { sumberDana: rest.sumberDana } : {}),
+          ...(tipe !== undefined || kategori !== undefined
+            ? {
+                tipe: resolvedTipe,
+                kategori: kategori ?? exists.kategori,
+                kodeAkun: kodeAkunByNama(resolvedTipe, kategori ?? exists.kategori),
+              }
+            : {}),
+        },
       });
       if (bukti && bukti.length > 0) {
         await tx.buktiTransaksi.createMany({
