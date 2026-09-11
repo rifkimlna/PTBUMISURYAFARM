@@ -14,6 +14,22 @@ const nextConfig: NextConfig = {
     "*.trycloudflare.com",
     "*.loca.lt",
   ],
+  async redirects() {
+    return [
+      // Lapangan di admin sudah dihapus — redirect ke edit (admin full)
+      { source: "/perkebunan/pohon/:id/lapangan", destination: "/perkebunan/pohon/:id/edit", permanent: false },
+      { source: "/admin/pertanian/pohon/:id/lapangan", destination: "/perkebunan/pohon/:id/edit", permanent: false },
+      // Legacy admin -> new split routes
+      { source: "/admin/pertanian", destination: "/perkebunan", permanent: false },
+      { source: "/admin/pertanian/:path*", destination: "/perkebunan/:path*", permanent: false },
+      { source: "/admin/keuangan", destination: "/keuangan/kas", permanent: false },
+      { source: "/admin/keuangan/:path*", destination: "/keuangan/:path*", permanent: false },
+      { source: "/admin/aset", destination: "/keuangan/aset", permanent: false },
+      { source: "/admin/aset/:path*", destination: "/keuangan/aset/:path*", permanent: false },
+      { source: "/admin/persediaan", destination: "/keuangan/persediaan", permanent: false },
+      { source: "/admin/persediaan/:path*", destination: "/keuangan/persediaan/:path*", permanent: false },
+    ];
+  },
   // Allow ngrok / tunneling hosts + prevent layout break on external images
   async headers() {
     return [
