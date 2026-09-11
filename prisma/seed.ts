@@ -10,11 +10,13 @@ async function main() {
   console.log("🌱 Seeding PT BST...");
 
   const hash = await bcrypt.hash("Admin123!", 10);
+  const hashPetugas = await bcrypt.hash("Lapangan123!", 10);
 
   const users = [
     { nama: "Super Admin", email: "super@ptbst.id", password: hash, role: "SUPER_ADMIN" as const },
     { nama: "Budi Pertanian", email: "budi@ptbst.id", password: hash, role: "ADMIN_PERTANIAN" as const },
     { nama: "Siti Keuangan", email: "siti@ptbst.id", password: hash, role: "ADMIN_KEUANGAN" as const },
+    { nama: "Petugas Lapangan", email: "petugas@ptbst.id", password: hashPetugas, role: "PETUGAS_LAPANGAN" as const },
   ];
 
   for (const u of users) {

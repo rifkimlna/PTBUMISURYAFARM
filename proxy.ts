@@ -50,24 +50,9 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // PUT geotag & lapangan juga boleh tanpa login untuk demo lapangan
-  if (method === "PUT" && (pathname.includes("/geotag") || pathname.includes("/lapangan"))) {
-    const authHeader = req.headers.get("authorization");
-    const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-    const cookieToken = req.cookies.get("token")?.value || req.cookies.get("auth-token")?.value;
-    const token = bearer || cookieToken || null;
-    if (token) {
-      const payload = await verifyToken(token);
-      if (payload) {
-        const requestHeaders = new Headers(req.headers);
-        requestHeaders.set("x-user-id", payload.userId);
-        requestHeaders.set("x-user-role", payload.role);
-        requestHeaders.set("x-user-email", payload.email);
-        return NextResponse.next({ request: { headers: requestHeaders } });
-      }
-    }
-    return NextResponse.next();
-  }
+  // Lapangan & geotag sekarang wajib login petugas (PETUGAS_LAPANGAN) - hapus bypass demo
+  // Biarkan jatuh ke pengecekan protected di bawah yang wajib token
+  // (tidak return NextResponse.next() tanpa token)
 
   // Cek apakah termasuk protected prefix atau /api/admin
   const isProtected =

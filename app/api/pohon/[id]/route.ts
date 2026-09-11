@@ -7,9 +7,9 @@ import { ZodError } from "zod";
 
 type Params = { params: Promise<{ id: string }> };
 
-// GET /api/pohon/[id]
+// GET /api/pohon/[id] - petugas boleh lihat untuk scan
 export async function GET(req: NextRequest, { params }: Params) {
-  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_PERTANIAN"]);
+  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_PERTANIAN", "PETUGAS_LAPANGAN"]);
   if (auth instanceof Response) return auth;
 
   const { id } = await params;
