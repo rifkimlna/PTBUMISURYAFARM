@@ -136,11 +136,11 @@ export default function PetugasScanPage() {
         <CardContent className="space-y-4">
           <div
             ref={divRef}
-            className="relative rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden min-h-[280px] sm:min-h-[360px] flex items-center justify-center"
+            className="relative rounded-2xl border border-slate-200 bg-black overflow-hidden min-h-[280px] sm:min-h-[360px]"
           >
-            <div id="petugas-qr-reader" className="w-full" />
+            <div id="petugas-qr-reader" className="w-full h-full [&_video]:w-full [&_video]:h-full [&_video]:object-cover" />
             {!scanning && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center bg-slate-50">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white border border-slate-200 shadow-sm">
                   <ScanLine className="h-8 w-8 text-slate-400" />
                 </div>
@@ -155,6 +155,11 @@ export default function PetugasScanPage() {
                     <AlertCircle className="h-4 w-4" /> Kamera tidak didukung, gunakan input manual di bawah
                   </div>
                 )}
+              </div>
+            )}
+            {scanning && (
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/60 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none">
+                Arahkan QR ke kotak hijau
               </div>
             )}
           </div>
