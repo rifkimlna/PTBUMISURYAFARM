@@ -15,8 +15,13 @@ export default function PetugasLayout({ children }: { children: React.ReactNode 
     if (isLogin) return;
     try {
       const raw = localStorage.getItem("user");
-      if (raw) setUser(JSON.parse(raw));
-      else {
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setUser(parsed);
+        if (parsed.role !== "PETUGAS_LAPANGAN" && parsed.role !== "ADMIN_PERTANIAN" && parsed.role !== "SUPER_ADMIN") {
+          router.push("/login");
+        }
+      } else {
         fetch("/api/auth/me")
           .then((r) => r.json())
           .then((j) => {
@@ -24,14 +29,14 @@ export default function PetugasLayout({ children }: { children: React.ReactNode 
               setUser(j.data.user);
               localStorage.setItem("user", JSON.stringify(j.data.user));
               if (j.data.user.role !== "PETUGAS_LAPANGAN" && j.data.user.role !== "ADMIN_PERTANIAN" && j.data.user.role !== "SUPER_ADMIN") {
-                router.push("/petugas/login");
+                router.push("/login");
               }
-            } else router.push("/petugas/login");
+            } else router.push("/login");
           })
-          .catch(() => router.push("/petugas/login"));
+          .catch(() => router.push("/login"));
       }
     } catch {
-      router.push("/petugas/login");
+      router.push("/login");
     }
   }, [isLogin, router]);
 
@@ -41,7 +46,7 @@ export default function PetugasLayout({ children }: { children: React.ReactNode 
     } catch {}
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    router.push("/petugas/login");
+    router.push("/login");
   };
 
   if (isLogin) return <>{children}</>;
