@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,7 @@ export function PetugasLapanganMinimal({
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0] || null;
@@ -33,6 +34,8 @@ export function PetugasLapanganMinimal({
     if (f) setPreview(URL.createObjectURL(f));
     else setPreview(null);
   };
+
+  const triggerFile = () => fileRef.current?.click();
 
   const hasChange =
     form.hasilPanen !== pohon.hasilPanen ||
@@ -105,7 +108,10 @@ export function PetugasLapanganMinimal({
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      {/* Hasil Panen - paling besar, fokus utama */}
+      {/* Hidden input foto di root agar pasti bisa diklik */}
+      <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onFile} className="hidden" />
+
+      {/* Hasil Panen - FOKUS UPDATE DATA DI ATAS */}
       <Card className="border-emerald-100 bg-emerald-50/30 overflow-hidden">
         <CardContent className="p-4 sm:p-5 space-y-3">
           <div className="flex items-center gap-2">
@@ -130,29 +136,19 @@ export function PetugasLapanganMinimal({
             />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">KG</span>
           </div>
-          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium text-slate-700">Status Pohon</Label>
-              <Select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="h-11 bg-white text-sm">
-                <option value="SEHAT">SEHAT</option>
-                <option value="PERLU_PERHATIAN">PERLU PERHATIAN</option>
-                <option value="SAKIT">SAKIT</option>
-                <option value="MATI">MATI</option>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium text-slate-700">Foto Lapangan</Label>
-              <label className="flex h-11 items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 cursor-pointer touch-manipulation">
-                <Camera className="h-4 w-4" /> {file ? file.name.slice(0, 18) : "Ambil Foto"}
-                <input type="file" accept="image/*" capture="environment" onChange={onFile} className="hidden" />
-              </label>
-            </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium text-slate-700">Status Pohon</Label>
+            <Select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="h-11 bg-white text-sm">
+              <option value="SEHAT">SEHAT</option>
+              <option value="PERLU_PERHATIAN">PERLU PERHATIAN</option>
+              <option value="SAKIT">SAKIT</option>
+              <option value="MATI">MATI</option>
+            </Select>
           </div>
-          {preview && <img src={preview} alt="preview" className="h-48 w-full object-cover rounded-xl border border-slate-200" />}
         </CardContent>
       </Card>
 
-      {/* Perawatan - minimal */}
+      {/* Perawatan - FOKUS UPDATE DATA */}
       <Card className="border-slate-200">
         <CardContent className="p-4 sm:p-5 space-y-4">
           <div className="text-sm font-semibold tracking-tight text-slate-900">Perawatan</div>
@@ -181,7 +177,7 @@ export function PetugasLapanganMinimal({
         </CardContent>
       </Card>
 
-      {/* Catatan lapangan - opsional tapi minimal */}
+      {/* Catatan lapangan - minimal */}
       <Card className="border-slate-200">
         <CardContent className="p-4 sm:p-5 space-y-3">
           <div className="text-sm font-semibold tracking-tight text-slate-900">Catatan Lapangan (opsional)</div>
@@ -191,6 +187,27 @@ export function PetugasLapanganMinimal({
             <Textarea value={tindakan} onChange={(e) => setTindakan(e.target.value)} placeholder="Tindakan: semprot..." rows={2} className="text-sm" />
             <p className="text-xs text-slate-400">Kosongkan jika hanya update panen/pupuk</p>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Foto di BAWAH - sesuai request */}
+      <Card className="border-slate-200">
+        <CardContent className="p-4 sm:p-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <Camera className="h-4 w-4 text-slate-700" />
+            <div className="text-sm font-semibold tracking-tight text-slate-900">Foto Lapangan</div>
+            <span className="text-xs text-slate-500">opsional — simpan di bawah</span>
+          </div>
+          <Button type="button" onClick={triggerFile} className="w-full h-12 rounded-xl border-2 border-dashed border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 text-sm font-medium touch-manipulation">
+            <Camera className="h-4 w-4" /> {file ? file.name.slice(0, 22) : "Ambil Foto / Pilih Galeri"}
+          </Button>
+          <p className="text-xs text-slate-500 text-center">Kamera HP • Maks 5MB • JPG/PNG/WEBP</p>
+          {preview && <img src={preview} alt="preview" className="h-56 w-full object-cover rounded-xl border border-slate-200" />}
+          {file && (
+            <Button type="button" variant="outline" size="sm" className="w-full rounded-full" onClick={() => { setFile(null); setPreview(null); if (fileRef.current) fileRef.current.value = ""; }}>
+              Hapus Foto
+            </Button>
+          )}
         </CardContent>
       </Card>
 
