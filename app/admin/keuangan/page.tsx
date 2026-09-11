@@ -41,6 +41,8 @@ export default async function KeuanganPage() {
           tanggal: t.tanggal.toISOString(),
           tipe: t.tipe,
           kategori: t.kategori,
+          kodeAkun: t.kodeAkun,
+          sumberDana: t.sumberDana,
           jumlah: Number(t.jumlah),
           keterangan: t.keterangan,
           admin: { nama: t.admin.nama },

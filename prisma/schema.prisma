@@ -42,6 +42,12 @@ enum TipeTransaksi {
   PENGELUARAN
 }
 
+enum SumberDana {
+  KAS
+  BANK
+  TABUNGAN
+}
+
 enum JenisStok {
   MASUK
   KELUAR
@@ -187,7 +193,9 @@ model Aset {
 model TransaksiKas {
   id         String        @id @default(cuid())
   tipe       TipeTransaksi
-  kategori   String // ex: Penjualan Sawit, Pupuk, Gaji
+  kategori   String // ex: Pendapatan Penjualan Hasil Kebun, Beban Pupuk dan Obat-obatan
+  kodeAkun   String? // kode akun COA, ex: 4101 (nullable utk data lama)
+  sumberDana SumberDana   @default(KAS)
   jumlah     Decimal       @db.Decimal(15, 2)
   keterangan String?       @db.Text
   tanggal    DateTime      @default(now())
@@ -201,6 +209,7 @@ model TransaksiKas {
 
   @@index([tipe])
   @@index([kategori])
+  @@index([sumberDana])
   @@index([tanggal])
   @@index([adminId])
   @@map("transaksi_kas")

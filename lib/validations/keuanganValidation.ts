@@ -1,21 +1,11 @@
 import { z } from "zod";
 
 export const TipeTransaksiEnum = z.enum(["PEMASUKAN", "PENGELUARAN"]);
+export const SumberDanaEnum = z.enum(["KAS", "BANK", "TABUNGAN"]);
 export const StatusGajiEnum = z.enum(["SUDAH_DIBAYAR", "PENDING"]);
 
-// Kategori umum - bisa di-extend
-export const kategoriKeuanganList = [
-  "Penjualan Sawit",
-  "Penjualan Bibit",
-  "Gaji Karyawan",
-  "Pupuk",
-  "Pestisida",
-  "Perawatan Alat",
-  "Bahan Bakar",
-  "Pembelian Aset",
-  "Operasional",
-  "Lainnya",
-] as const;
+export type TipeTransaksi = z.infer<typeof TipeTransaksiEnum>;
+export type SumberDana = z.infer<typeof SumberDanaEnum>;
 
 export const createBuktiTransaksiSchema = z.object({
   fileName: z.string().min(1, "Nama file wajib").max(200),
@@ -26,7 +16,8 @@ export const createBuktiTransaksiSchema = z.object({
 
 export const createTransaksiKasSchema = z.object({
   tipe: TipeTransaksiEnum,
-  kategori: z.string().min(2, "Kategori minimal 2 karakter").max(50),
+  kategori: z.string().min(2, "Kategori minimal 2 karakter").max(100),
+  sumberDana: SumberDanaEnum.default("KAS"),
   jumlah: z
     .number({ message: "Jumlah harus angka" })
     .positive("Jumlah harus positif")
@@ -40,7 +31,8 @@ export const createTransaksiKasSchema = z.object({
 
 export const updateTransaksiKasSchema = z.object({
   tipe: TipeTransaksiEnum.optional(),
-  kategori: z.string().min(2).max(50).optional(),
+  kategori: z.string().min(2).max(100).optional(),
+  sumberDana: SumberDanaEnum.optional(),
   jumlah: z.number().positive().min(1000).max(10_000_000_000).optional(),
   keterangan: z.string().max(1000).optional().nullable(),
   tanggal: z.coerce.date().optional(),
@@ -52,6 +44,7 @@ export const updateTransaksiKasSchema = z.object({
 export const queryKeuanganSchema = z.object({
   tipe: TipeTransaksiEnum.optional(),
   kategori: z.string().optional(),
+  sumberDana: SumberDanaEnum.optional(),
   startDate: z.coerce.date().optional(),
   endDate: z.coerce.date().optional(),
   page: z.coerce.number().int().min(1).default(1).optional(),
