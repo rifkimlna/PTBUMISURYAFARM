@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ["192.168.56.1", "*.trycloudflare.com", "*.ngrok-free.app", "*.ngrok.io"],
   // Allow ngrok / tunneling hosts + prevent layout break on external images
   async headers() {
     return [
