@@ -230,7 +230,7 @@ export function PetugasLapanganMinimal({
       <Button type="submit" disabled={loading || !hasChange} className="w-full h-14 sm:h-12 rounded-full bg-green-700 hover:bg-green-800 text-sm font-semibold tracking-tight touch-manipulation">
         {loading ? "Menyimpan..." : <><Save className="h-4 w-4" /> Simpan Update</>}
       </Button>
-      <p className="text-center text-xs text-slate-500">Data langsung global — admin lihat di /admin/pertanian</p>
+      <p className="text-center text-xs text-slate-500">Data langsung global — admin lihat di /perkebunan</p>
     </form>
   );
 }
