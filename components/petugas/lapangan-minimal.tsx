@@ -108,8 +108,17 @@ export function PetugasLapanganMinimal({
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      {/* Hidden input foto di root agar pasti bisa diklik */}
-      <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onFile} className="hidden" />
+      {/* Hidden input foto - jangan pakai display:none di iOS Safari, pakai sr-only agar fileRef.click() jalan */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={onFile}
+        tabIndex={-1}
+        className="sr-only"
+        style={{ position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0,0,0,0)", whiteSpace: "nowrap", border: 0 }}
+      />
 
       {/* Hasil Panen - FOKUS UPDATE DATA DI ATAS */}
       <Card className="border-emerald-100 bg-emerald-50/30 overflow-hidden">
