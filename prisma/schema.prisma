@@ -42,6 +42,11 @@ enum TipeTransaksi {
   PENGELUARAN
 }
 
+enum JenisStok {
+  MASUK
+  KELUAR
+}
+
 enum GeotagSource {
   GPS
   EXIF
@@ -213,4 +218,36 @@ model BuktiTransaksi {
 
   @@index([transaksiId])
   @@map("bukti_transaksi")
+}
+
+model PersediaanBarang {
+  id          String   @id // Kode barang, ex: BRG-001 (unik)
+  namaBarang  String
+  kategori    String // Bibit/Benih | Pupuk & Obat-obatan | Pakan Ternak/Ikan
+  stokAwal    Int      @default(0)
+  satuan      String // kg, liter, pcs, karung
+  hargaSatuan Decimal  @db.Decimal(15, 2)
+  keterangan  String? @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  riwayat RiwayatStok[]
+
+  @@index([kategori])
+  @@map("persediaan_barang")
+}
+
+model RiwayatStok {
+  id         String         @id @default(cuid())
+  barangId   String
+  barang     PersediaanBarang @relation(fields: [barangId], references: [id], onDelete: Cascade)
+  jenis      JenisStok
+  jumlah     Int
+  keterangan String?        @db.Text
+  tanggal    DateTime       @default(now())
+  createdAt  DateTime       @default(now())
+
+  @@index([barangId])
+  @@index([tanggal])
+  @@map("riwayat_stok")
 }
