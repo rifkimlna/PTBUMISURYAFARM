@@ -128,14 +128,9 @@ export function PublicNavbar() {
           <a href="https://wa.me/628123456789" target="_blank" rel="noopener noreferrer" className="hidden xl:flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 px-2">
             <Phone className="h-3 w-3" /> +62 812
           </a>
-          <Link href="/admin">
-            <Button variant="ghost" size="sm" className="rounded-full cursor-pointer">
-              Masuk
-            </Button>
-          </Link>
-          <Link href="/admin">
-            <Button size="sm" className="rounded-full px-4 cursor-pointer">
-              Portal
+          <Link href="/login">
+            <Button size="sm" className="rounded-full px-5 cursor-pointer">
+              Login
             </Button>
           </Link>
         </div>
@@ -189,11 +184,8 @@ export function PublicNavbar() {
               </div>
             ))}
             <div className="pt-4 flex flex-col gap-2">
-              <Link href="/admin" onClick={() => setOpen(false)} className="block">
-                <Button className="w-full rounded-full h-11 cursor-pointer">Portal</Button>
-              </Link>
-              <Link href="/admin" onClick={() => setOpen(false)} className="block">
-                <Button variant="outline" className="w-full rounded-full h-11 cursor-pointer">Masuk</Button>
+              <Link href="/login" onClick={() => setOpen(false)} className="block">
+                <Button className="w-full rounded-full h-11 cursor-pointer">Login</Button>
               </Link>
               <a href="https://wa.me/628123456789" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 py-3 text-sm text-slate-500">
                 <Phone className="h-4 w-4" /> +62 812 3456 789

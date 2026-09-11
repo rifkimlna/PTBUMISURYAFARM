@@ -31,10 +31,10 @@ export default function LoginPage() {
       const { token, user } = j.data;
       if (token) localStorage.setItem("token", token);
       if (user) localStorage.setItem("user", JSON.stringify(user));
-      // redirect by role - petugas langsung ke scan lapangan
+      // redirect by role - pisah perkebunan vs keuangan
       if (user.role === "PETUGAS_LAPANGAN") router.push("/petugas/scan");
-      else if (user.role === "ADMIN_PERTANIAN") router.push("/admin/pertanian");
-      else if (user.role === "ADMIN_KEUANGAN") router.push("/admin/keuangan");
+      else if (user.role === "ADMIN_PERTANIAN") router.push("/perkebunan");
+      else if (user.role === "ADMIN_KEUANGAN") router.push("/keuangan");
       else router.push("/admin");
     } catch (e: any) {
       setErr(e.message);

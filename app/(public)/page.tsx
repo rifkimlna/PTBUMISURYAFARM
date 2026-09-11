@@ -135,9 +135,9 @@ export default async function LandingPage() {
                 WhatsApp
               </Button>
             </a>
-            <Link href="/admin" className="flex-1 sm:flex-none">
+            <Link href="/login" className="flex-1 sm:flex-none">
               <Button size="sm" variant="ghost" className="rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white backdrop-blur w-full sm:w-auto cursor-pointer">
-                Portal →
+                Login →
               </Button>
             </Link>
           </div>

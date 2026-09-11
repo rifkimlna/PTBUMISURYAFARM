@@ -242,7 +242,7 @@ export default function PetugasScanPage() {
       <Card className="border-slate-100 bg-slate-50/50">
         <CardContent className="p-4 text-xs text-slate-600 space-y-1">
           <div className="font-medium text-slate-700">Tips lapangan:</div>
-          <div>• Data lapangan global — admin di <span className="font-mono">/admin/pertanian</span> otomatis terupdate setelah kamu simpan.</div>
+          <div>• Data lapangan global — admin di <span className="font-mono">/perkebunan</span> otomatis terupdate setelah kamu simpan.</div>
           <div>• Hasil panen KG akan masuk chart trend 6-bulan.</div>
           <div>• Foto geotag wajib GPS/EXIF, cek akurasi &lt;25m.</div>
         </CardContent>
