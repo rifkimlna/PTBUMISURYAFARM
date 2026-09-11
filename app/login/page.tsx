@@ -43,8 +43,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#FCFCFD] px-4 py-10">
-      <Card className="w-full max-w-md border-slate-200 shadow-sm">
+    <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-[#FCFCFD] px-4 py-6 sm:py-10">
+      <Card className="w-full max-w-md border-slate-200 shadow-sm mx-auto">
         <CardHeader className="text-center">
           <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-green-700 text-white">
             <Leaf className="h-5 w-5" />
@@ -68,7 +68,7 @@ export default function LoginPage() {
               </div>
             </div>
             {err && <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{err}</div>}
-            <Button type="submit" disabled={loading} className="w-full bg-green-700 hover:bg-green-800 h-11">
+            <Button type="submit" disabled={loading} className="w-full bg-green-700 hover:bg-green-800 h-11 pointer-events-auto cursor-pointer" style={{ pointerEvents: "auto" }} onClick={() => console.log("login click", loading)}>
               {loading ? "Memproses..." : <><LogIn className="h-4 w-4" /> Login</>}
             </Button>
             <div className="flex justify-between text-xs text-slate-500">
