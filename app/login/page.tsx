@@ -31,8 +31,9 @@ export default function LoginPage() {
       const { token, user } = j.data;
       if (token) localStorage.setItem("token", token);
       if (user) localStorage.setItem("user", JSON.stringify(user));
-      // redirect by role
-      if (user.role === "ADMIN_PERTANIAN") router.push("/admin/pertanian");
+      // redirect by role - petugas langsung ke scan lapangan
+      if (user.role === "PETUGAS_LAPANGAN") router.push("/petugas/scan");
+      else if (user.role === "ADMIN_PERTANIAN") router.push("/admin/pertanian");
       else if (user.role === "ADMIN_KEUANGAN") router.push("/admin/keuangan");
       else router.push("/admin");
     } catch (e: any) {
@@ -50,7 +51,7 @@ export default function LoginPage() {
             <Leaf className="h-5 w-5" />
           </div>
           <CardTitle className="mt-3 text-xl">Login PT Bumi Surya Farm</CardTitle>
-          <CardDescription>Pakai akun seed: super@ptbst.id / budi@ptbst.id / siti@ptbst.id — password Admin123!</CardDescription>
+          <CardDescription>Semua role di sini — admin & petugas lapangan</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={submit} className="space-y-4">
@@ -68,7 +69,7 @@ export default function LoginPage() {
               </div>
             </div>
             {err && <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{err}</div>}
-            <Button type="submit" disabled={loading} className="w-full bg-green-700 hover:bg-green-800 h-11 pointer-events-auto cursor-pointer" style={{ pointerEvents: "auto" }} onClick={() => console.log("login click", loading)}>
+<Button type="submit" disabled={loading} className="w-full bg-green-700 hover:bg-green-800 h-11 cursor-pointer touch-manipulation" style={{ pointerEvents: "auto", touchAction: "manipulation" }}>
               {loading ? "Memproses..." : <><LogIn className="h-4 w-4" /> Login</>}
             </Button>
             <div className="flex justify-between text-xs text-slate-500">
@@ -77,10 +78,12 @@ export default function LoginPage() {
             </div>
             <div className="rounded-lg bg-slate-50 border p-3 text-xs text-slate-600">
               <div className="font-medium">Akun Demo:</div>
-              <div>super@ptbst.id — SUPER_ADMIN</div>
-              <div>budi@ptbst.id — ADMIN_PERTANIAN</div>
-              <div>siti@ptbst.id — ADMIN_KEUANGAN</div>
-              <div className="mt-1">Password semua: <span className="font-mono">Admin123!</span></div>
+              <div>super@ptbst.id — SUPER_ADMIN — Admin123!</div>
+              <div>budi@ptbst.id — ADMIN_PERTANIAN — Admin123!</div>
+              <div>siti@ptbst.id — ADMIN_KEUANGAN — Admin123!</div>
+              <div className="font-medium mt-2 text-green-700">Petugas Lapangan:</div>
+              <div>petugas@ptbst.id — PETUGAS_LAPANGAN — Lapangan123!</div>
+              <div className="text-[11px] text-slate-500 mt-1">Login di sini semua — petugas otomatis ke /petugas/scan</div>
             </div>
           </form>
         </CardContent>

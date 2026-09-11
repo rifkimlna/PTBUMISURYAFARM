@@ -8,7 +8,7 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
 const secret = new TextEncoder().encode(JWT_SECRET);
 
-export type Role = "SUPER_ADMIN" | "ADMIN_PERTANIAN" | "ADMIN_KEUANGAN";
+export type Role = "SUPER_ADMIN" | "ADMIN_PERTANIAN" | "ADMIN_KEUANGAN" | "PETUGAS_LAPANGAN";
 
 export interface JWTPayload {
   userId: string;

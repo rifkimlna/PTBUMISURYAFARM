@@ -12,6 +12,7 @@ enum Role {
   SUPER_ADMIN
   ADMIN_PERTANIAN
   ADMIN_KEUANGAN
+  PETUGAS_LAPANGAN
 }
 
 enum StatusKesehatan {
