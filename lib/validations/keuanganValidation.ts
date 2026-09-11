@@ -17,6 +17,13 @@ export const kategoriKeuanganList = [
   "Lainnya",
 ] as const;
 
+export const createBuktiTransaksiSchema = z.object({
+  fileName: z.string().min(1, "Nama file wajib").max(200),
+  fileUrl: z.string().min(1, "Path file wajib").max(500),
+  fileType: z.string().max(100).optional(),
+  fileSize: z.number().int().nonnegative().optional(),
+});
+
 export const createTransaksiKasSchema = z.object({
   tipe: TipeTransaksiEnum,
   kategori: z.string().min(2, "Kategori minimal 2 karakter").max(50),
@@ -27,6 +34,7 @@ export const createTransaksiKasSchema = z.object({
     .max(10_000_000_000, "Jumlah terlalu besar"),
   keterangan: z.string().max(1000, "Keterangan maksimal 1000 karakter").optional().nullable(),
   tanggal: z.coerce.date().optional(), // default now()
+  bukti: z.array(createBuktiTransaksiSchema).max(20, "Maksimal 20 bukti per transaksi").optional(),
   // adminId diambil dari session
 });
 
@@ -36,6 +44,7 @@ export const updateTransaksiKasSchema = z.object({
   jumlah: z.number().positive().min(1000).max(10_000_000_000).optional(),
   keterangan: z.string().max(1000).optional().nullable(),
   tanggal: z.coerce.date().optional(),
+  bukti: z.array(createBuktiTransaksiSchema).max(20, "Maksimal 20 bukti per transaksi").optional(),
 }).refine((data) => Object.keys(data).length > 0, {
   message: "Minimal satu field harus diisi",
 });
@@ -74,3 +83,4 @@ export const updateAsetSchema = z.object({
 export type CreateTransaksiInput = z.infer<typeof createTransaksiKasSchema>;
 export type UpdateTransaksiInput = z.infer<typeof updateTransaksiKasSchema>;
 export type CreateAsetInput = z.infer<typeof createAsetSchema>;
+export type BuktiTransaksiInput = z.infer<typeof createBuktiTransaksiSchema>;

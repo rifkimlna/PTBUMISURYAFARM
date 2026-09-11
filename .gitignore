@@ -46,3 +46,6 @@ next-env.d.ts
 
 # backup files
 *.bak
+
+# uploaded files
+/public/uploads/

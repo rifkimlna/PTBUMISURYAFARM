@@ -190,6 +190,8 @@ model TransaksiKas {
   adminId String
   admin   User   @relation("AdminKas", fields: [adminId], references: [id], onDelete: Restrict)
 
+  bukti BuktiTransaksi[]
+
   createdAt DateTime @default(now())
 
   @@index([tipe])
@@ -197,4 +199,18 @@ model TransaksiKas {
   @@index([tanggal])
   @@index([adminId])
   @@map("transaksi_kas")
+}
+
+model BuktiTransaksi {
+  id          String       @id @default(cuid())
+  transaksiId String
+  transaksi   TransaksiKas @relation(fields: [transaksiId], references: [id], onDelete: Cascade)
+  fileName    String // nama file asli untuk tampilan/download
+  fileUrl     String // path yang bisa diakses, ex: /uploads/bukti-transaksi/xxx.pdf
+  fileType    String // MIME type
+  fileSize    Int // byte
+  createdAt   DateTime     @default(now())
+
+  @@index([transaksiId])
+  @@map("bukti_transaksi")
 }
