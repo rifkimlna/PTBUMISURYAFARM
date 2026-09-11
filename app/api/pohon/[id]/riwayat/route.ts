@@ -18,7 +18,7 @@ type Params = { params: Promise<{ id: string }> };
 
 // GET /api/pohon/[id]/riwayat - list riwayat kesehatan 1 pohon
 export async function GET(req: NextRequest, { params }: Params) {
-  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_PERTANIAN"]);
+  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_PERTANIAN", "PETUGAS_LAPANGAN"]);
   if (auth instanceof Response) return auth;
 
   const { id: pohonId } = await params;
@@ -35,10 +35,11 @@ export async function GET(req: NextRequest, { params }: Params) {
   return successResponse(riwayat, `Riwayat kesehatan ${pohonId}`);
 }
 
-// POST /api/pohon/[id]/riwayat - tambah riwayat (tanpa login demo)
+// POST /api/pohon/[id]/riwayat - tambah riwayat (petugas lapangan)
 export async function POST(req: NextRequest, { params }: Params) {
-  const session = await getSessionFromRequest(req);
-  const auth = session ? session : ({ userId: "demo-admin", role: "ADMIN_PERTANIAN" } as any);
+  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_PERTANIAN", "PETUGAS_LAPANGAN"]);
+  if (auth instanceof Response) return auth;
+  const session = auth;
 
   const { id: pohonId } = await params;
 
@@ -92,11 +93,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     });
 
     // 6. SIMPAN KE DB - fotoUrl adalah URL publik cloud
-    let petugasId = (auth as any).userId as string;
-    if (petugasId === "demo-admin") {
-      const fallback = await prisma.user.findFirst({ select: { id: true } });
-      if (fallback) petugasId = fallback.id;
-    }
+    const petugasId = (auth as any).userId as string;
     const riwayat = await prisma.riwayatKesehatan.create({
       data: {
         pohonId,

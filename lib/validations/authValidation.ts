@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const RoleEnum = z.enum(["SUPER_ADMIN", "ADMIN_PERTANIAN", "ADMIN_KEUANGAN"]);
+export const RoleEnum = z.enum(["SUPER_ADMIN", "ADMIN_PERTANIAN", "ADMIN_KEUANGAN", "PETUGAS_LAPANGAN"]);
 
 export const registerSchema = z.object({
   nama: z.string().min(3).max(100),

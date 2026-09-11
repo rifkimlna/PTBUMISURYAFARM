@@ -4,15 +4,18 @@ import { EditMasterForm } from "./edit-form";
 
 export default async function EditPohonMasterPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const pohon = await prisma.pohon.findUnique({ where: { id } });
+  const pohon = await prisma.pohon.findUnique({
+    where: { id },
+    include: { riwayat: { orderBy: { tanggalCek: "desc" }, take: 10, include: { petugas: { select: { nama: true } } } } },
+  });
   if (!pohon) notFound();
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-slate-900">Edit Data Pohon — Master</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-slate-900">Koreksi Data Pohon — {pohon.id}</h1>
         <p className="text-sm text-slate-500">
-          ID <span className="font-mono font-medium text-slate-900">{pohon.id}</span> • Identitas jarang berubah • Pemupukan/panen di Data Lapangan terpisah
+          Admin full — identitas + snapshot lapangan + riwayat • Scan langsung kesini untuk koreksi kesalahan
         </p>
       </div>
       <EditMasterForm
@@ -25,7 +28,18 @@ export default async function EditPohonMasterPage({ params }: { params: Promise<
           tanggalTanam: pohon.tanggalTanam.toISOString().slice(0, 10),
           koordinat: (pohon as any).koordinat || "",
           status: pohon.status as string,
+          hasilPanen: (pohon as any).hasilPanen?.toString?.() ?? "",
+          pemupukan: (pohon as any).pemupukan || "",
+          pengobatan: (pohon as any).pengobatan || "",
         }}
+        riwayat={pohon.riwayat.map((r) => ({
+          id: r.id,
+          gejala: r.gejala,
+          tindakan: r.tindakan,
+          fotoUrl: r.fotoUrl,
+          tanggalCek: r.tanggalCek.toISOString(),
+          petugasNama: r.petugas.nama,
+        }))}
       />
     </div>
   );

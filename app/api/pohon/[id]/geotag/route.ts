@@ -8,9 +8,9 @@ import { ZodError } from "zod";
 
 type Params = { params: Promise<{ id: string }> };
 
-// GET /api/pohon/[id]/geotag - get geotag snapshot (admin pertanian)
+// GET /api/pohon/[id]/geotag - get geotag snapshot (petugas juga)
 export async function GET(req: NextRequest, { params }: Params) {
-  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_PERTANIAN"]);
+  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_PERTANIAN", "PETUGAS_LAPANGAN"]);
   if (auth instanceof Response) return auth;
   const { id } = await params;
   const pohon = await prisma.pohon.findUnique({
@@ -38,10 +38,10 @@ export async function GET(req: NextRequest, { params }: Params) {
   return successResponse({ ...pohon, geotagAdmin: admin });
 }
 
-// PUT /api/pohon/[id]/geotag - overwrite foto geotag wajib (tanpa login untuk demo)
+// PUT /api/pohon/[id]/geotag - overwrite foto geotag wajib (petugas)
 export async function PUT(req: NextRequest, { params }: Params) {
-  const session = await getSessionFromRequest(req);
-  const auth = session ? session : null;
+  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_PERTANIAN", "PETUGAS_LAPANGAN"]);
+  if (auth instanceof Response) return auth;
   const { id } = await params;
 
   try {
