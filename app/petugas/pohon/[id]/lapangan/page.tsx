@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
-import { LapanganClient } from "@/app/admin/pertanian/pohon/[id]/lapangan/lapangan-client";
+import { PetugasLapanganMinimal } from "@/components/petugas/lapangan-minimal";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { ArrowLeft, MapPin } from "lucide-react";
@@ -50,7 +50,7 @@ export default async function PetugasLapanganPage({ params }: { params: Promise<
         </div>
       </div>
 
-      <LapanganClient
+      <PetugasLapanganMinimal
         pohon={{
           id: pohon.id,
           hasilPanen: (pohon as any).hasilPanen?.toString?.() ?? "",
@@ -58,15 +58,23 @@ export default async function PetugasLapanganPage({ params }: { params: Promise<
           pengobatan: (pohon as any).pengobatan || "",
           status: pohon.status as string,
         }}
-        riwayat={pohon.riwayat.map((r) => ({
-          id: r.id,
-          gejala: r.gejala,
-          tindakan: r.tindakan,
-          fotoUrl: r.fotoUrl,
-          tanggalCek: r.tanggalCek.toISOString(),
-          petugasNama: r.petugas.nama,
-        }))}
       />
+
+      {/* Riwayat ringkas - auto hide kalau kosong biar minimalis */}
+      {pohon.riwayat.length > 0 && (
+        <div className="rounded-2xl border border-slate-100 bg-white p-4 sm:p-5">
+          <div className="text-sm font-semibold tracking-tight text-slate-900">Riwayat 3 Terbaru</div>
+          <div className="mt-3 space-y-2">
+            {pohon.riwayat.slice(0, 3).map((r) => (
+              <div key={r.id} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
+                <div className="text-xs text-slate-500">{new Date(r.tanggalCek).toLocaleDateString("id-ID")} • {r.petugas.nama}</div>
+                <div className="text-sm font-medium text-slate-900 truncate">{r.gejala}</div>
+                <div className="text-xs text-slate-600 truncate">→ {r.tindakan}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
