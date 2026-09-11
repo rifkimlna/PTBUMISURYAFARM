@@ -30,8 +30,17 @@ export async function GET(req: NextRequest) {
     if (query.kategori) where.kategori = { contains: query.kategori, mode: "insensitive" };
     if (query.startDate || query.endDate) {
       where.tanggal = {};
-      if (query.startDate) where.tanggal.gte = query.startDate;
-      if (query.endDate) where.tanggal.lte = query.endDate;
+      // Periode mencakup seluruh hari yang dipilih (dari 00:00 sampai 23:59:59)
+      if (query.startDate) {
+        const start = new Date(query.startDate);
+        start.setHours(0, 0, 0, 0);
+        where.tanggal.gte = start;
+      }
+      if (query.endDate) {
+        const end = new Date(query.endDate);
+        end.setHours(23, 59, 59, 999);
+        where.tanggal.lte = end;
+      }
     }
 
     const [data, total, summary] = await Promise.all([
@@ -40,7 +49,7 @@ export async function GET(req: NextRequest) {
         skip,
         take: limit,
         orderBy: { tanggal: "desc" },
-        include: { admin: { select: { id: true, nama: true, email: true } } },
+        include: { admin: { select: { id: true, nama: true, email: true } }, _count: { select: { bukti: true } } },
       }),
       prisma.transaksiKas.count({ where }),
       prisma.transaksiKas.groupBy({ by: ["tipe"], where, _sum: { jumlah: true } }),
@@ -78,16 +87,32 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const parsed = createTransaksiKasSchema.parse(body);
 
-    const transaksi = await prisma.transaksiKas.create({
-      data: {
-        tipe: parsed.tipe as any,
-        kategori: parsed.kategori,
-        jumlah: parsed.jumlah as any,
-        keterangan: parsed.keterangan ?? null,
-        tanggal: parsed.tanggal ?? new Date(),
-        adminId: adminId!,
-      },
-      include: { admin: { select: { id: true, nama: true } } },
+    const transaksi = await prisma.$transaction(async (tx) => {
+      const created = await tx.transaksiKas.create({
+        data: {
+          tipe: parsed.tipe as any,
+          kategori: parsed.kategori,
+          jumlah: parsed.jumlah as any,
+          keterangan: parsed.keterangan ?? null,
+          tanggal: parsed.tanggal ?? new Date(),
+          adminId: adminId!,
+        },
+        include: { admin: { select: { id: true, nama: true } }, _count: { select: { bukti: true } } },
+      });
+
+      if (parsed.bukti && parsed.bukti.length > 0) {
+        await tx.buktiTransaksi.createMany({
+          data: parsed.bukti.map((b) => ({
+            transaksiId: created.id,
+            fileName: b.fileName,
+            fileUrl: b.fileUrl,
+            fileType: b.fileType ?? "application/octet-stream",
+            fileSize: b.fileSize ?? 0,
+          })),
+        });
+      }
+
+      return created;
     });
 
     return successResponse(transaksi, "Transaksi berhasil ditambahkan", 201);
