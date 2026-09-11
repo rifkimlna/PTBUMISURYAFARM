@@ -44,74 +44,80 @@ function hitungUsia(tanggalTanam: string) {
   return `${tahun} thn`;
 }
 
-// Mobile card for HP / tablet portrait - prevents 15-col table from breaking layout
+// Mobile card - minimalis, gambar besar, terbaca semua kalangan, auto layout HP
 function PohonCard({ p, onQr }: { p: Pohon; onQr: (id: string) => void }) {
   const usia = hitungUsia(p.tanggalTanam);
   const tgl = new Date(p.tanggalTanam).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
-  const hasil = p.hasilPanen != null && p.hasilPanen !== "" ? `${Number(p.hasilPanen).toFixed(1)} KG` : "-";
+  const hasil = p.hasilPanen != null && p.hasilPanen !== "" ? `${Number(p.hasilPanen).toFixed(1)} KG` : "Belum panen";
   const riwayatCount = p._count?.riwayat ?? p.riwayatCount ?? 0;
+  const hasGeotag = !!p.fotoGeotagUrl;
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="font-mono text-xs font-bold tracking-tight text-slate-900">{p.id}</div>
-          <div className="text-sm font-medium text-slate-800 truncate">{p.namaPohon || p.jenis || p.varietas}</div>
-          <div className="text-xs text-slate-500">{p.lokasiBlok} • {tgl} • {usia}</div>
-        </div>
-        <StatusBadge s={p.status} />
-      </div>
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="rounded-lg bg-slate-50 px-3 py-2">
-          <div className="text-[11px] text-slate-400">Jenis</div>
-          <div className="font-medium text-slate-700 truncate">{p.jenis || p.varietas}</div>
-        </div>
-        <div className="rounded-lg bg-slate-50 px-3 py-2">
-          <div className="text-[11px] text-slate-400">Hasil</div>
-          <div className="font-medium text-slate-700">{hasil}</div>
-        </div>
-        <div className="rounded-lg bg-slate-50 px-3 py-2 col-span-2">
-          <div className="text-[11px] text-slate-400">Koordinat</div>
-          {p.koordinat ? (
-            <a href={`https://maps.google.com/?q=${encodeURIComponent(p.koordinat)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-emerald-600 font-medium">
-              <MapPin className="h-3 w-3" /> {p.koordinat}
-            </a>
-          ) : <span className="text-slate-400">-</span>}
-        </div>
-        <div className="rounded-lg bg-slate-50 px-3 py-2 col-span-2 flex items-center justify-between">
-          <span className="text-[11px] text-slate-400">{riwayatCount} riwayat</span>
-          {p.fotoGeotagUrl ? (
-            <a href={p.fotoGeotagUrl} target="_blank" className="inline-flex items-center gap-1.5">
-              <img src={p.fotoGeotagUrl} alt="geotag" className="h-6 w-6 rounded object-cover border border-emerald-200" />
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${p.geotagSource === "GPS" ? "bg-green-100 text-green-700" : p.geotagSource === "EXIF" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>{p.geotagSource || "GPS"}</span>
-            </a>
-          ) : <span className="text-[11px] font-medium text-red-600">✗ Tanpa Geotag</span>}
-        </div>
-      </div>
-      {(p.pemupukan || p.pengobatan) && (
-        <div className="text-xs text-slate-500 space-y-1 border-t border-slate-100 pt-2">
-          {p.pemupukan && <div><span className="font-medium">Pupuk:</span> {p.pemupukan}</div>}
-          {p.pengobatan && <div><span className="font-medium">Obat:</span> {p.pengobatan}</div>}
+    <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm flex flex-col">
+      {/* Foto hero - auto read */}
+      {hasGeotag ? (
+        <a href={p.fotoGeotagUrl!} target="_blank" className="block relative">
+          <img src={p.fotoGeotagUrl!} alt={p.namaPohon || p.id} className="h-44 w-full object-cover" loading="lazy" />
+          <span className={`absolute left-3 top-3 text-xs px-2.5 py-1 rounded-full font-medium border bg-white/90 backdrop-blur ${p.geotagSource === "GPS" ? "text-green-700 border-green-200" : p.geotagSource === "EXIF" ? "text-blue-700 border-blue-200" : "text-amber-700 border-amber-200"}`}>{p.geotagSource || "GPS"} • {hasGeotag ? "Geotag ✓" : ""}</span>
+          <span className="absolute right-3 top-3"><StatusBadge s={p.status} /></span>
+        </a>
+      ) : (
+        <div className="h-24 w-full bg-slate-50 flex flex-col items-center justify-center gap-1 border-b border-slate-100">
+          <span className="text-xs font-medium text-red-600">✗ Belum ada foto geotag</span>
+          <span className="text-xs text-slate-500">Wajib foto di lapangan</span>
         </div>
       )}
-      <div className="grid grid-cols-4 gap-2 pt-1">
-        <Button type="button" variant="outline" size="sm" className="rounded-full text-xs h-9 cursor-pointer" onClick={() => onQr(p.id)}>
-          <QrCode className="h-3.5 w-3.5" /> QR
-        </Button>
-        <Link href={`/pohon/${p.id}`} target="_blank" className="block">
-          <Button variant="outline" size="sm" className="w-full rounded-full h-9 cursor-pointer" type="button">
-            <Eye className="h-3.5 w-3.5" />
+      <div className="p-4 space-y-3 flex-1 flex flex-col">
+        <div className="min-w-0">
+          <div className="font-mono text-xs font-bold tracking-tight text-slate-500">{p.id}</div>
+          <div className="text-base font-semibold tracking-tight text-slate-900 truncate leading-tight">{p.namaPohon || p.jenis || p.varietas}</div>
+          <div className="text-sm text-slate-600 flex items-center gap-1.5 mt-0.5 flex-wrap">
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium">{p.lokasiBlok}</span>
+            <span className="text-xs text-slate-500">{p.jenis || p.varietas} • {usia}</span>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2.5">
+            <div className="text-xs text-emerald-700 font-medium">Hasil Panen</div>
+            <div className="text-sm font-semibold text-emerald-900 tracking-tight">{hasil}</div>
+            <div className="text-xs text-emerald-600">{tgl}</div>
+          </div>
+          <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5">
+            <div className="text-xs text-slate-500 font-medium">Riwayat</div>
+            <div className="text-sm font-semibold text-slate-900">{riwayatCount} entri</div>
+            <div className="text-xs text-slate-500">tindakan tercatat</div>
+          </div>
+        </div>
+        {p.koordinat && (
+          <a href={`https://maps.google.com/?q=${encodeURIComponent(p.koordinat)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-emerald-700 font-medium hover:underline">
+            <MapPin className="h-4 w-4" /> {p.koordinat}
+          </a>
+        )}
+        {(p.pemupukan || p.pengobatan) && (
+          <div className="text-sm text-slate-600 space-y-1 border-t border-slate-100 pt-3">
+            {p.pemupukan && <div className="truncate"><span className="font-medium text-slate-700">Pupuk:</span> {p.pemupukan}</div>}
+            {p.pengobatan && <div className="truncate"><span className="font-medium text-slate-700">Obat:</span> {p.pengobatan}</div>}
+          </div>
+        )}
+        <div className="grid grid-cols-4 gap-2 pt-2 mt-auto">
+          <Button type="button" variant="outline" size="sm" className="rounded-full text-xs h-11 cursor-pointer border-slate-200" onClick={() => onQr(p.id)}>
+            <QrCode className="h-4 w-4" /> QR
           </Button>
-        </Link>
-        <Link href={`/admin/pertanian/pohon/${p.id}/edit`} className="block">
-          <Button variant="outline" size="sm" className="w-full rounded-full h-9 cursor-pointer" type="button">
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-        </Link>
-        <Link href={`/admin/pertanian/pohon/${p.id}/lapangan`} className="block">
-          <Button variant="outline" size="sm" className="w-full rounded-full h-9 bg-emerald-50 hover:bg-emerald-100 cursor-pointer" type="button">
-            <ClipboardList className="h-3.5 w-3.5 text-emerald-700" />
-          </Button>
-        </Link>
+          <Link href={`/pohon/${p.id}`} target="_blank" className="block">
+            <Button variant="outline" size="sm" className="w-full rounded-full h-11 cursor-pointer border-slate-200" type="button">
+              <Eye className="h-4 w-4" />
+            </Button>
+          </Link>
+          <Link href={`/admin/pertanian/pohon/${p.id}/edit`} className="block">
+            <Button variant="outline" size="sm" className="w-full rounded-full h-11 cursor-pointer border-slate-200" type="button">
+              <Pencil className="h-4 w-4" />
+            </Button>
+          </Link>
+          <Link href={`/admin/pertanian/pohon/${p.id}/lapangan`} className="block">
+            <Button variant="outline" size="sm" className="w-full rounded-full h-11 bg-emerald-600 text-white hover:bg-emerald-700 border-emerald-600 cursor-pointer" type="button">
+              <ClipboardList className="h-4 w-4" />
+            </Button>
+          </Link>
+        </div>
       </div>
     </div>
   );
@@ -121,17 +127,17 @@ export function PohonTable({ data }: { data: Pohon[] }) {
   const [qrId, setQrId] = useState<string | null>(null);
   return (
     <>
-      {/* Mobile: card list (<768px) - auto layout perfect di HP */}
-      <div className="grid gap-3 md:hidden p-3">
+      {/* Mobile/Tablet: card grid auto - 1 col HP, 2 col tablet */}
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:hidden p-3 sm:p-4">
         {data.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Belum ada data pohon</div>
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500 col-span-full">Belum ada data pohon</div>
         ) : (
           data.map((p) => <PohonCard key={p.id} p={p} onQr={setQrId} />)
         )}
       </div>
 
-      {/* Desktop/Tablet landscape: scrollable table */}
-      <div className="hidden md:block overflow-x-auto rounded-lg border border-slate-100 -mx-0">
+      {/* Desktop: scrollable table */}
+      <div className="hidden lg:block overflow-x-auto rounded-lg border border-slate-100 -mx-0">
         <div className="min-w-[1100px]">
           <Table>
             <TableHeader>

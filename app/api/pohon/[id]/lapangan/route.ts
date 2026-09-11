@@ -36,7 +36,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 // PUT /api/pohon/[id]/lapangan - update (tanpa login demo)
 export async function PUT(req: NextRequest, { params }: Params) {
   // tanpa login untuk demo tambah data
-  await getSessionFromRequest(req);
+  const session = await getSessionFromRequest(req);
   const { id } = await params;
   try {
     const body = await req.json();
@@ -50,10 +50,29 @@ export async function PUT(req: NextRequest, { params }: Params) {
     if (parsed.pengobatan !== undefined) data.pengobatan = (parsed.pengobatan as string) === "" ? null : parsed.pengobatan;
     if (parsed.status !== undefined) data.status = parsed.status;
 
-    // normalize empty string for hasilPanen
-    if (data.hasilPanen === "" ) data.hasilPanen = null;
-
     const updated = await prisma.pohon.update({ where: { id }, data });
+
+    // Create Panen history if hasilPanen changed and not null
+    try {
+      if (parsed.hasilPanen !== undefined && parsed.hasilPanen !== null && (parsed.hasilPanen as any) !== "" && Number(parsed.hasilPanen) > 0) {
+        const prev = exists.hasilPanen ? Number(exists.hasilPanen) : 0;
+        const next = Number(parsed.hasilPanen);
+        if (next !== prev) {
+          await prisma.panen.create({
+            data: {
+              pohonId: id,
+              jumlahKg: next as any,
+              petugasId: session?.userId ?? null,
+              catatan: `Update via lapangan: ${prev} -> ${next} KG`,
+            },
+          });
+        }
+      }
+    } catch (e) {
+      console.error("[Panen create]", e);
+      // don't fail main update
+    }
+
     return successResponse(updated, "Data lapangan berhasil diupdate");
   } catch (e) {
     if (e instanceof ZodError) return zodErrorResponse(e);

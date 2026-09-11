@@ -3,17 +3,27 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { PohonTable } from "@/components/admin/pohon-table";
+import { StatusDonut } from "@/components/admin/status-donut";
+import { BarHasilBlok } from "@/components/admin/bar-hasil-blok";
+import { PanenChart } from "@/components/admin/panen-chart";
 import Link from "next/link";
 
 export default async function PertanianDashboard() {
-  const [total, sehat, perhatian, sakit, tanpaGeotag, pohon] = await Promise.all([
+  const [total, sehat, perhatian, sakit, tanpaGeotag, pohon, sumHasil, panenTotal, sudahPanen] = await Promise.all([
     prisma.pohon.count(),
     prisma.pohon.count({ where: { status: "SEHAT" } }),
     prisma.pohon.count({ where: { status: "PERLU_PERHATIAN" } }),
     prisma.pohon.count({ where: { status: "SAKIT" } }),
     prisma.pohon.count({ where: { fotoGeotagUrl: null } }),
     prisma.pohon.findMany({ orderBy: { createdAt: "desc" }, take: 20, include: { _count: { select: { riwayat: true } } } }),
+    prisma.pohon.aggregate({ _sum: { hasilPanen: true } }),
+    prisma.panen.aggregate({ _sum: { jumlahKg: true }, _count: { _all: true } }),
+    prisma.pohon.count({ where: { hasilPanen: { not: null } } }),
   ]);
+  const totalKg = Number(sumHasil._sum.hasilPanen ?? 0);
+  const panenKg = Number(panenTotal._sum.jumlahKg ?? 0);
+  const displayKg = panenKg > 0 ? panenKg : totalKg;
+  const rataKg = total ? displayKg / total : 0;
 
   return (
     <div className="space-y-6 sm:space-y-8 min-w-0">
@@ -53,6 +63,23 @@ export default async function PertanianDashboard() {
             </CardContent>
           </Card>
         ))}
+      </div>
+
+      {/* Summary Panen - minimalis, terbaca semua kalangan */}
+      <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
+        <Card className="border-slate-100"><CardContent className="p-5"><div className="text-xs tracking-wide text-slate-400">Total Panen</div><div className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{displayKg.toLocaleString("id-ID", { maximumFractionDigits: 1 })} KG</div><div className="mt-1 text-xs text-slate-400">{panenTotal._count._all > 0 ? `${panenTotal._count._all} panen tercatat` : `${sudahPanen} pohon sudah panen`}</div></CardContent></Card>
+        <Card className="border-slate-100"><CardContent className="p-5"><div className="text-xs tracking-wide text-slate-400">Rata-rata</div><div className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{rataKg.toLocaleString("id-ID", { maximumFractionDigits: 1 })} KG</div><div className="mt-1 text-xs text-slate-400">per pohon</div></CardContent></Card>
+        <Card className="border-slate-100"><CardContent className="p-5"><div className="text-xs tracking-wide text-slate-400">Sudah Panen</div><div className="mt-2 text-2xl font-semibold tracking-tight text-green-700">{sudahPanen}/{total}</div><div className="mt-1 text-xs text-slate-400">{total ? Math.round((sudahPanen / total) * 100) : 0}% pohon</div></CardContent></Card>
+      </div>
+
+      {/* Chart Grid - auto layout HP 1 kolom, tablet 2, desktop 2+1 */}
+      <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2">
+        <StatusDonut />
+        <BarHasilBlok groupBy="blok" />
+      </div>
+      <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2">
+        <BarHasilBlok groupBy="jenis" />
+        <PanenChart />
       </div>
 
       <Card className="overflow-hidden border-slate-100">

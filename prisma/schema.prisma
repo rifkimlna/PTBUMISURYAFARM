@@ -63,6 +63,7 @@ model User {
   riwayatDitangani RiwayatKesehatan[] @relation("PetugasRiwayat")
   transaksiKas     TransaksiKas[]     @relation("AdminKas")
   geotagPohon     Pohon[]            @relation("GeotagAdmin")
+  panen           Panen[]            @relation("PetugasPanen")
 
   @@map("users")
 }
@@ -93,6 +94,7 @@ model Pohon {
   updatedAt    DateTime          @updatedAt
 
   riwayat RiwayatKesehatan[]
+  panen   Panen[]
 
   @@index([lokasiBlok])
   @@index([status])
@@ -213,4 +215,21 @@ model BuktiTransaksi {
 
   @@index([transaksiId])
   @@map("bukti_transaksi")
+}
+
+model Panen {
+  id          String   @id @default(cuid())
+  pohonId     String
+  pohon       Pohon    @relation(fields: [pohonId], references: [id], onDelete: Cascade)
+  tanggalPanen DateTime @default(now())
+  jumlahKg    Decimal  @db.Decimal(10, 2)
+  petugasId   String?
+  petugas     User?    @relation("PetugasPanen", fields: [petugasId], references: [id], onDelete: SetNull)
+  catatan     String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  @@index([pohonId])
+  @@index([tanggalPanen])
+  @@index([petugasId])
+  @@map("panen")
 }
