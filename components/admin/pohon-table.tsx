@@ -1,10 +1,12 @@
 "use client";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { QrCode, Eye, Pencil, ClipboardList, MapPin } from "lucide-react";
+import { QrCode, Eye, Pencil, Trash2, MapPin } from "lucide-react";
 import { QrModal } from "./qr-modal";
+import { isRealFotoUrl } from "@/lib/utils";
 import Link from "next/link";
 
 type Pohon = {
@@ -44,26 +46,61 @@ function hitungUsia(tanggalTanam: string) {
   return `${tahun} thn`;
 }
 
-// Mobile card - minimalis, gambar besar, terbaca semua kalangan, auto layout HP
+function HapusButton({ id, className }: { id: string; className?: string }) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  async function hapus() {
+    if (!window.confirm(`Hapus pohon ${id}? Data dan riwayat ikut terhapus.`)) return;
+    setLoading(true);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : "";
+      const res = await fetch(`/api/pohon/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.message || j.error || "Gagal hapus");
+      router.refresh();
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Gagal hapus");
+    } finally {
+      setLoading(false);
+    }
+  }
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      disabled={loading}
+      onClick={hapus}
+      title="Hapus"
+      className={className || "w-full rounded-full h-11 cursor-pointer border-slate-200 text-red-600 hover:text-red-700 hover:bg-red-50"}
+    >
+      <Trash2 className="h-4 w-4" />
+    </Button>
+  );
+}
+
+// Mobile card - minimalis, auto layout HP
 function PohonCard({ p, onQr }: { p: Pohon; onQr: (id: string) => void }) {
   const usia = hitungUsia(p.tanggalTanam);
   const tgl = new Date(p.tanggalTanam).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
   const hasil = p.hasilPanen != null && p.hasilPanen !== "" ? `${Number(p.hasilPanen).toFixed(1)} KG` : "Belum panen";
   const riwayatCount = p._count?.riwayat ?? p.riwayatCount ?? 0;
-  const hasGeotag = !!p.fotoGeotagUrl;
+  const hasGeotag = isRealFotoUrl(p.fotoGeotagUrl);
   return (
     <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm flex flex-col">
       {/* Foto hero - auto read */}
       {hasGeotag ? (
         <a href={p.fotoGeotagUrl!} target="_blank" className="block relative">
           <img src={p.fotoGeotagUrl!} alt={p.namaPohon || p.id} className="h-44 w-full object-cover" loading="lazy" />
-          <span className={`absolute left-3 top-3 text-xs px-2.5 py-1 rounded-full font-medium border bg-white/90 backdrop-blur ${p.geotagSource === "GPS" ? "text-green-700 border-green-200" : p.geotagSource === "EXIF" ? "text-blue-700 border-blue-200" : "text-amber-700 border-amber-200"}`}>{p.geotagSource || "GPS"} • {hasGeotag ? "Geotag ✓" : ""}</span>
+          <span className={`absolute left-3 top-3 text-xs px-2.5 py-1 rounded-full font-medium border bg-white ${p.geotagSource === "GPS" ? "text-green-700 border-green-200" : p.geotagSource === "EXIF" ? "text-blue-700 border-blue-200" : "text-amber-700 border-amber-200"}`}>{p.geotagSource || "GPS"} • Geotag ✓</span>
           <span className="absolute right-3 top-3"><StatusBadge s={p.status} /></span>
         </a>
       ) : (
         <div className="h-24 w-full bg-slate-50 flex flex-col items-center justify-center gap-1 border-b border-slate-100">
-          <span className="text-xs font-medium text-red-600">✗ Belum ada foto geotag</span>
-          <span className="text-xs text-slate-500">Wajib foto di lapangan</span>
+          <span className="text-xs font-medium text-slate-500">Belum ada foto</span>
         </div>
       )}
       <div className="p-4 space-y-3 flex-1 flex flex-col">
@@ -112,11 +149,7 @@ function PohonCard({ p, onQr }: { p: Pohon; onQr: (id: string) => void }) {
               <Pencil className="h-4 w-4" />
             </Button>
           </Link>
-          <Link href={`/perkebunan/pohon/${p.id}/lapangan`} className="block">
-            <Button variant="outline" size="sm" className="w-full rounded-full h-11 bg-emerald-600 text-white hover:bg-emerald-700 border-emerald-600 cursor-pointer" type="button">
-              <ClipboardList className="h-4 w-4" />
-            </Button>
-          </Link>
+          <HapusButton id={p.id} />
         </div>
       </div>
     </div>
@@ -193,12 +226,12 @@ export function PohonTable({ data }: { data: Pohon[] }) {
                         ) : <span className="text-slate-400">-</span>}
                       </TableCell>
                       <TableCell className="text-xs whitespace-nowrap">
-                        {p.fotoGeotagUrl ? (
+                        {isRealFotoUrl(p.fotoGeotagUrl) ? (
                           <a href={p.fotoGeotagUrl} target="_blank" className="inline-flex items-center gap-1.5 cursor-pointer">
                             <img src={p.fotoGeotagUrl} alt="geotag" className="h-8 w-8 rounded object-cover border border-emerald-200" />
                             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${p.geotagSource === "GPS" ? "bg-green-100 text-green-700" : p.geotagSource === "EXIF" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>{p.geotagSource || "GPS"}</span>
                           </a>
-                        ) : <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600 border border-red-200">✗ Tanpa Geotag</span>}
+                        ) : <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">Tanpa foto</span>}
                       </TableCell>
                       <TableCell className="text-xs font-medium text-slate-700 whitespace-nowrap">{hasil}</TableCell>
                       <TableCell className="text-xs text-slate-600 whitespace-nowrap">{usia}</TableCell>
@@ -211,12 +244,10 @@ export function PohonTable({ data }: { data: Pohon[] }) {
                           <Link href={`/pohon/${p.id}`} target="_blank">
                             <Button variant="ghost" size="sm" className="h-8 w-8 rounded-full cursor-pointer touch-manipulation" type="button"><Eye className="h-3.5 w-3.5" /></Button>
                           </Link>
-                          <Link href={`/perkebunan/pohon/${p.id}/edit`} title="Edit Master">
+                          <Link href={`/perkebunan/pohon/${p.id}/edit`} title="Edit">
                             <Button variant="ghost" size="sm" className="h-8 w-8 rounded-full cursor-pointer touch-manipulation" type="button"><Pencil className="h-3.5 w-3.5" /></Button>
                           </Link>
-                          <Link href={`/perkebunan/pohon/${p.id}/lapangan`} title="Data Lapangan">
-                            <Button variant="ghost" size="sm" className="h-8 w-8 rounded-full bg-emerald-50 hover:bg-emerald-100 cursor-pointer touch-manipulation" type="button"><ClipboardList className="h-3.5 w-3.5 text-emerald-700" /></Button>
-                          </Link>
+                          <HapusButton id={p.id} className="h-8 w-8 rounded-full cursor-pointer touch-manipulation text-red-600 hover:text-red-700 hover:bg-red-50" />
                         </div>
                       </TableCell>
                     </TableRow>

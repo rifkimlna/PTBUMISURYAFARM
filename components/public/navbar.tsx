@@ -19,6 +19,7 @@ const menus: { label: string; href?: string; subs?: Sub[] }[] = [
   {
     label: "Operasional",
     subs: [
+      { label: "Scan QR Pohon", href: "/scan", desc: "Tamu — tanpa login", icon: ScanLine },
       { label: "Manajemen Pohon", href: "/#qr", desc: "ID PHN-BLK-XXX", icon: Sprout },
       { label: "QR Traceability", href: "/#qr", desc: "Scan tanpa aplikasi", icon: ScanLine },
       { label: "Lahan & Blok", href: "/#qr", desc: "120 Ha • Blok A–D", icon: MapPinned },
@@ -33,6 +34,7 @@ const menus: { label: string; href?: string; subs?: Sub[] }[] = [
     ],
   },
   { label: "Kontak", href: "/#kontak" },
+  { label: "Scan", href: "/scan" },
 ];
 
 export function PublicNavbar() {
@@ -70,7 +72,7 @@ export function PublicNavbar() {
   }, [open]);
 
   return (
-    <header ref={navRef} className="sticky top-0 z-40 w-full border-b border-slate-100 bg-white/90 backdrop-blur-xl supports-[backdrop-filter]:bg-white/80">
+    <header ref={navRef} className="sticky top-0 z-40 w-full border-b border-slate-100 bg-white">
       <div className="mx-auto flex h-[56px] sm:h-[60px] max-w-[1280px] items-center justify-between px-4 sm:px-6 lg:px-8 gap-2">
         <Link href="/" className="flex items-center gap-2.5 shrink-0">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-700 text-white shrink-0">
@@ -128,6 +130,9 @@ export function PublicNavbar() {
           <a href="https://wa.me/628123456789" target="_blank" rel="noopener noreferrer" className="hidden xl:flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 px-2">
             <Phone className="h-3 w-3" /> +62 812
           </a>
+          <Link href="/scan" className="rounded-full px-3 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 flex items-center gap-1.5">
+            <ScanLine className="h-3.5 w-3.5" /> Scan
+          </Link>
           <Link href="/login">
             <Button size="sm" className="rounded-full px-5 cursor-pointer">
               Login
@@ -184,6 +189,9 @@ export function PublicNavbar() {
               </div>
             ))}
             <div className="pt-4 flex flex-col gap-2">
+              <Link href="/scan" onClick={() => setOpen(false)} className="block">
+                <Button variant="outline" className="w-full rounded-full h-11 cursor-pointer">Scan QR Pohon</Button>
+              </Link>
               <Link href="/login" onClick={() => setOpen(false)} className="block">
                 <Button className="w-full rounded-full h-11 cursor-pointer">Login</Button>
               </Link>

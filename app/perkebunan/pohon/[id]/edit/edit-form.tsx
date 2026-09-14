@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { CheckCircle2, ArrowLeft, Pencil, Sprout, Camera, Upload, Save } from "lucide-react";
+import { isRealFotoUrl } from "@/lib/utils";
+import { stampGeotagPhoto } from "@/lib/geotag-stamp";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -23,6 +25,10 @@ type Props = {
     hasilPanen: string;
     pemupukan: string;
     pengobatan: string;
+    fotoGeotagUrl: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    geotagSource: string | null;
   };
   riwayat: { id: string; gejala: string; tindakan: string; fotoUrl: string | null; tanggalCek: string; petugasNama: string }[];
 };
@@ -43,6 +49,76 @@ export function EditMasterForm({ pohon, riwayat }: Props) {
   const [rLoading, setRLoading] = useState(false);
   const [rMsg, setRMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [blokList, setBlokList] = useState<string[]>([]);
+
+  useEffect(() => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : "";
+    fetch("/api/blok", { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        const rows = j?.data;
+        if (Array.isArray(rows) && rows.length > 0) setBlokList(rows.map((b: { nama: string }) => b.nama));
+      })
+      .catch(() => {});
+  }, []);
+
+  // ganti foto
+  const [fotoFile, setFotoFile] = useState<File | null>(null);
+  const [fotoPreview, setFotoPreview] = useState<string | null>(null);
+  const [fotoLoading, setFotoLoading] = useState(false);
+  const [fotoMsg, setFotoMsg] = useState<string | null>(null);
+  const [fotoUrl, setFotoUrl] = useState<string | null>(pohon.fotoGeotagUrl);
+  const fotoRef = useRef<HTMLInputElement>(null);
+
+  const onFoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] || null;
+    setFotoFile(f);
+    if (f) setFotoPreview(URL.createObjectURL(f));
+    else setFotoPreview(null);
+  };
+
+  async function submitFoto(e: React.FormEvent) {
+    e.preventDefault();
+    if (!fotoFile) {
+      setFotoMsg("Pilih foto dulu");
+      return;
+    }
+    setFotoLoading(true);
+    setFotoMsg(null);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : "";
+      const stamped = pohon.latitude != null && pohon.longitude != null
+        ? await stampGeotagPhoto(fotoFile, {
+            pohonId: pohon.id,
+            latitude: pohon.latitude,
+            longitude: pohon.longitude,
+            source: pohon.geotagSource,
+          })
+        : fotoFile;
+      const fd = new FormData();
+      fd.set("foto", stamped);
+      if (pohon.latitude != null) fd.set("latitude", String(pohon.latitude));
+      if (pohon.longitude != null) fd.set("longitude", String(pohon.longitude));
+      if (pohon.geotagSource) fd.set("source", pohon.geotagSource);
+      fd.set("geotagTimestamp", new Date().toISOString());
+      const res = await fetch(`/api/pohon/${pohon.id}/geotag`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message || j.error || "Gagal ganti foto");
+      setFotoUrl(j.data?.fotoGeotagUrl || null);
+      setFotoMsg("Foto diperbarui");
+      setFotoFile(null);
+      setFotoPreview(null);
+      if (fotoRef.current) fotoRef.current.value = "";
+    } catch (e: unknown) {
+      setFotoMsg(e instanceof Error ? e.message : "Gagal ganti foto");
+    } finally {
+      setFotoLoading(false);
+    }
+  }
 
   const onChange = (k: string, v: string) => setForm((s) => ({ ...s, [k]: v }));
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -157,13 +233,13 @@ export function EditMasterForm({ pohon, riwayat }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* MASTER + SNAPSHOT — SATU FORM ADMIN “SEMUANYA” */}
+      {/* DATA POHON */}
       <Card className="border-slate-200">
         <CardHeader>
           <CardTitle className="text-sm flex items-center gap-2">
-            <Pencil className="h-4 w-4 text-slate-700" /> Koreksi Data Pohon — {pohon.id} (Admin)
+            <Pencil className="h-4 w-4 text-slate-700" /> Data Pohon — {pohon.id}
           </CardTitle>
-          <CardDescription>Semua field bisa dikoreksi — ID read-only. Snapshot lapangan (panen/pupuk/obat) ada di bawah.</CardDescription>
+          <CardDescription>ID tidak bisa diubah.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={submitAll} className="space-y-6">
@@ -176,7 +252,7 @@ export function EditMasterForm({ pohon, riwayat }: Props) {
               <div className="text-xs font-semibold tracking-widest text-slate-500 mb-2">IDENTITAS</div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>NAMA POHON</Label>
+                  <Label>Nama Pohon</Label>
                   <Input value={form.namaPohon} onChange={(e) => onChange("namaPohon", e.target.value)} placeholder="Pohon Sawit 001" />
                 </div>
                 <div className="space-y-2">
@@ -186,21 +262,30 @@ export function EditMasterForm({ pohon, riwayat }: Props) {
               </div>
               <div className="grid gap-4 sm:grid-cols-2 mt-4">
                 <div className="space-y-2">
-                  <Label>JENIS</Label>
+                  <Label>Jenis</Label>
                   <Input value={form.jenis} onChange={(e) => onChange("jenis", e.target.value)} placeholder="Sawit / Durian" />
                 </div>
                 <div className="space-y-2">
-                  <Label>BLOK *</Label>
-                  <Input value={form.lokasiBlok} onChange={(e) => onChange("lokasiBlok", e.target.value)} required />
+                  <Label>Blok *</Label>
+                  {blokList.length > 0 ? (
+                    <Select value={form.lokasiBlok} onChange={(e) => onChange("lokasiBlok", e.target.value)} required>
+                      {blokList.map((b) => (
+                        <option key={b} value={b}>{b}</option>
+                      ))}
+                      {!blokList.includes(form.lokasiBlok) && <option value={form.lokasiBlok}>{form.lokasiBlok}</option>}
+                    </Select>
+                  ) : (
+                    <Input value={form.lokasiBlok} onChange={(e) => onChange("lokasiBlok", e.target.value)} required />
+                  )}
                 </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2 mt-4">
                 <div className="space-y-2">
-                  <Label>TANGGAL TANAM *</Label>
+                  <Label>Tanggal Tanam *</Label>
                   <Input type="date" value={form.tanggalTanam} onChange={(e) => onChange("tanggalTanam", e.target.value)} required />
                 </div>
                 <div className="space-y-2">
-                  <Label>KOORDINAT</Label>
+                  <Label>Koordinat</Label>
                   <Input value={form.koordinat} onChange={(e) => onChange("koordinat", e.target.value)} placeholder="-2.983, 104.752" />
                 </div>
               </div>
@@ -218,18 +303,12 @@ export function EditMasterForm({ pohon, riwayat }: Props) {
             <div className="border-t border-slate-100 pt-6">
               <div className="flex items-center gap-2 mb-3">
                 <Sprout className="h-4 w-4 text-emerald-700" />
-                <div className="text-xs font-semibold tracking-widest text-slate-500">SNAPSHOT LAPANGAN (admin koreksi)</div>
+                <div className="text-xs font-semibold tracking-widest text-slate-500">HASIL & PERAWATAN</div>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Hasil Panen (KG)</Label>
-                  <Input type="number" step="0.1" inputMode="decimal" value={form.hasilPanen} onChange={(e) => onChange("hasilPanen", e.target.value)} placeholder="125.5" className="bg-white" />
-                  <p className="text-xs text-slate-400">Kosongkan jika belum panen</p>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-slate-400">Preview</Label>
-                  <div className="h-10 flex items-center rounded-lg border bg-slate-50 px-3 text-sm font-medium">{form.hasilPanen ? `${form.hasilPanen} KG` : "—"}</div>
-                </div>
+              <div className="space-y-2">
+                <Label>Hasil Panen (KG)</Label>
+                <Input type="number" step="0.1" inputMode="decimal" value={form.hasilPanen} onChange={(e) => onChange("hasilPanen", e.target.value)} placeholder="125.5" className="bg-white" />
+                <p className="text-xs text-slate-400">Kosongkan jika belum panen</p>
               </div>
               <div className="space-y-2 mt-4">
                 <Label>Pemupukan</Label>
@@ -261,11 +340,39 @@ export function EditMasterForm({ pohon, riwayat }: Props) {
         </CardContent>
       </Card>
 
+      {/* FOTO */}
+      <Card className="border-slate-200">
+        <CardHeader>
+          <CardTitle className="text-sm flex items-center gap-2"><Camera className="h-4 w-4" /> Foto</CardTitle>
+          <CardDescription>Foto terbaru pohon + titik lokasi.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={submitFoto} className="space-y-4">
+            {isRealFotoUrl(fotoUrl) ? (
+              <img src={fotoUrl} alt="foto pohon" className="h-56 w-full object-cover rounded-xl border" />
+            ) : (
+              <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400">
+                Belum ada foto
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Ganti foto</Label>
+              <Input ref={fotoRef} type="file" accept="image/*" capture="environment" onChange={onFoto} className="bg-white" />
+              {fotoPreview && <img src={fotoPreview} alt="preview" className="mt-2 h-48 w-full object-cover rounded-lg border" />}
+            </div>
+            <Button type="submit" disabled={fotoLoading} className="w-full bg-green-700 hover:bg-green-800 h-11 rounded-full">
+              {fotoLoading ? "Mengupload..." : "Simpan Foto"}
+            </Button>
+            {fotoMsg && <div className="rounded-lg bg-slate-100 border p-3 text-sm text-slate-700">{fotoMsg}</div>}
+          </form>
+        </CardContent>
+      </Card>
+
       {/* RIWAYAT ADMIN */}
       <Card className="border-slate-200">
         <CardHeader>
-          <CardTitle className="text-sm flex items-center gap-2"><Camera className="h-4 w-4" /> Tambah Riwayat (Admin)</CardTitle>
-          <CardDescription>Koreksi gejala/tindakan historis — optional, petugas tetap input harian di /petugas</CardDescription>
+          <CardTitle className="text-sm flex items-center gap-2"><Camera className="h-4 w-4" /> Tambah Riwayat</CardTitle>
+          <CardDescription>Catat kondisi & tindakan.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={submitRiwayat} className="space-y-4">
@@ -297,7 +404,7 @@ export function EditMasterForm({ pohon, riwayat }: Props) {
       {/* HISTORY */}
       <Card className="border-slate-100">
         <CardHeader>
-          <CardTitle className="text-sm">History 10 Terbaru — {pohon.id}</CardTitle>
+          <CardTitle className="text-sm">Riwayat — {pohon.id}</CardTitle>
           <CardDescription>{riwayat.length} entri</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">

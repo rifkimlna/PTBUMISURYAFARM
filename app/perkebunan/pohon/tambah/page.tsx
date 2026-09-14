@@ -1,14 +1,15 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle2, Plus, ArrowLeft, MapPin, Camera, Crosshair } from "lucide-react";
+import { CheckCircle2, Plus, ArrowLeft, Camera, Crosshair, MapPin } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { stampGeotagPhoto } from "@/lib/geotag-stamp";
 
 export default function TambahPohonPage() {
   const router = useRouter();
@@ -27,15 +28,24 @@ export default function TambahPohonPage() {
   });
   const [foto, setFoto] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [latitude, setLatitude] = useState("");
-  const [longitude, setLongitude] = useState("");
-  const [accuracy, setAccuracy] = useState<string>("");
   const [source, setSource] = useState("GPS");
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsMsg, setGpsMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [blokList, setBlokList] = useState<string[]>(["Blok A", "Blok B", "Blok C", "Blok D"]);
+
+  useEffect(() => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : "";
+    fetch("/api/blok", { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        const rows = j?.data;
+        if (Array.isArray(rows) && rows.length > 0) setBlokList(rows.map((b: { nama: string }) => b.nama));
+      })
+      .catch(() => {});
+  }, []);
 
   const onChange = (k: string, v: string) => setForm((s) => ({ ...s, [k]: v }));
 
@@ -57,13 +67,9 @@ export default function TambahPohonPage() {
       (pos) => {
         const lat = pos.coords.latitude.toFixed(6);
         const lng = pos.coords.longitude.toFixed(6);
-        const acc = Math.round(pos.coords.accuracy);
-        setLatitude(lat);
-        setLongitude(lng);
-        setAccuracy(String(acc));
         setForm((s) => ({ ...s, koordinat: `${lat}, ${lng}` }));
         setSource("GPS");
-        setGpsMsg(`GPS lock: ${lat}, ${lng} ±${acc}m`);
+        setGpsMsg(`GPS lock: ${lat}, ${lng}`);
         setGpsLoading(false);
       },
       (err) => {
@@ -75,11 +81,16 @@ export default function TambahPohonPage() {
     );
   };
 
-  const latNum = latitude ? Number(latitude) : null;
-  const lngNum = longitude ? Number(longitude) : null;
-  const accNum = accuracy ? Number(accuracy) : null;
-  const accColor = accNum == null ? "text-slate-400" : accNum <= 30 ? "text-green-700" : accNum <= 50 ? "text-amber-600" : "text-red-600";
-  const accBadge = accNum == null ? "" : accNum <= 30 ? " (Akurat)" : accNum <= 50 ? " (Sedang)" : " (>50m - perlu di area terbuka)";
+  function parseKoordinat(text: string): { lat: number; lng: number } | null {
+    if (!text) return null;
+    const parts = text.split(",").map((s) => parseFloat(s.trim()));
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+      if (parts[0] >= -90 && parts[0] <= 90 && parts[1] >= -180 && parts[1] <= 180) {
+        return { lat: parts[0], lng: parts[1] };
+      }
+    }
+    return null;
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -88,7 +99,16 @@ export default function TambahPohonPage() {
     setErr(null);
     try {
       if (!foto) throw new Error("Foto geotag wajib — upload foto pohon");
-      if (!latitude || !longitude) throw new Error("Koordinat GPS wajib — klik Ambil GPS atau isi manual lat/lng");
+      const parsed = parseKoordinat(form.koordinat);
+      if (!parsed) throw new Error("Koordinat tidak valid — format: -2.983, 104.752");
+      setMsg("Menyiapkan foto...");
+      const stamped = await stampGeotagPhoto(foto, {
+        pohonId: form.id.toUpperCase(),
+        latitude: parsed.lat,
+        longitude: parsed.lng,
+        source,
+      });
+      setPreview(URL.createObjectURL(stamped));
       const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : "";
       const fd = new FormData();
       fd.set("id", form.id.toUpperCase());
@@ -97,15 +117,14 @@ export default function TambahPohonPage() {
       if (form.jenis) fd.set("jenis", form.jenis);
       fd.set("lokasiBlok", form.lokasiBlok);
       fd.set("tanggalTanam", form.tanggalTanam);
-      fd.set("koordinat", form.koordinat || `${latitude}, ${longitude}`);
+      fd.set("koordinat", form.koordinat);
+      fd.set("latitude", String(parsed.lat));
+      fd.set("longitude", String(parsed.lng));
       if (form.hasilPanen) fd.set("hasilPanen", form.hasilPanen);
       if (form.pemupukan) fd.set("pemupukan", form.pemupukan);
       if (form.pengobatan) fd.set("pengobatan", form.pengobatan);
       fd.set("status", form.status);
-      fd.set("foto", foto);
-      fd.set("latitude", latitude);
-      fd.set("longitude", longitude);
-      if (accuracy) fd.set("accuracy", accuracy);
+      fd.set("foto", stamped);
       fd.set("source", source);
       fd.set("geotagTimestamp", new Date().toISOString());
 
@@ -116,7 +135,7 @@ export default function TambahPohonPage() {
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.message || j.error || "Gagal tambah pohon");
-      setMsg(`Berhasil: ${j.data?.id || form.id} + foto geotag tersimpan`);
+      setMsg(`Tersimpan: ${j.data?.id || form.id}`);
       setTimeout(() => router.push("/perkebunan/pohon"), 1200);
     } catch (e: any) {
       setErr(e.message);
@@ -124,8 +143,6 @@ export default function TambahPohonPage() {
       setLoading(false);
     }
   }
-
-  const koordinatToMap = latitude && longitude ? `${latitude},${longitude}` : form.koordinat ? form.koordinat.replace(/\s/g, "") : null;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 min-w-0 px-0">
@@ -136,85 +153,84 @@ export default function TambahPohonPage() {
           </Button>
         </Link>
         <div className="min-w-0">
-          <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-slate-900">Tambah Data Pohon — Wajib Geotag</h1>
-          <p className="text-xs sm:text-sm text-slate-500">11 field + Foto Geotag terbaru (GPS/EXIF/MANUAL) wajib setiap pohon</p>
+          <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-slate-900">Tambah Pohon</h1>
+          <p className="text-xs sm:text-sm text-slate-500">Data pohon + foto lokasi</p>
         </div>
       </div>
 
       <Card className="border-slate-200">
         <CardHeader>
           <CardTitle className="text-sm flex items-center gap-2">
-            <Plus className="h-4 w-4 text-green-700" /> Form 11 Field + Geotag Wajib
+            <Plus className="h-4 w-4 text-green-700" /> Data Pohon
           </CardTitle>
-          <CardDescription>ID PHN-* • Foto + GPS wajib • Akurasi ≤50m ideal</CardDescription>
+          <CardDescription>ID unik PHN-* • Foto + lokasi wajib diisi</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={submit} className="space-y-4">
+          <form onSubmit={submit} className="space-y-6">
+            <div>
+              <div className="text-xs font-semibold tracking-widest text-slate-500 mb-3">IDENTITAS</div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="id">ID Pohon *</Label>
                 <Input id="id" value={form.id} onChange={(e) => onChange("id", e.target.value)} placeholder="PHN-BLK-A03" required pattern="PHN-[A-Z0-9-]+" title="Format PHN-*" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="namaPohon">2. NAMA POHON</Label>
+                <Label htmlFor="namaPohon">Nama Pohon</Label>
                 <Input id="namaPohon" value={form.namaPohon} onChange={(e) => onChange("namaPohon", e.target.value)} placeholder="Pohon Sawit 003" />
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 mt-4">
               <div className="space-y-2">
                 <Label htmlFor="varietas">Varietas *</Label>
                 <Input id="varietas" value={form.varietas} onChange={(e) => onChange("varietas", e.target.value)} placeholder="Sawit DxP" required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="jenis">3. JENIS</Label>
+                <Label htmlFor="jenis">Jenis</Label>
                 <Input id="jenis" value={form.jenis} onChange={(e) => onChange("jenis", e.target.value)} placeholder="Sawit / Durian / Karet" />
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 mt-4">
               <div className="space-y-2">
-                <Label htmlFor="lokasiBlok">6. BLOK *</Label>
-                <Input id="lokasiBlok" value={form.lokasiBlok} onChange={(e) => onChange("lokasiBlok", e.target.value)} placeholder="Blok A" required />
+                <Label htmlFor="lokasiBlok">Blok *</Label>
+                <Select value={form.lokasiBlok} onChange={(e) => onChange("lokasiBlok", e.target.value)} required>
+                  <option value="">Pilih blok</option>
+                  {blokList.map((b) => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="tanggalTanam">5. TANGGAL TANAM *</Label>
+                <Label htmlFor="tanggalTanam">Tanggal Tanam *</Label>
                 <Input id="tanggalTanam" type="date" value={form.tanggalTanam} onChange={(e) => onChange("tanggalTanam", e.target.value)} required />
               </div>
             </div>
+            </div>
 
-            {/* Geotag wajib */}
-            <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
-              <div className="flex items-center gap-2 text-sm font-semibold text-emerald-800">
-                <Camera className="h-4 w-4" /> Foto Geotag Wajib * <span className="text-xs font-normal text-emerald-700">— 1 foto terbaru per pohon</span>
+            {/* Foto + lokasi */}
+            <div className="border-t border-slate-100 pt-6">
+              <div className="text-xs font-semibold tracking-widest text-slate-500 mb-3">FOTO & LOKASI</div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                <Camera className="h-4 w-4" /> Foto Pohon *
               </div>
 
               <div className="space-y-2">
                 <Label>Foto Pohon (kamera HP) *</Label>
                 <div className="rounded-xl border-2 border-dashed border-emerald-200 bg-white p-3">
                   <Input type="file" accept="image/*" capture="environment" onChange={onFile} required className="bg-white" />
-                  <p className="mt-1 text-xs text-slate-500">Maks 5MB • JPG/PNG/WEBP — akan diupload ke Supabase folder pohon-geotag</p>
+                  <p className="mt-1 text-xs text-slate-500">Maks 5MB • JPG/PNG/WEBP</p>
                   {preview && <img src={preview} alt="preview" className="mt-3 h-56 w-full object-cover rounded-lg border" />}
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="space-y-2">
-                  <Label>Latitude *</Label>
-                  <Input value={latitude} onChange={(e) => { setLatitude(e.target.value); setForm((s) => ({ ...s, koordinat: `${e.target.value}, ${longitude}` })); }} placeholder="-2.983" required />
-                </div>
-                <div className="space-y-2">
-                  <Label>Longitude *</Label>
-                  <Input value={longitude} onChange={(e) => { setLongitude(e.target.value); setForm((s) => ({ ...s, koordinat: `${latitude}, ${e.target.value}` })); }} placeholder="104.752" required />
-                </div>
-                <div className="space-y-2">
-                  <Label>Akurasi (m)</Label>
-                  <Input value={accuracy} onChange={(e) => setAccuracy(e.target.value)} placeholder="12" type="number" />
-                  {accuracy && <p className={`text-xs ${accColor}`}>{accuracy}m{accBadge}</p>}
-                </div>
+              <div className="space-y-2">
+                <Label>Koordinat *</Label>
+                <Input value={form.koordinat} onChange={(e) => onChange("koordinat", e.target.value)} placeholder="-2.983, 104.752" required />
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 items-center">
                 <Button type="button" variant="outline" onClick={ambilGPS} disabled={gpsLoading} className="rounded-full border-emerald-200 hover:bg-emerald-50">
                   <Crosshair className="h-4 w-4" /> {gpsLoading ? "Mengambil GPS..." : "Ambil GPS Saat Ini"}
                 </Button>
@@ -229,16 +245,12 @@ export default function TambahPohonPage() {
                 {gpsMsg && <span className="text-xs text-emerald-700">{gpsMsg}</span>}
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="koordinat">7. KOORDINAT (auto)</Label>
-                  <Input id="koordinat" value={form.koordinat} onChange={(e) => onChange("koordinat", e.target.value)} placeholder="-2.983, 104.752" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1">
-                    <MapPin className="h-3 w-3" /> Preview Peta
-                  </Label>
-                  {koordinatToMap ? (
+              {form.koordinat && parseKoordinat(form.koordinat) && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-1">
+                      <MapPin className="h-3 w-3" /> Preview Peta
+                    </Label>
                     <div className="overflow-hidden rounded-xl border border-slate-200">
                       <iframe
                         title="map"
@@ -246,23 +258,24 @@ export default function TambahPohonPage() {
                         height="180"
                         style={{ border: 0 }}
                         loading="lazy"
-                        src={`https://maps.google.com/maps?q=${encodeURIComponent(koordinatToMap)}&z=16&output=embed`}
+                        src={`https://maps.google.com/maps?q=${encodeURIComponent(form.koordinat)}&z=16&output=embed`}
                       />
-                      <a href={`https://maps.google.com/?q=${encodeURIComponent(koordinatToMap)}`} target="_blank" className="block bg-slate-50 px-3 py-1.5 text-xs text-emerald-700 hover:underline text-center">
+                      <a href={`https://maps.google.com/?q=${encodeURIComponent(form.koordinat)}`} target="_blank" className="block bg-slate-50 px-3 py-1.5 text-xs text-emerald-700 hover:underline text-center">
                         Buka di Google Maps →
                       </a>
                     </div>
-                  ) : (
-                    <div className="flex h-[180px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-xs text-slate-400">Isi lat/lng atau Ambil GPS untuk preview</div>
-                  )}
+                  </div>
                 </div>
-              </div>
-              <p className="text-xs text-emerald-800/70">Wajib: foto + lat/lng. Akurasi ≤30m hijau, 30-50m kuning, &gt;50m merah — coba di area terbuka.</p>
+              )}
+              <p className="text-xs text-slate-500">Format: lat, lng (contoh: -2.983, 104.752). Foto + titik lokasi wajib diisi.</p>
+            </div>
             </div>
 
+            <div>
+              <div className="text-xs font-semibold tracking-widest text-slate-500 mb-3">HASIL & PERAWATAN</div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="hasilPanen">8. HASIL PANEN (KG)</Label>
+                <Label htmlFor="hasilPanen">Hasil Panen (KG)</Label>
                 <Input id="hasilPanen" type="number" step="0.1" min="0" value={form.hasilPanen} onChange={(e) => onChange("hasilPanen", e.target.value)} placeholder="125.5" />
               </div>
               <div className="space-y-2">
@@ -277,27 +290,26 @@ export default function TambahPohonPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="pemupukan">10. PEMUPUKAN</Label>
+              <Label htmlFor="pemupukan">Pemupukan</Label>
               <Textarea id="pemupukan" value={form.pemupukan} onChange={(e) => onChange("pemupukan", e.target.value)} placeholder="NPK 2kg - 2026-01-15" rows={2} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="pengobatan">11. PENGOBATAN</Label>
+              <Label htmlFor="pengobatan">Pengobatan</Label>
               <Textarea id="pengobatan" value={form.pengobatan} onChange={(e) => onChange("pengobatan", e.target.value)} placeholder="Fungisida 2ml/L - Sehat" rows={2} />
             </div>
 
-            <div className="rounded-lg bg-slate-50 border border-slate-100 p-3 text-xs text-slate-500">
-              <div>1. NO = auto • 4. RIWAYAT = via Data Lapangan • 9. USIA = auto • Foto Geotag wajib overwrite terbaru</div>
-            </div>
-
-            <Button type="submit" disabled={loading} className="w-full bg-green-700 hover:bg-green-800 h-12 text-base">
-              {loading ? "Mengupload & Menyimpan..." : "Simpan Data Pohon + Geotag"}
+            <div className="sticky bottom-0 -mx-1 px-1 pb-1 pt-2 bg-white">
+            <Button type="submit" disabled={loading} className="w-full bg-green-700 hover:bg-green-800 h-12 text-base rounded-full">
+              {loading ? "Menyimpan..." : "Simpan"}
             </Button>
+            </div>
             {msg && (
               <div className="rounded-lg bg-green-50 border border-green-300 p-3 text-sm text-green-800 flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4" /> {msg}
               </div>
             )}
             {err && <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{err}</div>}
+            </div>
           </form>
         </CardContent>
       </Card>

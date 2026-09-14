@@ -71,6 +71,18 @@ enum GeotagSource {
   MANUAL
 }
 
+enum JenisPerawatan {
+  PUPUK
+  OBAT
+  LAIN
+}
+
+enum StatusJadwal {
+  RENCANA
+  SELESAI
+  BATAL
+}
+
 // ===================== MODELS =====================
 
 model User {
@@ -88,6 +100,7 @@ model User {
   tagihan          Tagihan[]          @relation("AdminTagihan")
   geotagPohon     Pohon[]            @relation("GeotagAdmin")
   panen           Panen[]            @relation("PetugasPanen")
+  jadwalDibuat    JadwalPerawatan[]  @relation("JadwalCreatedBy")
 
   @@map("users")
 }
@@ -119,6 +132,7 @@ model Pohon {
 
   riwayat RiwayatKesehatan[]
   panen   Panen[]
+  jadwal  JadwalPerawatan[]
 
   @@index([lokasiBlok])
   @@index([status])
@@ -322,4 +336,33 @@ model Panen {
   @@index([tanggalPanen])
   @@index([petugasId])
   @@map("panen")
+}
+
+model Blok {
+  id        String   @id @default(cuid())
+  kode      String   @unique // A, B, C, D
+  nama      String   @unique // Blok A
+  luasHa    Float?   @db.DoublePrecision
+  createdAt DateTime @default(now())
+
+  @@map("blok")
+}
+
+model JadwalPerawatan {
+  id             String         @id @default(cuid())
+  blok           String
+  pohonId        String?
+  pohon          Pohon?         @relation(fields: [pohonId], references: [id], onDelete: Cascade)
+  jenis          JenisPerawatan
+  tanggalRencana DateTime
+  status         StatusJadwal   @default(RENCANA)
+  catatan        String?        @db.Text
+  createdById    String?
+  createdBy      User?          @relation("JadwalCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime       @default(now())
+
+  @@index([blok])
+  @@index([tanggalRencana])
+  @@index([status])
+  @@map("jadwal_perawatan")
 }
