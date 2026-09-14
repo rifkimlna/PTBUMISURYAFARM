@@ -107,12 +107,12 @@ function PohonCard({ p, onQr }: { p: Pohon; onQr: (id: string) => void }) {
               <Eye className="h-4 w-4" />
             </Button>
           </Link>
-          <Link href={`/admin/pertanian/pohon/${p.id}/edit`} className="block">
+          <Link href={`/perkebunan/pohon/${p.id}/edit`} className="block">
             <Button variant="outline" size="sm" className="w-full rounded-full h-11 cursor-pointer border-slate-200" type="button">
               <Pencil className="h-4 w-4" />
             </Button>
           </Link>
-          <Link href={`/admin/pertanian/pohon/${p.id}/lapangan`} className="block">
+          <Link href={`/perkebunan/pohon/${p.id}/lapangan`} className="block">
             <Button variant="outline" size="sm" className="w-full rounded-full h-11 bg-emerald-600 text-white hover:bg-emerald-700 border-emerald-600 cursor-pointer" type="button">
               <ClipboardList className="h-4 w-4" />
             </Button>
@@ -211,10 +211,10 @@ export function PohonTable({ data }: { data: Pohon[] }) {
                           <Link href={`/pohon/${p.id}`} target="_blank">
                             <Button variant="ghost" size="sm" className="h-8 w-8 rounded-full cursor-pointer touch-manipulation" type="button"><Eye className="h-3.5 w-3.5" /></Button>
                           </Link>
-                          <Link href={`/admin/pertanian/pohon/${p.id}/edit`} title="Edit Master">
+                          <Link href={`/perkebunan/pohon/${p.id}/edit`} title="Edit Master">
                             <Button variant="ghost" size="sm" className="h-8 w-8 rounded-full cursor-pointer touch-manipulation" type="button"><Pencil className="h-3.5 w-3.5" /></Button>
                           </Link>
-                          <Link href={`/admin/pertanian/pohon/${p.id}/lapangan`} title="Data Lapangan">
+                          <Link href={`/perkebunan/pohon/${p.id}/lapangan`} title="Data Lapangan">
                             <Button variant="ghost" size="sm" className="h-8 w-8 rounded-full bg-emerald-50 hover:bg-emerald-100 cursor-pointer touch-manipulation" type="button"><ClipboardList className="h-3.5 w-3.5 text-emerald-700" /></Button>
                           </Link>
                         </div>
