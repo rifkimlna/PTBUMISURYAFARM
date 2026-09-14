@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const StatusKaryawanEnum = z.enum(["TETAP", "KONTRAK", "HARIAN"]);
+export const StatusKaryawanEnum = z.enum(["TETAP", "TIDAK_TETAP", "PENDUKUNG"]);
 export const StatusGajiEnum = z.enum(["SUDAH_DIBAYAR", "PENDING"]);
 export const JenisKelaminEnum = z.enum(["LAKI_LAKI", "PEREMPUAN"]);
 
@@ -25,7 +25,6 @@ export const createKaryawanSchema = z.object({
   alamat: emptyToUndefined(z.string().trim().max(500, "Alamat maksimal 500 karakter")),
   tanggalLahir: emptyToUndefined(z.coerce.date({ message: "Tanggal lahir tidak valid" })),
   jenisKelamin: emptyToUndefined(JenisKelaminEnum),
-  divisi: emptyToUndefined(z.string().trim().max(100)),
   lokasiKerja: emptyToUndefined(z.string().trim().max(100)),
 });
 
@@ -40,7 +39,6 @@ export const updateKaryawanSchema = z.object({
   alamat: emptyToUndefined(z.string().trim().max(500)),
   tanggalLahir: emptyToUndefined(z.coerce.date()),
   jenisKelamin: emptyToUndefined(JenisKelaminEnum),
-  divisi: emptyToUndefined(z.string().trim().max(100)),
   lokasiKerja: emptyToUndefined(z.string().trim().max(100)),
 }).refine((data) => Object.keys(data).length > 0, {
   message: "Minimal satu field harus diisi",

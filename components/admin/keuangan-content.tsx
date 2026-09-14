@@ -4,33 +4,72 @@ import { useCallback, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { CalendarRange, RotateCcw } from "lucide-react";
+import { CalendarRange, RotateCcw, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { TransaksiTable } from "@/components/admin/transaksi-table";
 import type { TransaksiRow } from "@/components/admin/transaksi-table";
 import { ArusKasChart } from "@/components/admin/arus-kas-chart";
+import { labelSumberDana, SUMBER_DANA_KEYS } from "@/lib/coa";
 import { formatRupiah } from "@/lib/utils";
 
-type Summary = { pemasukan: number; pengeluaran: number; saldo: number };
+type PerSumber = { KAS: number; BANK: number; TABUNGAN: number };
+
+type Summary = {
+  pemasukan: number;
+  pengeluaran: number;
+  saldo: number;
+  pemasukanCount?: number;
+  perSumber?: PerSumber;
+};
+
+type SummaryCardTone = "neutral" | "positive" | "negative";
+type SummaryCardIcon = "up" | "down" | "wallet";
+
+const summaryIcons = {
+  up: TrendingUp,
+  down: TrendingDown,
+  wallet: Wallet,
+} as const;
 
 function SummaryCard({
   label,
   value,
   note,
-  tone,
+  tone = "neutral",
+  icon,
 }: {
   label: string;
   value: number;
   note: string;
-  tone?: string;
+  tone?: SummaryCardTone;
+  icon?: SummaryCardIcon;
 }) {
+  const Icon = icon ? summaryIcons[icon] : undefined;
+  const isNeutral = tone === "neutral";
+
   return (
-    <Card className="border-slate-100">
+    <Card
+      className={`rounded-2xl border ${isNeutral ? "border-slate-100" : "border-green-200"} ${
+        isNeutral ? "bg-white" : "bg-green-50/50"
+      } shadow-[0_1px_3px_rgba(16,24,40,0.04),0_8px_24px_rgba(16,24,40,0.04)]`}
+    >
       <CardContent className="p-5">
-        <div className="text-xs tracking-wide text-slate-400">{label}</div>
-        <div className={`mt-2 text-2xl font-semibold tracking-tight ${tone || "text-slate-900"}`}>
+        <div className="flex items-center gap-2 text-xs font-medium tracking-wide text-slate-500">
+          {Icon && (
+            <Icon
+              aria-hidden="true"
+              className={`h-4 w-4 ${isNeutral ? "text-slate-400" : tone === "negative" ? "text-red-500" : "text-green-600"}`}
+            />
+          )}
+          <span>{label}</span>
+        </div>
+        <div
+          className={`mt-3 text-2xl sm:text-3xl font-semibold tracking-tight ${
+            tone === "positive" ? "text-green-700" : tone === "negative" ? "text-red-600" : "text-slate-900"
+          }`}
+        >
           Rp {formatRupiah(value)}
         </div>
-        <div className="mt-1 text-xs text-slate-400">{note}</div>
+        <div className="mt-1.5 text-xs text-slate-400">{note}</div>
       </CardContent>
     </Card>
   );
@@ -58,11 +97,13 @@ export function KeuanganContent({
   const isFiltered = Boolean(appliedStart || appliedEnd);
 
   const handleSummaryChange = useCallback((next: Summary) => {
-    setSummary({
+    setSummary((prev) => ({
       pemasukan: Number(next.pemasukan) || 0,
       pengeluaran: Number(next.pengeluaran) || 0,
       saldo: Number(next.saldo) || 0,
-    });
+      pemasukanCount: next.pemasukanCount ?? prev.pemasukanCount,
+      perSumber: next.perSumber ?? prev.perSumber,
+    }));
   }, []);
 
   const handleDataChange = useCallback(() => setRefreshKey((key) => key + 1), []);
@@ -134,15 +175,60 @@ export function KeuanganContent({
       </Card>
 
       <div className="grid gap-3 md:grid-cols-3">
-        <SummaryCard label="Pemasukan" value={summary.pemasukan} note="PEMASUKAN" />
-        <SummaryCard label="Pengeluaran" value={summary.pengeluaran} note="PENGELUARAN" tone="text-slate-500" />
+        <SummaryCard
+          label="Pemasukan"
+          value={summary.pemasukan}
+          note={`${summary.pemasukanCount ?? 0} transaksi tercatat`}
+          tone="positive"
+          icon="up"
+        />
+        <SummaryCard
+          label="Pengeluaran"
+          value={summary.pengeluaran}
+          note="Total beban"
+          tone="negative"
+          icon="down"
+        />
         <SummaryCard
           label="Saldo"
           value={summary.saldo}
-          note="Pemasukan − Pengeluaran"
-          tone={summary.saldo < 0 ? "text-red-500" : "text-slate-900"}
+          note={summary.saldo >= 0 ? "Surplus" : "Defisit"}
+          tone={summary.saldo >= 0 ? "positive" : "negative"}
+          icon="wallet"
         />
       </div>
+
+      {/* Posisi dana per sumber — ikut filter tanggal */}
+      <Card className="border-slate-100">
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs font-medium tracking-wide text-slate-500">
+              <Wallet className="h-4 w-4 text-slate-400" aria-hidden="true" />
+              <span>Posisi Dana</span>
+            </div>
+            <span className="text-xs text-slate-400">{periodeNote}</span>
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {SUMBER_DANA_KEYS.map((sumber) => {
+              const nilai = summary.perSumber?.[sumber] ?? 0;
+              return (
+                <div
+                  key={sumber}
+                  className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2.5"
+                >
+                  <span className="text-xs text-slate-500">{labelSumberDana(sumber)}</span>
+                  <span
+                    className={`text-sm font-semibold tracking-tight ${nilai < 0 ? "text-red-600" : "text-slate-900"}`}
+                    title={nilai < 0 ? "Saldo negatif — cek mutasi sumber dana" : undefined}
+                  >
+                    Rp {formatRupiah(nilai)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
       <ArusKasChart refreshKey={refreshKey} />
 

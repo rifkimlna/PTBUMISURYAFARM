@@ -24,8 +24,8 @@ enum StatusKesehatan {
 
 enum StatusKaryawan {
   TETAP
-  KONTRAK
-  HARIAN
+  TIDAK_TETAP
+  PENDUKUNG
 }
 
 enum StatusGaji {
@@ -41,6 +41,17 @@ enum JenisKelamin {
 enum TipeTransaksi {
   PEMASUKAN
   PENGELUARAN
+}
+
+enum TipeTagihan {
+  HUTANG
+  PIUTANG
+}
+
+enum StatusTagihan {
+  BELUM_LUNAS
+  LUNAS_SEBAGIAN
+  LUNAS
 }
 
 enum SumberDana {
@@ -74,6 +85,7 @@ model User {
   // Relasi
   riwayatDitangani RiwayatKesehatan[] @relation("PetugasRiwayat")
   transaksiKas     TransaksiKas[]     @relation("AdminKas")
+  tagihan          Tagihan[]          @relation("AdminTagihan")
   geotagPohon     Pohon[]            @relation("GeotagAdmin")
   panen           Panen[]            @relation("PetugasPanen")
 
@@ -150,7 +162,6 @@ model Karyawan {
   alamat       String?        @db.Text
   tanggalLahir DateTime?
   jenisKelamin JenisKelamin?
-  divisi       String?
   lokasiKerja  String?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
@@ -158,7 +169,6 @@ model Karyawan {
   riwayatGaji RiwayatGaji[]
 
   @@index([statusKerja])
-  @@index([divisi])
   @@index([lokasiKerja])
   @@map("karyawan")
 }
@@ -211,6 +221,9 @@ model TransaksiKas {
 
   bukti BuktiTransaksi[]
 
+  tagihanId String?
+  tagihan   Tagihan? @relation(fields: [tagihanId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
 
   @@index([tipe])
@@ -218,7 +231,34 @@ model TransaksiKas {
   @@index([sumberDana])
   @@index([tanggal])
   @@index([adminId])
+  @@index([tagihanId])
   @@map("transaksi_kas")
+}
+
+model Tagihan {
+  id          String        @id @default(cuid())
+  tipe        TipeTagihan
+  pihak       String // ex: nama tengkulak / supplier
+  keterangan  String?       @db.Text
+  jumlah      Decimal       @db.Decimal(15, 2)
+  sisa        Decimal       @db.Decimal(15, 2)
+  tanggal     DateTime      @default(now())
+  jatuhTempo  DateTime?
+  status      StatusTagihan @default(BELUM_LUNAS)
+
+  adminId String
+  admin   User   @relation("AdminTagihan", fields: [adminId], references: [id], onDelete: Restrict)
+
+  pembayaran TransaksiKas[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tipe])
+  @@index([status])
+  @@index([jatuhTempo])
+  @@index([adminId])
+  @@map("tagihan")
 }
 
 model BuktiTransaksi {

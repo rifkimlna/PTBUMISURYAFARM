@@ -2,17 +2,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Wallet, Users, Package, Boxes, LogOut, Leaf } from "lucide-react";
+import { LayoutDashboard, Wallet, ArrowLeftRight, Users, Package, Boxes, LogOut, Leaf } from "lucide-react";
 
 const keuanganMenu = [
   { label: "Dashboard", href: "/keuangan", icon: LayoutDashboard },
   { label: "Keuangan Kas", href: "/keuangan/kas", icon: Wallet },
+  { label: "Hutang & Piutang", href: "/keuangan/tagihan", icon: ArrowLeftRight },
   { label: "Data Karyawan", href: "/keuangan/karyawan", icon: Users },
   { label: "Inventaris Aset", href: "/keuangan/aset", icon: Package },
   { label: "Persediaan Barang", href: "/keuangan/persediaan", icon: Boxes },
 ];
 
-function NavItem({ href, icon: Icon, label }: { href: string; icon: any; label: string }) {
+function NavItem({ href, icon: Icon, label }: { href: string; icon: React.ElementType; label: string }) {
   const pathname = usePathname();
   const active = pathname === href || pathname.startsWith(href + "/");
   return (

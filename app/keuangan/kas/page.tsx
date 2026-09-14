@@ -5,14 +5,22 @@ import { ExportButton } from "@/components/admin/print-button";
 import { KeuanganContent } from "@/components/admin/keuangan-content";
 
 export default async function KeuanganPage() {
-  const [transaksi, agg, totalTransaksi, cookieStore] = await Promise.all([
+  const [transaksi, agg, totalTransaksi, aggSumber, cookieStore] = await Promise.all([
     prisma.transaksiKas.findMany({
       orderBy: { tanggal: "desc" },
       take: 10,
       include: { admin: { select: { nama: true } }, _count: { select: { bukti: true } } },
     }),
-    prisma.transaksiKas.groupBy({ by: ["tipe"], _sum: { jumlah: true } }),
+    prisma.transaksiKas.groupBy({
+      by: ["tipe"],
+      _sum: { jumlah: true },
+      _count: { id: true },
+    }),
     prisma.transaksiKas.count(),
+    prisma.transaksiKas.groupBy({
+      by: ["sumberDana", "tipe"],
+      _sum: { jumlah: true },
+    }),
     cookies(),
   ]);
 
@@ -22,6 +30,10 @@ export default async function KeuanganPage() {
 
   const pemasukan = Number(agg.find((a) => a.tipe === "PEMASUKAN")?._sum.jumlah ?? 0);
   const pengeluaran = Number(agg.find((a) => a.tipe === "PENGELUARAN")?._sum.jumlah ?? 0);
+  const pemasukanCount = agg.find((a) => a.tipe === "PEMASUKAN")?._count?.id ?? 0;
+  const saldoSumber = (sumber: string) =>
+    Number(aggSumber.find((a) => a.sumberDana === sumber && a.tipe === "PEMASUKAN")?._sum.jumlah ?? 0) -
+    Number(aggSumber.find((a) => a.sumberDana === sumber && a.tipe === "PENGELUARAN")?._sum.jumlah ?? 0);
 
   return (
     <div className="space-y-8">
@@ -54,6 +66,12 @@ export default async function KeuanganPage() {
           pemasukan,
           pengeluaran,
           saldo: pemasukan - pengeluaran,
+          pemasukanCount,
+          perSumber: {
+            KAS: saldoSumber("KAS"),
+            BANK: saldoSumber("BANK"),
+            TABUNGAN: saldoSumber("TABUNGAN"),
+          },
         }}
       />
     </div>

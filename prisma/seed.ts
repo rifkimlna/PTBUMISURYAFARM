@@ -206,7 +206,6 @@ async function main() {
       alamat: "Perumahan Bumi Surya, Blok A",
       tanggalLahir: new Date("1985-06-15"),
       jenisKelamin: "LAKI_LAKI",
-      divisi: "Operasional Kebun",
       lokasiKerja: "Blok A",
     },
     create: {
@@ -221,7 +220,6 @@ async function main() {
       alamat: "Perumahan Bumi Surya, Blok A",
       tanggalLahir: new Date("1985-06-15"),
       jenisKelamin: "LAKI_LAKI",
-      divisi: "Operasional Kebun",
       lokasiKerja: "Blok A",
     },
   });
