@@ -33,7 +33,6 @@ export default async function DataKaryawanPage() {
           alamat: k.alamat ?? "",
           tanggalLahir: k.tanggalLahir?.toISOString() ?? "",
           jenisKelamin: k.jenisKelamin ?? "",
-          divisi: k.divisi ?? "",
           lokasiKerja: k.lokasiKerja ?? "",
           bulanGaji: k.riwayatGaji[0]?.bulanTahun ?? "",
           statusGaji: k.riwayatGaji[0]?.status ?? "PENDING",

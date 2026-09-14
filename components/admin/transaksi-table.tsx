@@ -83,7 +83,12 @@ function Field({ label, children, className }: { label: string; children: ReactN
   );
 }
 
-type Summary = { pemasukan: number; pengeluaran: number; saldo: number };
+type Summary = {
+  pemasukan: number;
+  pengeluaran: number;
+  saldo: number;
+  perSumber?: { KAS: number; BANK: number; TABUNGAN: number };
+};
 
 export function TransaksiTable({
   initialData,

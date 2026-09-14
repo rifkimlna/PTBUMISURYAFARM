@@ -9,6 +9,7 @@ export const COA_PEMASUKAN: AkunCOA[] = [
   { kode: "4102", nama: "Pendapatan Penjualan Ternak (Ayam)" },
   { kode: "4103", nama: "Pendapatan Penjualan Ikan" },
   { kode: "4104", nama: "Pendapatan Lain-lain" },
+  { kode: "4105", nama: "Penerimaan Piutang Usaha" },
 ];
 
 // Pengeluaran
@@ -27,6 +28,7 @@ export const COA_PENGELUARAN: AkunCOA[] = [
   { kode: "5404", nama: "Beban Listrik" },
   { kode: "5405", nama: "Beban Air/PDAM" },
   { kode: "5406", nama: "Beban Internet/Telepon/WIFI" },
+  { kode: "5501", nama: "Pelunasan Hutang Usaha" },
 ];
 
 // Sumber Dana
