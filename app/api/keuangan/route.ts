@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const [data, total, summary] = await Promise.all([
+    const [data, total, summary, perSumberAgg] = await Promise.all([
       prisma.transaksiKas.findMany({
         where,
         skip,
@@ -56,10 +56,21 @@ export async function GET(req: NextRequest) {
       }),
       prisma.transaksiKas.count({ where }),
       prisma.transaksiKas.groupBy({ by: ["tipe"], where, _sum: { jumlah: true } }),
+      // Posisi dana per sumber: hanya ikut filter tanggal (abaikan filter tipe/kategori/sumber
+      // tabel) agar ketiga sumber selalu tampil utuh dalam periode yang sama.
+      prisma.transaksiKas.groupBy({
+        by: ["sumberDana", "tipe"],
+        where: where.tanggal ? { tanggal: where.tanggal } : {},
+        _sum: { jumlah: true },
+      }),
     ]);
 
     const totalMasuk = summary.find((s) => s.tipe === "PEMASUKAN")?._sum.jumlah ?? 0;
     const totalKeluar = summary.find((s) => s.tipe === "PENGELUARAN")?._sum.jumlah ?? 0;
+
+    const saldoSumber = (sumber: string) =>
+      Number(perSumberAgg.find((s) => s.sumberDana === sumber && s.tipe === "PEMASUKAN")?._sum.jumlah ?? 0) -
+      Number(perSumberAgg.find((s) => s.sumberDana === sumber && s.tipe === "PENGELUARAN")?._sum.jumlah ?? 0);
 
     return successResponse({
       data,
@@ -68,6 +79,11 @@ export async function GET(req: NextRequest) {
         pemasukan: totalMasuk,
         pengeluaran: totalKeluar,
         saldo: Number(totalMasuk) - Number(totalKeluar),
+        perSumber: {
+          KAS: saldoSumber("KAS"),
+          BANK: saldoSumber("BANK"),
+          TABUNGAN: saldoSumber("TABUNGAN"),
+        },
       },
     });
   } catch (e) {

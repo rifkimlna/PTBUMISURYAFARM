@@ -72,7 +72,6 @@ export async function POST(req: NextRequest) {
         alamat: parsed.alamat,
         tanggalLahir: parsed.tanggalLahir,
         jenisKelamin: parsed.jenisKelamin,
-        divisi: parsed.divisi,
         lokasiKerja: parsed.lokasiKerja,
       },
     });
