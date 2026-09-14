@@ -59,7 +59,7 @@ export default function AdminHubLayout({ children }: { children: React.ReactNode
 
   return (
     <div className="min-h-screen bg-[#FCFCFD]">
-      <header className="sticky top-0 z-30 flex h-[56px] items-center justify-between border-b border-slate-100 bg-white/90 backdrop-blur-md px-4 sm:px-6 lg:px-8">
+      <header className="sticky top-0 z-30 flex h-[56px] items-center justify-between border-b border-slate-100 bg-white px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" className="lg:hidden rounded-full" onClick={() => setOpen(true)}>
             <Menu className="h-4 w-4" />

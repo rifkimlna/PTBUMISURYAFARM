@@ -26,7 +26,7 @@ export default async function LandingPage() {
         </div>
         <div className="relative mx-auto flex w-full max-w-[1280px] 2xl:max-w-[1440px] items-center justify-center px-4 sm:px-6 lg:px-8 py-10 sm:py-12">
           <div className="mx-auto max-w-4xl text-center w-full">
-            <div className="inline-flex flex-wrap justify-center items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 sm:px-4 py-1.5 text-[11px] sm:text-xs backdrop-blur">
+            <div className="inline-flex flex-wrap justify-center items-center gap-2 rounded-full bg-green-700 px-3 sm:px-4 py-1.5 text-[11px] sm:text-xs">
               <span className="h-2 w-2 rounded-full bg-green-600 animate-pulse shrink-0" />
               <span className="tracking-wide text-white font-medium">Traceability • Live</span>
               <span className="hidden sm:inline h-3 w-px bg-white/20" />
@@ -136,7 +136,7 @@ export default async function LandingPage() {
               </Button>
             </a>
             <Link href="/login" className="flex-1 sm:flex-none">
-              <Button size="sm" variant="ghost" className="rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white backdrop-blur w-full sm:w-auto cursor-pointer">
+              <Button size="sm" variant="ghost" className="rounded-full bg-white text-green-800 hover:bg-green-50 hover:text-green-800 w-full sm:w-auto cursor-pointer">
                 Login →
               </Button>
             </Link>

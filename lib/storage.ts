@@ -4,7 +4,8 @@
  * Alur: Foto dari HP petugas -> upload ke Cloud Storage (UploadThing / Supabase / S3) -> dapat URL publik -> simpan fotoUrl ke DB
  *
  * File ini menyediakan abstraction agar mudah ganti provider tanpa ubah logic API.
- * Default: validasi file + simulasi upload (jika belum set env) atau integrasi Supabase/UploadThing.
+ * Default: validasi file + simpan ke local disk public/uploads (tanpa butuh env),
+ * atau integrasi Supabase/UploadThing jika env tersedia.
  */
 
 import { promises as fs } from "fs";
@@ -75,18 +76,18 @@ async function uploadToUploadThing(file: File): Promise<UploadResult> {
   throw new Error("UploadThing belum dikonfigurasi - install uploadthing dan set UPLOADTHING_TOKEN");
 }
 
-// ========== Fallback: Simulasi / Local (Dev) ==========
-// Jika tidak ada provider cloud, return URL placeholder dan log warning
-async function uploadSimulated(file: File, folder: string): Promise<UploadResult> {
-  console.warn("[Storage] Tidak ada provider cloud dikonfigurasi - menggunakan simulated URL.");
-  console.warn("Set SUPABASE_URL + SUPABASE_ANON_KEY atau UPLOADTHING_TOKEN di .env untuk upload real.");
-  const ext = file.name.split(".").pop() || "jpg";
-  const fakeUrl = `https://storage.pt-bst.example/${folder}/${Date.now()}-${file.name.replace(/\s+/g, "-")}`;
-  // Di production, throw error agar petugas tidak save fotoUrl palsu
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("Storage belum dikonfigurasi untuk production");
-  }
-  return { url: fakeUrl, key: fakeUrl, provider: "simulated" };
+// ========== Fallback: Local disk (public/uploads) ==========
+// Menyimpan file ke public/uploads/<folder>/ agar langsung bisa diakses aplikasi.
+// Tidak bergantung layanan cloud eksternal.
+async function uploadToLocal(file: File, folder: string): Promise<UploadResult> {
+  const rawExt = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+  const ext = rawExt === "jpeg" ? "jpg" : rawExt;
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const dir = path.join(process.cwd(), "public", "uploads", folder);
+  await fs.mkdir(dir, { recursive: true });
+  const name = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  await fs.writeFile(path.join(dir, name), buffer);
+  return { url: `/uploads/${folder}/${name}`, key: `${folder}/${name}`, provider: "local" };
 }
 
 // ========== Main API ==========
@@ -102,15 +103,13 @@ export async function uploadFotoLapangan(file: File, opts: UploadOptions = {}): 
   validateFile(file, opts);
   const folder = opts.folder || "riwayat-kesehatan";
 
-  // Prioritas: Supabase -> UploadThing -> Simulated
+  // Prioritas: Supabase -> UploadThing -> Local disk
   if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
     try {
       return await uploadToSupabase(file, folder);
     } catch (e) {
-      console.error("[Storage] Supabase upload gagal, fallback:", e);
-      // fallback ke simulated jika di dev
-      if (process.env.NODE_ENV !== "production") return uploadSimulated(file, folder);
-      throw e;
+      console.error("[Storage] Supabase upload gagal, fallback ke local disk:", e);
+      return uploadToLocal(file, folder);
     }
   }
 
@@ -118,13 +117,23 @@ export async function uploadFotoLapangan(file: File, opts: UploadOptions = {}): 
     return uploadToUploadThing(file);
   }
 
-  return uploadSimulated(file, folder);
+  return uploadToLocal(file, folder);
 }
 
 /**
  * Hapus file dari storage (optional)
  */
 export async function deleteFotoLapangan(keyOrUrl: string): Promise<void> {
+  // File lokal public/uploads/... -> hapus dari disk
+  if (keyOrUrl.startsWith("/uploads/")) {
+    const rel = keyOrUrl.replace(/^\/uploads\//, "");
+    if (!rel.includes("..")) {
+      try {
+        await fs.unlink(path.join(process.cwd(), "public", "uploads", rel));
+      } catch {}
+    }
+    return;
+  }
   if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
     // @ts-ignore - optional dependency
     const { createClient } = await import("@supabase/supabase-js");

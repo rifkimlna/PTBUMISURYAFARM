@@ -13,24 +13,28 @@ export default async function EditPohonMasterPage({ params }: { params: Promise<
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-slate-900">Koreksi Data Pohon — {pohon.id}</h1>
-        <p className="text-sm text-slate-500">
-          Admin full — identitas + snapshot lapangan + riwayat • Scan langsung kesini untuk koreksi kesalahan
+        <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-slate-900">Edit Pohon — {pohon.id}</h1>
+        <p className="text-xs sm:text-sm text-slate-500">
+          Ubah data pohon
         </p>
       </div>
       <EditMasterForm
         pohon={{
           id: pohon.id,
-          namaPohon: (pohon as any).namaPohon || "",
+          namaPohon: pohon.namaPohon || "",
           varietas: pohon.varietas,
-          jenis: (pohon as any).jenis || "",
+          jenis: pohon.jenis || "",
           lokasiBlok: pohon.lokasiBlok,
           tanggalTanam: pohon.tanggalTanam.toISOString().slice(0, 10),
-          koordinat: (pohon as any).koordinat || "",
-          status: pohon.status as string,
-          hasilPanen: (pohon as any).hasilPanen?.toString?.() ?? "",
-          pemupukan: (pohon as any).pemupukan || "",
-          pengobatan: (pohon as any).pengobatan || "",
+          koordinat: pohon.koordinat || "",
+          status: pohon.status,
+          hasilPanen: pohon.hasilPanen?.toString?.() ?? "",
+          pemupukan: pohon.pemupukan || "",
+          pengobatan: pohon.pengobatan || "",
+          fotoGeotagUrl: pohon.fotoGeotagUrl || null,
+          latitude: pohon.latitude ?? null,
+          longitude: pohon.longitude ?? null,
+          geotagSource: pohon.geotagSource || null,
         }}
         riwayat={pohon.riwayat.map((r) => ({
           id: r.id,

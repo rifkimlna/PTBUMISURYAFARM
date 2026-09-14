@@ -73,7 +73,7 @@ export default function KeuanganLayout({ children }: { children: React.ReactNode
 
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setOpen(false)} aria-hidden="true" />
+          <div className="fixed inset-0 bg-black/50" onClick={() => setOpen(false)} aria-hidden="true" />
           <aside className="fixed left-0 top-0 h-[100dvh] w-[85vw] max-w-[300px] bg-white shadow-2xl flex flex-col">
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0">
               <span className="text-sm font-semibold tracking-tight">Menu Keuangan</span>
@@ -89,7 +89,7 @@ export default function KeuanganLayout({ children }: { children: React.ReactNode
       )}
 
       <div className="lg:pl-[256px] min-w-0">
-        <header className="sticky top-0 z-20 flex h-[56px] items-center justify-between border-b border-slate-100 bg-white/90 backdrop-blur-md px-4 sm:px-6 lg:px-8 gap-2">
+        <header className="sticky top-0 z-20 flex h-[56px] items-center justify-between border-b border-slate-100 bg-white px-4 sm:px-6 lg:px-8 gap-2">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <Button variant="ghost" size="icon" className="lg:hidden rounded-full shrink-0 cursor-pointer" onClick={() => setOpen(true)} aria-label="Buka menu">
               <Menu className="h-4 w-4" />

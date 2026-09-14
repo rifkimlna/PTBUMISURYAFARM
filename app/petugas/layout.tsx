@@ -53,7 +53,7 @@ export default function PetugasLayout({ children }: { children: React.ReactNode 
 
   return (
     <div className="min-h-screen bg-[#FCFCFD] flex flex-col">
-      <header className="sticky top-0 z-30 flex h-[56px] items-center justify-between border-b border-slate-100 bg-white/90 backdrop-blur px-4 sm:px-6 gap-2">
+      <header className="sticky top-0 z-30 flex h-[56px] items-center justify-between border-b border-slate-100 bg-white px-4 sm:px-6 gap-2">
         <Link href="/petugas/scan" className="flex items-center gap-2 shrink-0">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-700 text-white">
             <Sprout className="h-4 w-4" />

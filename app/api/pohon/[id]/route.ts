@@ -39,6 +39,14 @@ export async function PUT(req: NextRequest, { params }: Params) {
     for (const k of ["namaPohon", "jenis", "koordinat", "pemupukan", "pengobatan"] as const) {
       if ((data as any)[k] === "") (data as any)[k] = null;
     }
+    // Parse koordinat text into numeric lat/lng
+    if (data.koordinat && typeof data.koordinat === "string") {
+      const parts = data.koordinat.split(",").map((s: string) => parseFloat(s.trim()));
+      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        data.latitude = parts[0];
+        data.longitude = parts[1];
+      }
+    }
     if (data.hasilPanen === "" || data.hasilPanen === undefined) {
       if (data.hasilPanen === "") data.hasilPanen = null;
     }
@@ -54,14 +62,23 @@ export async function PUT(req: NextRequest, { params }: Params) {
   }
 }
 
-// DELETE /api/pohon/[id] - SUPER_ADMIN only (pertanian hanya edit)
+// DELETE /api/pohon/[id] - SUPER_ADMIN & ADMIN_PERTANIAN
 export async function DELETE(req: NextRequest, { params }: Params) {
-  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN"]);
+  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_PERTANIAN"]);
   if (auth instanceof Response) return auth;
 
   const { id } = await params;
   const exists = await prisma.pohon.findUnique({ where: { id } });
   if (!exists) return errorResponse("Pohon tidak ditemukan", 404);
+
+  // hapus file foto lokal/cloud bila ada (best-effort)
+  try {
+    const url = exists.fotoGeotagUrl as string | null;
+    if (url) {
+      const { deleteFotoLapangan } = await import("@/lib/storage");
+      await deleteFotoLapangan(url);
+    }
+  } catch {}
 
   await prisma.pohon.delete({ where: { id } });
   return successResponse(null, "Pohon berhasil dihapus");

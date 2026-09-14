@@ -18,14 +18,14 @@ export const createPohonSchema = z.object({
   jenis: z.string().min(2, "Jenis minimal 2 karakter").max(50).optional().nullable().or(z.literal("")),
   lokasiBlok: z.string().min(2, "Lokasi blok wajib diisi").max(50),
   tanggalTanam: z.coerce.date({ message: "Tanggal tanam tidak valid" }),
-  koordinat: z
-    .string()
-    .max(50, "Koordinat maksimal 50 karakter")
-    .regex(/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/, "Format koordinat: -2.983, 104.752")
-    .optional()
-    .nullable()
-    .or(z.literal("")),
-  hasilPanen: z.coerce.number().min(0, "Hasil panen minimal 0").max(999999).optional().nullable(),
+   koordinat: z
+     .string()
+     .max(50, "Koordinat maksimal 50 karakter")
+     .regex(/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/, "Format koordinat: -2.983, 104.752")
+     .optional()
+     .nullable()
+     .or(z.literal("")),
+   hasilPanen: z.coerce.number().min(0, "Hasil panen minimal 0").max(999999).optional().nullable(),
   pemupukan: z.string().max(2000, "Pemupukan maksimal 2000 karakter").optional().nullable().or(z.literal("")),
   pengobatan: z.string().max(2000, "Pengobatan maksimal 2000 karakter").optional().nullable().or(z.literal("")),
   status: StatusKesehatanEnum.default("SEHAT").optional(),

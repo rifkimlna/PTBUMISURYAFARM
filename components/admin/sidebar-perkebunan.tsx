@@ -2,11 +2,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Trees, QrCode, ClipboardList, ScanLine, LogOut, Leaf } from "lucide-react";
+import { LayoutDashboard, Trees, Wheat, Map, CalendarClock, FileText, QrCode, ClipboardList, ScanLine, LogOut, Leaf } from "lucide-react";
 
 const perkebunanMenu = [
   { label: "Dashboard", href: "/perkebunan", icon: LayoutDashboard },
   { label: "Data Pohon", href: "/perkebunan/pohon", icon: Trees },
+  { label: "Panen", href: "/perkebunan/panen", icon: Wheat },
+  { label: "Blok", href: "/perkebunan/blok", icon: Map },
+  { label: "Jadwal", href: "/perkebunan/jadwal", icon: CalendarClock },
+  { label: "Laporan", href: "/perkebunan/laporan", icon: FileText },
   { label: "Cetak QR", href: "/perkebunan/qr", icon: QrCode },
   { label: "Log Riwayat", href: "/perkebunan/riwayat", icon: ClipboardList },
   { label: "Scan Koreksi", href: "/perkebunan/scan", icon: ScanLine },
@@ -14,16 +18,16 @@ const perkebunanMenu = [
 
 function NavItem({ href, icon: Icon, label }: { href: string; icon: any; label: string }) {
   const pathname = usePathname();
-  const active = pathname === href || pathname.startsWith(href + "/");
+  const active = href === "/perkebunan" || href === "/keuangan" ? pathname === href : pathname === href || pathname.startsWith(href + "/");
   return (
     <Link
       href={href}
       className={cn(
         "flex items-center gap-2.5 rounded-full px-3.5 py-2.5 text-[13px] font-medium transition-colors cursor-pointer touch-manipulation",
-        active ? "bg-[#f0fdf4] text-green-800 ring-1 ring-green-200" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900 active:bg-slate-100"
+        active ? "bg-green-700 text-white" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900 active:bg-slate-100"
       )}
     >
-      <Icon className={cn("h-3.5 w-3.5 shrink-0", active ? "text-green-800" : "text-slate-400")} />
+      <Icon className={cn("h-3.5 w-3.5 shrink-0", active ? "text-white" : "text-slate-400")} />
       {label}
     </Link>
   );
