@@ -13,9 +13,21 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, FileSpreadsheet, Pencil, Trash2, Search } from "lucide-react";
 
-type StatusKerja = "TETAP" | "KONTRAK" | "HARIAN";
+type StatusKerja = "TETAP" | "TIDAK_TETAP" | "PENDUKUNG";
 type StatusGaji = "SUDAH_DIBAYAR" | "PENDING";
 type JenisKelamin = "LAKI_LAKI" | "PEREMPUAN";
+
+const STATUS_KERJA_LABEL: Record<StatusKerja, string> = {
+  TETAP: "Tetap",
+  TIDAK_TETAP: "Tidak Tetap",
+  PENDUKUNG: "Pendukung",
+};
+
+const STATUS_KERJA_VARIANT: Record<StatusKerja, "sehat" | "perhatian" | "secondary"> = {
+  TETAP: "sehat",
+  TIDAK_TETAP: "perhatian",
+  PENDUKUNG: "secondary",
+};
 
 export type Row = {
   id: string;
@@ -29,7 +41,6 @@ export type Row = {
   alamat: string;
   tanggalLahir: string;
   jenisKelamin: JenisKelamin | "";
-  divisi: string;
   lokasiKerja: string;
   bulanGaji: string;
   statusGaji: StatusGaji;
@@ -47,7 +58,6 @@ type FormValues = {
   alamat: string;
   tanggalLahir: string;
   jenisKelamin: JenisKelamin | "";
-  divisi: string;
   lokasiKerja: string;
 };
 
@@ -63,7 +73,6 @@ const emptyForm: FormValues = {
   alamat: "",
   tanggalLahir: "",
   jenisKelamin: "",
-  divisi: "",
   lokasiKerja: "",
 };
 
@@ -110,7 +119,7 @@ export function KaryawanTable({ data }: { data: Row[] }) {
     const term = search.trim().toLowerCase();
     if (!term) return data;
     return data.filter((row) =>
-      [row.id, row.namaLengkap, row.jabatan, row.divisi, row.lokasiKerja, row.telepon, row.email]
+      [row.id, row.namaLengkap, row.jabatan, STATUS_KERJA_LABEL[row.statusKerja], row.lokasiKerja, row.telepon, row.email]
         .filter(Boolean)
         .some((value) => value.toLowerCase().includes(term))
     );
@@ -141,7 +150,6 @@ export function KaryawanTable({ data }: { data: Row[] }) {
       alamat: row.alamat,
       tanggalLahir: formatDateInput(row.tanggalLahir),
       jenisKelamin: row.jenisKelamin,
-      divisi: row.divisi,
       lokasiKerja: row.lokasiKerja,
     });
     setMessage("");
@@ -165,7 +173,6 @@ export function KaryawanTable({ data }: { data: Row[] }) {
       alamat: form.alamat.trim() || undefined,
       tanggalLahir: form.tanggalLahir || undefined,
       jenisKelamin: form.jenisKelamin || undefined,
-      divisi: form.divisi.trim() || undefined,
       lokasiKerja: form.lokasiKerja.trim() || undefined,
     };
 
@@ -207,7 +214,7 @@ export function KaryawanTable({ data }: { data: Row[] }) {
       "ID",
       "Nama Lengkap",
       "Jabatan",
-      "Divisi",
+      "Status Pekerja",
       "Lokasi Kerja",
       "Telepon",
       "Email",
@@ -222,7 +229,7 @@ export function KaryawanTable({ data }: { data: Row[] }) {
       row.id,
       row.namaLengkap,
       row.jabatan,
-      row.divisi,
+      STATUS_KERJA_LABEL[row.statusKerja],
       row.lokasiKerja,
       row.telepon,
       row.email,
@@ -254,7 +261,7 @@ export function KaryawanTable({ data }: { data: Row[] }) {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center w-full sm:w-auto">
             <div className="relative flex-1 sm:flex-none sm:w-[220px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <Input className="pl-9 w-full" placeholder="Cari nama, ID, divisi..." value={search} onChange={(event) => setSearch(event.target.value)} />
+              <Input className="pl-9 w-full" placeholder="Cari nama, ID, jabatan..." value={search} onChange={(event) => setSearch(event.target.value)} />
             </div>
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={exportCsv} className="flex-1 sm:flex-none cursor-pointer">
@@ -280,9 +287,9 @@ export function KaryawanTable({ data }: { data: Row[] }) {
                     <div className="min-w-0">
                       <div className="font-mono text-xs font-bold text-slate-900">{k.id}</div>
                       <div className="text-sm font-medium text-slate-900 truncate">{k.namaLengkap}</div>
-                      <div className="text-xs text-slate-500">{k.jabatan} • {k.divisi || "-"}</div>
+                      <div className="text-xs text-slate-500">{k.jabatan} • {STATUS_KERJA_LABEL[k.statusKerja]}</div>
                     </div>
-                    <StatusBadge value={k.statusKerja} variant="outline" />
+                    <StatusBadge value={STATUS_KERJA_LABEL[k.statusKerja]} variant={STATUS_KERJA_VARIANT[k.statusKerja]} />
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="rounded-lg bg-slate-50 px-3 py-2"><div className="text-[11px] text-slate-400">Lokasi</div><div className="font-medium truncate">{k.lokasiKerja || "-"}</div></div>
@@ -310,7 +317,7 @@ export function KaryawanTable({ data }: { data: Row[] }) {
                     <TableHead>ID</TableHead>
                     <TableHead>Nama</TableHead>
                     <TableHead>Jabatan</TableHead>
-                    <TableHead>Divisi</TableHead>
+                    <TableHead>Status Pekerja</TableHead>
                     <TableHead>Lokasi</TableHead>
                     <TableHead>Telepon</TableHead>
                     <TableHead>Email</TableHead>
@@ -333,7 +340,9 @@ export function KaryawanTable({ data }: { data: Row[] }) {
                         <TableCell className="font-mono text-xs">{k.id}</TableCell>
                         <TableCell className="text-sm font-medium">{k.namaLengkap}</TableCell>
                         <TableCell className="text-sm">{k.jabatan}</TableCell>
-                        <TableCell className="text-sm">{k.divisi || "-"}</TableCell>
+                        <TableCell>
+                          <StatusBadge value={STATUS_KERJA_LABEL[k.statusKerja]} variant={STATUS_KERJA_VARIANT[k.statusKerja]} />
+                        </TableCell>
                         <TableCell className="text-sm">{k.lokasiKerja || "-"}</TableCell>
                         <TableCell className="text-sm">{k.telepon || "-"}</TableCell>
                         <TableCell className="text-sm max-w-[160px] truncate" title={k.email}>{k.email || "-"}</TableCell>
@@ -381,11 +390,11 @@ export function KaryawanTable({ data }: { data: Row[] }) {
               <Field label="Jabatan">
                 <Input value={form.jabatan} onChange={(event) => updateForm("jabatan", event.target.value)} placeholder="Jabatan" />
               </Field>
-              <Field label="Status Kerja">
+              <Field label="Status Pekerja">
                 <Select value={form.statusKerja} onChange={(event) => updateForm("statusKerja", event.target.value as StatusKerja)}>
-                  <option value="TETAP">TETAP</option>
-                  <option value="KONTRAK">KONTRAK</option>
-                  <option value="HARIAN">HARIAN</option>
+                  <option value="TETAP">Tetap</option>
+                  <option value="TIDAK_TETAP">Tidak Tetap</option>
+                  <option value="PENDUKUNG">Pendukung</option>
                 </Select>
               </Field>
               <Field label="Gaji Pokok">
@@ -408,9 +417,6 @@ export function KaryawanTable({ data }: { data: Row[] }) {
                   <option value="LAKI_LAKI">Laki-laki</option>
                   <option value="PEREMPUAN">Perempuan</option>
                 </Select>
-              </Field>
-              <Field label="Divisi" className="sm:col-span-1">
-                <Input value={form.divisi} onChange={(event) => updateForm("divisi", event.target.value)} placeholder="Operasional Kebun" />
               </Field>
               <Field label="Lokasi Kerja">
                 <Input value={form.lokasiKerja} onChange={(event) => updateForm("lokasiKerja", event.target.value)} placeholder="Blok A" />
