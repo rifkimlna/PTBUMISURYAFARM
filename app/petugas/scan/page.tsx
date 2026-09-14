@@ -185,7 +185,7 @@ export default function PetugasScanPage() {
               </div>
             )}
             {scanning && (
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/70 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none backdrop-blur">
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/70 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none">
                 Arahkan QR ke kotak hijau
               </div>
             )}

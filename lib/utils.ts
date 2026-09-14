@@ -13,8 +13,14 @@ export function formatRupiah(value: number | string): string {
   return Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
 
+// URL foto palsu dari mode simulated lama tidak bisa dibuka — anggap tidak ada foto.
+export function isRealFotoUrl(url?: string | null): url is string {
+  if (!url) return false;
+  if (url.includes("storage.pt-bst.example")) return false;
+  return true;
+}
+
 // Format rupiah ringkas untuk label sumbu grafik.
-// Contoh: 7500000 -> "Rp 7,5 jt", 75000 -> "Rp 75 rb"
 export function formatRupiahCompact(value: number | string): string {
   const num = Number(value);
   if (Number.isNaN(num)) return "Rp 0";

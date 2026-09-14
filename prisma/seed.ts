@@ -316,6 +316,27 @@ const daftarAset = [
     if (!exists) await prisma.panen.create({ data: p });
   }
 
+  // Master blok A-D + normalisasi lokasiBlok varian lama ("BLOK A" -> "Blok A")
+  const blokSeed = [
+    { kode: "A", nama: "Blok A", luasHa: 30 },
+    { kode: "B", nama: "Blok B", luasHa: 30 },
+    { kode: "C", nama: "Blok C", luasHa: 30 },
+    { kode: "D", nama: "Blok D", luasHa: 30 },
+  ];
+  for (const b of blokSeed) {
+    await prisma.blok.upsert({ where: { kode: b.kode }, update: { nama: b.nama }, create: b });
+  }
+  const varian = await prisma.pohon.findMany({ select: { lokasiBlok: true }, distinct: ["lokasiBlok"] });
+  for (const v of varian) {
+    // hanya normalisasi pola "blok <huruf>", nilai lain dibiarkan apa adanya
+    const m = v.lokasiBlok.match(/blok[\s-]*([A-D])/i);
+    if (!m) continue;
+    const baku = `Blok ${m[1].toUpperCase()}`;
+    if (v.lokasiBlok !== baku) {
+      await prisma.pohon.updateMany({ where: { lokasiBlok: v.lokasiBlok }, data: { lokasiBlok: baku } });
+    }
+  }
+
   console.log("✅ Seed selesai. Login dengan password: Admin123!");
 }
 

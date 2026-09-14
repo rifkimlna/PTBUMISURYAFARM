@@ -72,7 +72,7 @@ export function PublicNavbar() {
   }, [open]);
 
   return (
-    <header ref={navRef} className="sticky top-0 z-40 w-full border-b border-slate-100 bg-white/90 backdrop-blur-xl supports-[backdrop-filter]:bg-white/80">
+    <header ref={navRef} className="sticky top-0 z-40 w-full border-b border-slate-100 bg-white">
       <div className="mx-auto flex h-[56px] sm:h-[60px] max-w-[1280px] items-center justify-between px-4 sm:px-6 lg:px-8 gap-2">
         <Link href="/" className="flex items-center gap-2.5 shrink-0">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-700 text-white shrink-0">

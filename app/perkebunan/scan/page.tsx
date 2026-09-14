@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScanLine, Camera, Keyboard, AlertCircle, CheckCircle2, Pencil } from "lucide-react";
+import { ScanLine, Camera, Keyboard, AlertCircle, CheckCircle2 } from "lucide-react";
 
 function AdminScanInner() {
   const router = useRouter();
@@ -118,14 +118,14 @@ function AdminScanInner() {
   return (
     <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2"><Pencil className="h-5 w-5 text-slate-700" /> Scan — Koreksi Data Pohon (Admin)</h1>
-        <p className="text-sm text-slate-500">Admin full — scan QR batang → edit semua field (identitas + panen/pupuk/obat). Untuk panen harian, petugas input di /petugas.</p>
+        <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-slate-900 flex items-center gap-2"><ScanLine className="h-5 w-5 text-green-700" /> Scan Pohon</h1>
+        <p className="text-xs sm:text-sm text-slate-500">Scan QR di batang → buka halaman edit.</p>
       </div>
 
       <Card className="border-slate-200 overflow-hidden">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2"><Camera className="h-4 w-4 text-slate-700" /> Kamera Scanner</CardTitle>
-          <CardDescription>Scan QR PHN-BLK-XXX → langsung buka halaman koreksi lengkap</CardDescription>
+          <CardTitle className="text-sm flex items-center gap-2"><Camera className="h-4 w-4 text-green-700" /> Kamera</CardTitle>
+          <CardDescription>Scan QR → langsung buka edit</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="relative rounded-2xl border border-slate-200 bg-slate-900 overflow-hidden" style={{ minHeight: scanning ? 360 : 280 }}>
@@ -139,9 +139,9 @@ function AdminScanInner() {
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center bg-slate-50">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white border shadow-sm"><ScanLine className="h-8 w-8 text-slate-400" /></div>
                 <div className="text-sm font-medium text-slate-700">Kamera siap</div>
-                <div className="text-xs text-slate-500 max-w-[280px]">Tekan Mulai Scan, izinkan kamera. QR di tengah kotak → otomatis buka Edit Lengkap.</div>
+                <div className="text-xs text-slate-500 max-w-[280px]">Tekan Mulai Scan, izinkan kamera, arahkan QR ke kotak.</div>
                 {hasCamera ? (
-                  <Button onClick={startScan} className="mt-2 bg-slate-900 hover:bg-slate-800 h-11 px-6 rounded-full"><Camera className="h-4 w-4" /> Mulai Scan</Button>
+                  <Button onClick={startScan} className="mt-2 bg-green-700 hover:bg-green-800 h-11 px-6 rounded-full"><Camera className="h-4 w-4" /> Mulai Scan</Button>
                 ) : (
                   <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"><AlertCircle className="h-4 w-4" /> Kamera tidak didukung, pakai input manual</div>
                 )}
@@ -159,9 +159,9 @@ function AdminScanInner() {
             <Label htmlFor="manualId" className="flex items-center gap-1.5"><Keyboard className="h-3.5 w-3.5" /> Input Manual ID</Label>
             <div className="flex gap-2">
               <Input id="manualId" value={manualId} onChange={(e) => setManualId(e.target.value.toUpperCase())} placeholder="PHN-BLK-A01" className="h-11 font-mono text-sm" autoComplete="off" />
-              <Button type="submit" className="h-11 px-6 rounded-full bg-slate-900 hover:bg-slate-800 shrink-0">Buka Edit</Button>
+              <Button type="submit" className="h-11 px-6 rounded-full bg-green-700 hover:bg-green-800 shrink-0">Buka</Button>
             </div>
-            <p className="text-xs text-slate-500">Ketik ID label batang → buka koreksi semua field (blok, varietas, tanggal, koordinat, panen, pupuk, riwayat).</p>
+            <p className="text-xs text-slate-500">Ketik ID dari label batang.</p>
           </form>
         </CardContent>
       </Card>
