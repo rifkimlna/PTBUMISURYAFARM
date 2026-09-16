@@ -10,11 +10,16 @@ import { CheckCircle2, Save, Camera, Sparkles } from "lucide-react";
 
 export function PetugasLapanganMinimal({
   pohon,
+  panenTerakhir,
+  riwayatPanen,
 }: {
-  pohon: { id: string; hasilPanen: string; pemupukan: string; pengobatan: string; status: string };
+  pohon: { id: string; pemupukan: string; pengobatan: string; status: string };
+  panenTerakhir: { kg: string; tanggal: string; petugas: string } | null;
+  riwayatPanen: { id: string; kg: string; tanggal: string; petugas: string }[];
 }) {
+  // Input panen = kejadian kali ini, mulai dari kosong (0) tiap buka form
   const [form, setForm] = useState({
-    hasilPanen: pohon.hasilPanen,
+    hasilPanen: "",
     status: pohon.status,
     pemupukan: pohon.pemupukan,
     pengobatan: pohon.pengobatan,
@@ -38,13 +43,17 @@ export function PetugasLapanganMinimal({
   const triggerFile = () => fileRef.current?.click();
 
   const hasChange =
-    form.hasilPanen !== pohon.hasilPanen ||
+    form.hasilPanen.trim() !== "" ||
     form.pemupukan !== pohon.pemupukan ||
     form.pengobatan !== pohon.pengobatan ||
     form.status !== pohon.status ||
     gejala.trim().length >= 5 ||
     tindakan.trim().length >= 5 ||
     !!file;
+
+  function fmtTanggal(iso: string) {
+    return new Date(iso).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -57,9 +66,14 @@ export function PetugasLapanganMinimal({
     setErr(null);
     try {
       const token = localStorage.getItem("token") || "";
-      // 1. Snapshot jika ada perubahan hasil/status/pupuk/obat
+      // 1. Snapshot jika ada perubahan status/pupuk/obat + panen kali ini (kosong = tidak panen)
       const payload: any = {};
-      if (form.hasilPanen !== pohon.hasilPanen) payload.hasilPanen = form.hasilPanen === "" ? null : Number(form.hasilPanen);
+      const panenInput = form.hasilPanen.trim();
+      if (panenInput !== "") {
+        const n = Number(panenInput);
+        if (!Number.isFinite(n) || n < 0) throw new Error("Hasil panen harus angka ≥ 0");
+        payload.hasilPanen = n;
+      }
       if (form.pemupukan !== pohon.pemupukan) payload.pemupukan = form.pemupukan || null;
       if (form.pengobatan !== pohon.pengobatan) payload.pengobatan = form.pengobatan || null;
       if (form.status !== pohon.status) payload.status = form.status;
@@ -92,7 +106,8 @@ export function PetugasLapanganMinimal({
       }
 
       setMsg("Tersimpan — data global terupdate, admin ikut lihat");
-      // reset gejala after success, keep snapshot
+      // reset input panen ke 0 lagi + gejala, keep perawatan/status
+      setForm((f) => ({ ...f, hasilPanen: "" }));
       setGejala("");
       setTindakan("");
       setFile(null);
@@ -129,7 +144,11 @@ export function PetugasLapanganMinimal({
             </div>
             <div>
               <div className="text-sm font-semibold tracking-tight text-slate-900">Hasil Panen</div>
-              <div className="text-xs text-slate-500">KG — langsung masuk chart admin</div>
+              <div className="text-xs text-slate-500">
+                {panenTerakhir
+                  ? <>Terakhir: <span className="font-semibold text-emerald-700">{Number(panenTerakhir.kg).toLocaleString("id-ID")} KG</span> • {fmtTanggal(panenTerakhir.tanggal)}</>
+                  : "Belum pernah panen"}
+              </div>
             </div>
           </div>
           <div className="relative">
@@ -137,6 +156,7 @@ export function PetugasLapanganMinimal({
               id="hasilPanen"
               type="number"
               step="0.1"
+              min="0"
               inputMode="decimal"
               value={form.hasilPanen}
               onChange={(e) => setForm({ ...form, hasilPanen: e.target.value })}
@@ -145,6 +165,7 @@ export function PetugasLapanganMinimal({
             />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">KG</span>
           </div>
+          <p className="text-xs text-slate-500">Isi panen <span className="font-medium">kali ini</span> — kosongkan jika tidak panen. Tercatat + tanggal otomatis.</p>
           <div className="space-y-1.5">
             <Label className="text-sm font-medium text-slate-700">Status Pohon</Label>
             <Select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="h-11 bg-white text-sm">
@@ -154,6 +175,34 @@ export function PetugasLapanganMinimal({
               <option value="MATI">MATI</option>
             </Select>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Riwayat Panen - history sudah panen + tanggal */}
+      <Card className="border-slate-200">
+        <CardContent className="p-4 sm:p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold tracking-tight text-slate-900">Riwayat Panen</div>
+            <div className="text-xs text-slate-400">{riwayatPanen.length} kali</div>
+          </div>
+          {riwayatPanen.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-400">
+              Belum ada panen tercatat untuk pohon ini
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {riwayatPanen.map((r) => (
+                <div key={r.id} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/50 px-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs text-slate-500">{fmtTanggal(r.tanggal)} • {r.petugas}</div>
+                  </div>
+                  <div className="text-sm font-semibold text-emerald-700 whitespace-nowrap">
+                    {Number(r.kg).toLocaleString("id-ID")} KG
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 

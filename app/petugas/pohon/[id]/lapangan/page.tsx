@@ -10,10 +10,18 @@ import { Button } from "@/components/ui/button";
 
 export default async function PetugasLapanganPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const pohon = await prisma.pohon.findUnique({
-    where: { id },
-    include: { riwayat: { orderBy: { tanggalCek: "desc" }, take: 10, include: { petugas: { select: { nama: true } } } } },
-  });
+  const [pohon, panenHist] = await Promise.all([
+    prisma.pohon.findUnique({
+      where: { id },
+      include: { riwayat: { orderBy: { tanggalCek: "desc" }, take: 10, include: { petugas: { select: { nama: true } } } } },
+    }),
+    prisma.panen.findMany({
+      where: { pohonId: id },
+      orderBy: { tanggalPanen: "desc" },
+      take: 5,
+      include: { petugas: { select: { nama: true } } },
+    }),
+  ]);
   if (!pohon) notFound();
 
   return (
@@ -51,11 +59,25 @@ export default async function PetugasLapanganPage({ params }: { params: Promise<
       <PetugasLapanganMinimal
         pohon={{
           id: pohon.id,
-          hasilPanen: (pohon as any).hasilPanen?.toString?.() ?? "",
           pemupukan: (pohon as any).pemupukan || "",
           pengobatan: (pohon as any).pengobatan || "",
           status: pohon.status as string,
         }}
+        panenTerakhir={
+          panenHist[0]
+            ? {
+                kg: String(panenHist[0].jumlahKg),
+                tanggal: panenHist[0].tanggalPanen.toISOString(),
+                petugas: panenHist[0].petugas?.nama || "-",
+              }
+            : null
+        }
+        riwayatPanen={panenHist.map((r) => ({
+          id: r.id,
+          kg: String(r.jumlahKg),
+          tanggal: r.tanggalPanen.toISOString(),
+          petugas: r.petugas?.nama || "-",
+        }))}
       />
 
       {/* Riwayat ringkas - auto hide kalau kosong biar minimalis */}

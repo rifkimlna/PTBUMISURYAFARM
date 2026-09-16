@@ -6,10 +6,18 @@ import { EditMasterForm } from "./edit-form";
 
 export default async function EditPohonMasterPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const pohon = await prisma.pohon.findUnique({
-    where: { id },
-    include: { riwayat: { orderBy: { tanggalCek: "desc" }, take: 10, include: { petugas: { select: { nama: true } } } } },
-  });
+  const [pohon, panenHist] = await Promise.all([
+    prisma.pohon.findUnique({
+      where: { id },
+      include: { riwayat: { orderBy: { tanggalCek: "desc" }, take: 10, include: { petugas: { select: { nama: true } } } } },
+    }),
+    prisma.panen.findMany({
+      where: { pohonId: id },
+      orderBy: { tanggalPanen: "desc" },
+      take: 1,
+      select: { jumlahKg: true, tanggalPanen: true },
+    }),
+  ]);
   if (!pohon) notFound();
 
   return (
@@ -46,6 +54,11 @@ export default async function EditPohonMasterPage({ params }: { params: Promise<
           tanggalCek: r.tanggalCek.toISOString(),
           petugasNama: r.petugas.nama,
         }))}
+        panenTerakhir={
+          panenHist[0]
+            ? { kg: String(panenHist[0].jumlahKg), tanggal: panenHist[0].tanggalPanen.toISOString() }
+            : null
+        }
       />
     </div>
   );

@@ -31,9 +31,10 @@ type Props = {
     geotagSource: string | null;
   };
   riwayat: { id: string; gejala: string; tindakan: string; fotoUrl: string | null; tanggalCek: string; petugasNama: string }[];
+  panenTerakhir: { kg: string; tanggal: string } | null;
 };
 
-export function EditMasterForm({ pohon, riwayat }: Props) {
+export function EditMasterForm({ pohon, riwayat, panenTerakhir }: Props) {
   const router = useRouter();
   const [form, setForm] = useState(pohon);
   const [loading, setLoading] = useState(false);
@@ -137,13 +138,14 @@ export function EditMasterForm({ pohon, riwayat }: Props) {
     form.koordinat !== pohon.koordinat ||
     form.status !== pohon.status;
   const hasSnapshotChange =
-    form.hasilPanen !== pohon.hasilPanen ||
     form.pemupukan !== pohon.pemupukan ||
     form.pengobatan !== pohon.pengobatan;
+  // hasilPanen ikut payload master -> API hanya KOREKSI panen terakhir, tidak tambah baris
+  const hasPanenChange = form.hasilPanen !== pohon.hasilPanen;
 
   async function submitAll(e: React.FormEvent) {
     e.preventDefault();
-    if (!hasMasterChange && !hasSnapshotChange) {
+    if (!hasMasterChange && !hasSnapshotChange && !hasPanenChange) {
       setErr("Tidak ada perubahan — ubah field dulu");
       return;
     }
@@ -152,8 +154,8 @@ export function EditMasterForm({ pohon, riwayat }: Props) {
     setErr(null);
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : "";
-      // 1. Master (varietas/jenis/blok/tanggal/koordinat/nama/status)
-      if (hasMasterChange) {
+      // 1. Master (varietas/jenis/blok/tanggal/koordinat/nama/status + koreksi hasilPanen)
+      if (hasMasterChange || hasPanenChange) {
         const payload: any = {};
         if (form.namaPohon !== pohon.namaPohon) payload.namaPohon = form.namaPohon || null;
         if (form.varietas !== pohon.varietas) payload.varietas = form.varietas;
@@ -162,6 +164,8 @@ export function EditMasterForm({ pohon, riwayat }: Props) {
         if (form.tanggalTanam !== pohon.tanggalTanam) payload.tanggalTanam = form.tanggalTanam;
         if (form.koordinat !== pohon.koordinat) payload.koordinat = form.koordinat || null;
         if (form.status !== pohon.status) payload.status = form.status;
+        // Koreksi panen: API master hanya ubah baris panen TERAKHIR, tidak tambah baru
+        if (hasPanenChange) payload.hasilPanen = form.hasilPanen === "" ? null : Number(form.hasilPanen);
         const res = await fetch(`/api/pohon/${pohon.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -170,14 +174,13 @@ export function EditMasterForm({ pohon, riwayat }: Props) {
         const j = await res.json();
         if (!res.ok) throw new Error(j.message || j.error || "Gagal update master");
       }
-      // 2. Snapshot lapangan (hasilPanen/pemupukan/pengobatan) — admin full control
+      // 2. Snapshot lapangan (pemupukan/pengobatan) — tanpa hasilPanen agar tidak catat panen baru
       if (hasSnapshotChange) {
         const payload: any = {};
-        if (form.hasilPanen !== pohon.hasilPanen) payload.hasilPanen = form.hasilPanen === "" ? null : Number(form.hasilPanen);
         if (form.pemupukan !== pohon.pemupukan) payload.pemupukan = form.pemupukan || null;
         if (form.pengobatan !== pohon.pengobatan) payload.pengobatan = form.pengobatan || null;
         // status sudah handle di master, tapi jika hanya snapshot change tanpa master status, tetap kirim jika beda
-        if (!hasMasterChange && form.status !== pohon.status) payload.status = form.status;
+        if (!hasMasterChange && !hasPanenChange && form.status !== pohon.status) payload.status = form.status;
         if (Object.keys(payload).length > 0) {
           const res2 = await fetch(`/api/pohon/${pohon.id}/lapangan`, {
             method: "PUT",
@@ -306,9 +309,13 @@ export function EditMasterForm({ pohon, riwayat }: Props) {
                 <div className="text-xs font-semibold tracking-widest text-slate-500">HASIL & PERAWATAN</div>
               </div>
               <div className="space-y-2">
-                <Label>Hasil Panen (KG)</Label>
-                <Input type="number" step="0.1" inputMode="decimal" value={form.hasilPanen} onChange={(e) => onChange("hasilPanen", e.target.value)} placeholder="125.5" className="bg-white" />
-                <p className="text-xs text-slate-400">Kosongkan jika belum panen</p>
+                <Label>Hasil Panen (KG) — koreksi</Label>
+                <Input type="number" step="0.1" min="0" inputMode="decimal" value={form.hasilPanen} onChange={(e) => onChange("hasilPanen", e.target.value)} placeholder="125.5" className="bg-white" />
+                <p className="text-xs text-slate-400">
+                  {panenTerakhir
+                    ? <>Panen terakhir: <span className="font-semibold text-slate-600">{Number(panenTerakhir.kg).toLocaleString("id-ID")} KG • {new Date(panenTerakhir.tanggal).toLocaleDateString("id-ID")}</span> — edit di sini hanya memperbaiki data itu, tidak menambah baru. Kosongkan jika belum panen.</>
+                    : "Belum ada panen tercatat — isi untuk mencatat pertama kali. Kosongkan jika belum panen."}
+                </p>
               </div>
               <div className="space-y-2 mt-4">
                 <Label>Pemupukan</Label>
