@@ -6,8 +6,76 @@ import bcrypt from "bcryptjs";
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
 
+const coaData = [
+  // Aset
+  { kode: "1101", nama: "Kas", kelompok: "Aset" as const, golongan: "Kas & Setara", tipe: "NETRAL" as const },
+  { kode: "1102", nama: "Piutang", kelompok: "Aset" as const, golongan: "Piutang Usaha", tipe: "NETRAL" as const },
+  { kode: "1103", nama: "Bank", kelompok: "Aset" as const, golongan: "Kas & Setara", tipe: "NETRAL" as const },
+  { kode: "1104", nama: "Tabungan", kelompok: "Aset" as const, golongan: "Kas & Setara", tipe: "NETRAL" as const },
+  { kode: "1105", nama: "Persediaan Pupuk & Obat-obatan", kelompok: "Aset" as const, golongan: "Persediaan", tipe: "NETRAL" as const },
+  { kode: "1106", nama: "Persediaan Pakan Ternak/Ikan", kelompok: "Aset" as const, golongan: "Persediaan", tipe: "NETRAL" as const },
+  { kode: "1107", nama: "Persediaan Bibit/Benih", kelompok: "Aset" as const, golongan: "Persediaan", tipe: "NETRAL" as const },
+  { kode: "1201", nama: "Tanah", kelompok: "Aset" as const, golongan: "Aset Tetap", tipe: "NETRAL" as const },
+  { kode: "1202", nama: "Bangunan dan Instalasi", kelompok: "Aset" as const, golongan: "Aset Tetap", tipe: "NETRAL" as const },
+  { kode: "1203", nama: "Mesin dan Peralatan Pertanian/Peternakan", kelompok: "Aset" as const, golongan: "Aset Tetap", tipe: "NETRAL" as const },
+  { kode: "1204", nama: "Perabotan dan Peralatan Kantor/Villa", kelompok: "Aset" as const, golongan: "Aset Tetap", tipe: "NETRAL" as const },
+  { kode: "1205", nama: "Tanaman Produktif", kelompok: "Aset" as const, golongan: "Aset Tetap", tipe: "NETRAL" as const },
+  { kode: "1206", nama: "Ternak", kelompok: "Aset" as const, golongan: "Aset Tetap", tipe: "NETRAL" as const },
+  { kode: "1207", nama: "Ikan Budidaya", kelompok: "Aset" as const, golongan: "Aset Tetap", tipe: "NETRAL" as const },
+  // Kewajiban
+  { kode: "2101", nama: "Utang Usaha", kelompok: "Kewajiban" as const, golongan: "Utang", tipe: "NETRAL" as const },
+  { kode: "2102", nama: "Utang Gaji / Kasbon Karyawan", kelompok: "Kewajiban" as const, golongan: "Utang", tipe: "NETRAL" as const },
+  { kode: "2103", nama: "Utang Pajak", kelompok: "Kewajiban" as const, golongan: "Utang", tipe: "NETRAL" as const },
+  { kode: "2104", nama: "Utang Lain-lain", kelompok: "Kewajiban" as const, golongan: "Utang", tipe: "NETRAL" as const },
+  // Modal
+  { kode: "3101", nama: "Modal Disetor / Setoran Pemilik (Bapak)", kelompok: "Modal" as const, golongan: "Modal", tipe: "NETRAL" as const },
+  { kode: "3102", nama: "Modal Disetor / Setoran Pemilik (Riki)", kelompok: "Modal" as const, golongan: "Modal", tipe: "NETRAL" as const },
+  { kode: "3103", nama: "Prive / Penarikan Modal", kelompok: "Modal" as const, golongan: "Modal", tipe: "NETRAL" as const },
+  { kode: "3104", nama: "Laba Ditahan (Akumulasi)", kelompok: "Modal" as const, golongan: "Laba Ditahan", tipe: "NETRAL" as const },
+  // Pendapatan
+  { kode: "4101", nama: "Pendapatan Penjualan Hasil Kebun", kelompok: "Pendapatan" as const, golongan: "Pendapatan Usaha", tipe: "PEMASUKAN" as const },
+  { kode: "4102", nama: "Pendapatan Penjualan Ternak (Ayam)", kelompok: "Pendapatan" as const, golongan: "Pendapatan Usaha", tipe: "PEMASUKAN" as const },
+  { kode: "4103", nama: "Pendapatan Penjualan Ikan", kelompok: "Pendapatan" as const, golongan: "Pendapatan Usaha", tipe: "PEMASUKAN" as const },
+  { kode: "4104", nama: "Pendapatan Lain-lain", kelompok: "Pendapatan" as const, golongan: "Pendapatan Lainnya", tipe: "PEMASUKAN" as const },
+  { kode: "4105", nama: "Penerimaan Piutang Usaha", kelompok: "Pendapatan" as const, golongan: "Pendapatan Lainnya", tipe: "PEMASUKAN" as const },
+  // Beban
+  { kode: "5101", nama: "Beban Upah dan Gaji Pekerja", kelompok: "Beban" as const, golongan: "Beban Tenaga Kerja", tipe: "PENGELUARAN" as const },
+  { kode: "5201", nama: "Beban Pupuk dan Obat-obatan", kelompok: "Beban" as const, golongan: "Beban Produksi", tipe: "PENGELUARAN" as const },
+  { kode: "5202", nama: "Beban Pakan dan Obat Ternak", kelompok: "Beban" as const, golongan: "Beban Produksi", tipe: "PENGELUARAN" as const },
+  { kode: "5203", nama: "Beban Pembelian Bibit/Benih Tanaman Semusim", kelompok: "Beban" as const, golongan: "Beban Produksi", tipe: "PENGELUARAN" as const },
+  { kode: "5204", nama: "Beban Pembelian Bibit/DOC/Ternak", kelompok: "Beban" as const, golongan: "Beban Produksi", tipe: "PENGELUARAN" as const },
+  { kode: "5205", nama: "Beban Panen dan Pengolahan Hasil Ternak", kelompok: "Beban" as const, golongan: "Beban Produksi", tipe: "PENGELUARAN" as const },
+  { kode: "5301", nama: "Beban Perlengkapan Kebun", kelompok: "Beban" as const, golongan: "Beban Perlengkapan & Peralatan", tipe: "PENGELUARAN" as const },
+  { kode: "5302", nama: "Beban Peralatan Kecil", kelompok: "Beban" as const, golongan: "Beban Perlengkapan & Peralatan", tipe: "PENGELUARAN" as const },
+  { kode: "5401", nama: "Beban Transportasi dan BBM", kelompok: "Beban" as const, golongan: "Beban Operasional", tipe: "PENGELUARAN" as const },
+  { kode: "5402", nama: "Beban Lain-lain/Belum Teridentifikasi", kelompok: "Beban" as const, golongan: "Beban Operasional", tipe: "PENGELUARAN" as const },
+  { kode: "5403", nama: "Beban Sewa Tanah/Garapan", kelompok: "Beban" as const, golongan: "Beban Operasional", tipe: "PENGELUARAN" as const },
+  { kode: "5404", nama: "Beban Listrik", kelompok: "Beban" as const, golongan: "Beban Operasional", tipe: "PENGELUARAN" as const },
+  { kode: "5405", nama: "Beban Air/PDAM", kelompok: "Beban" as const, golongan: "Beban Operasional", tipe: "PENGELUARAN" as const },
+  { kode: "5406", nama: "Beban Internet/Telepon/WIFI", kelompok: "Beban" as const, golongan: "Beban Operasional", tipe: "PENGELUARAN" as const },
+  { kode: "5407", nama: "Beban Pajak", kelompok: "Beban" as const, golongan: "Beban Operasional", tipe: "PENGELUARAN" as const },
+  { kode: "5408", nama: "Beban Penyusutan Aset Tetap", kelompok: "Beban" as const, golongan: "Beban Operasional", tipe: "PENGELUARAN" as const },
+  { kode: "5409", nama: "Beban Perawatan & Reparasi", kelompok: "Beban" as const, golongan: "Beban Operasional", tipe: "PENGELUARAN" as const },
+  { kode: "5410", nama: "Beban Administrasi & Umum", kelompok: "Beban" as const, golongan: "Beban Operasional", tipe: "PENGELUARAN" as const },
+  { kode: "5411", nama: "Beban Perlengkapan Kantor / ATK", kelompok: "Beban" as const, golongan: "Beban Operasional", tipe: "PENGELUARAN" as const },
+  { kode: "5412", nama: "Beban Konsumsi", kelompok: "Beban" as const, golongan: "Beban Operasional", tipe: "PENGELUARAN" as const },
+  { kode: "5413", nama: "Beban Mess", kelompok: "Beban" as const, golongan: "Beban Operasional", tipe: "PENGELUARAN" as const },
+  { kode: "5414", nama: "Beban Perlengkapan & Pemeliharaan Jaringan Air", kelompok: "Beban" as const, golongan: "Beban Operasional", tipe: "PENGELUARAN" as const },
+  { kode: "5501", nama: "Pelunasan Hutang Usaha", kelompok: "Beban" as const, golongan: "Pelunasan Hutang", tipe: "PENGELUARAN" as const },
+];
+
 async function main() {
   console.log("🌱 Seeding PT BST...");
+
+  // Seed AkunCOA first
+  console.log("  📋 Seeding AkunCOA...");
+  for (const akun of coaData) {
+    await prisma.akunCOA.upsert({
+      where: { kode: akun.kode },
+      update: akun,
+      create: akun,
+    });
+  }
 
   const hash = await bcrypt.hash("Admin123!", 10);
   const hashPetugas = await bcrypt.hash("Lapangan123!", 10);

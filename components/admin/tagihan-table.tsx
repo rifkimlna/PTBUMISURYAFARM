@@ -21,6 +21,7 @@ export type PembayaranRow = {
   id: string;
   tipe: TipeTagihan;
   kategori: string;
+  kodeAkun?: string | null;
   sumberDana: string;
   jumlah: number;
   keterangan: string | null;
@@ -472,7 +473,7 @@ export function TagihanTable({ data, summary, tab }: { data: TagihanRow[]; summa
                       <TableCell className="text-sm text-slate-500 whitespace-nowrap">{formatDate(p.tanggal)}</TableCell>
                       <TableCell className="text-sm font-semibold text-green-600">Rp {formatRupiah(p.jumlah)}</TableCell>
                       <TableCell className="text-sm text-slate-500">{p.sumberDana}</TableCell>
-                      <TableCell className="text-sm text-slate-500">{p.kategori}</TableCell>
+                      <TableCell className="text-sm text-slate-500">{p.kodeAkun ? `${p.kodeAkun} - ` : ""}{p.kategori}</TableCell>
                       <TableCell className="text-sm text-slate-500">{p.adminNama}</TableCell>
                       <TableCell className="text-sm text-slate-500">{p.keterangan || "-"}</TableCell>
                     </TableRow>

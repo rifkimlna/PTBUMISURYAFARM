@@ -26,6 +26,10 @@ const createTagihanSchema = z.object({
     .max(10_000_000_000, "Jumlah terlalu besar"),
   tanggal: z.coerce.date({ message: "Tanggal tidak valid" }).optional(),
   jatuhTempo: z.coerce.date({ message: "Jatuh tempo tidak valid" }).optional().nullable(),
+  // Persiapan modul Penjualan (opsional; diisi form Penagihan tahap berikut)
+  noInvoice: z.string().trim().max(50, "No invoice maksimal 50 karakter").optional().nullable(),
+  jenis: z.enum(["HASIL_KEBUN", "TERNAK", "IKAN", "LAINNYA"]).optional().nullable(),
+  dokumen: z.enum(["PENAGIHAN", "PROFORMA", "TUKAR_FAKTUR"]).optional().nullable(),
 });
 
 // GET /api/tagihan - daftar + ringkasan (SUPER_ADMIN, ADMIN_KEUANGAN)
@@ -118,6 +122,9 @@ export async function POST(req: NextRequest) {
         sisa: parsed.jumlah,
         tanggal: parsed.tanggal ?? new Date(),
         jatuhTempo: parsed.jatuhTempo ?? null,
+        noInvoice: parsed.noInvoice?.trim() || null,
+        jenis: parsed.jenis ?? null,
+        dokumen: parsed.dokumen ?? null,
         adminId: adminId!,
       },
       include: { admin: { select: { id: true, nama: true } } },

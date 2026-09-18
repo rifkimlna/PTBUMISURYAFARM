@@ -41,6 +41,15 @@ enum JenisKelamin {
 enum TipeTransaksi {
   PEMASUKAN
   PENGELUARAN
+  TRANSFER
+}
+
+enum TipeDokumenPenjualan {
+  PENAWARAN
+  PESANAN
+  PROFORMA
+  TUKAR_FAKTUR
+  PENAGIHAN
 }
 
 enum TipeTagihan {
@@ -83,6 +92,20 @@ enum StatusJadwal {
   BATAL
 }
 
+enum KelompokCOA {
+  Aset
+  Kewajiban
+  Modal
+  Pendapatan
+  Beban
+}
+
+enum TipeAkunCOA {
+  PEMASUKAN
+  PENGELUARAN
+  NETRAL
+}
+
 // ===================== MODELS =====================
 
 model User {
@@ -101,8 +124,32 @@ model User {
   geotagPohon     Pohon[]            @relation("GeotagAdmin")
   panen           Panen[]            @relation("PetugasPanen")
   jadwalDibuat    JadwalPerawatan[]  @relation("JadwalCreatedBy")
+  akunCOA         AkunCOA[]          @relation("AkunCreatedBy")
+  dokumenPenjualan DokumenPenjualan[] @relation("DokumenCreatedBy")
+  pengiriman      PengirimanPenjualan[] @relation("PengirimanAdmin")
+  fakturPembelian FakturPembelian[] @relation("FakturBeliCreatedBy")
 
   @@map("users")
+}
+
+model AkunCOA {
+  id          String       @id @default(cuid())
+  kode        String       @unique
+  nama        String
+  kelompok    KelompokCOA
+  golongan    String
+  tipe        TipeAkunCOA
+  deskripsi   String?      @db.Text
+  isActive    Boolean      @default(true)
+  createdById String?
+  createdBy   User?        @relation("AkunCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([kelompok])
+  @@index([golongan])
+  @@index([kode])
+  @@map("akun_coa")
 }
 
 model Pohon {
@@ -226,9 +273,15 @@ model TransaksiKas {
   kategori   String // ex: Pendapatan Penjualan Hasil Kebun, Beban Pupuk dan Obat-obatan
   kodeAkun   String? // kode akun COA, ex: 4101 (nullable utk data lama)
   sumberDana SumberDana   @default(KAS)
+  sumberDanaTujuan SumberDana? // akun tujuan utk TRANSFER antar Kas/Bank/Tabungan
   jumlah     Decimal       @db.Decimal(15, 2)
   keterangan String?       @db.Text
   tanggal    DateTime      @default(now())
+  // Field gaya Mekari untuk form Terima/Kirim/Transfer Uang
+  noTransaksi String?  @unique // ex: TRF-20260917-AB12 (auto-generate bila kosong)
+  pihak       String? // Yang Membayar (Terima) / Penerima (Kirim), opsional
+  tag         String? // Tag transaksi, opsional
+  deskripsi   String?  @db.Text // Deskripsi rincian akun (Terima/Kirim), opsional
 
   adminId String
   admin   User   @relation("AdminKas", fields: [adminId], references: [id], onDelete: Restrict)
@@ -259,11 +312,19 @@ model Tagihan {
   tanggal     DateTime      @default(now())
   jatuhTempo  DateTime?
   status      StatusTagihan @default(BELUM_LUNAS)
+  // Persiapan modul Penjualan (diisi form Penagihan tahap berikut; nullable agar baris lama aman)
+  noInvoice String? @unique // Nomor invoice penjualan, ex: INV-20260917-AB12
+  jenis     String? // Jenis produk penjualan: HASIL_KEBUN | TERNAK | IKAN | LAINNYA
+  dokumen   String? // Jenis dokumen penjualan: PENAGIHAN | PROFORMA | TUKAR_FAKTUR (null = Penagihan)
 
   adminId String
   admin   User   @relation("AdminTagihan", fields: [adminId], references: [id], onDelete: Restrict)
 
   pembayaran TransaksiKas[]
+
+  dokumenPenjualan DokumenPenjualan?
+
+  fakturPembelian FakturPembelian?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -290,15 +351,16 @@ model BuktiTransaksi {
 }
 
 model PersediaanBarang {
-  id          String   @id // Kode barang, ex: BRG-001 (unik)
-  namaBarang  String
-  kategori    String // Bibit/Benih | Pupuk & Obat-obatan | Pakan Ternak/Ikan
-  stokAwal    Int      @default(0)
-  satuan      String // kg, liter, pcs, karung
-  hargaSatuan Decimal  @db.Decimal(15, 2)
-  keterangan  String? @db.Text
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id // Kode barang, ex: BRG-001 (unik)
+  namaBarang      String
+  kategori        String // Bibit/Benih | Pupuk & Obat-obatan | Pakan Ternak/Ikan
+  kodeAkunCOA     String?  // Kode akun COA persediaan (ex: 1105, 1106, 1107) - optional untuk backward compat
+  stokAwal        Int      @default(0)
+  satuan          String // kg, liter, pcs, karung
+  hargaSatuan     Decimal  @db.Decimal(15, 2)
+  keterangan      String? @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   riwayat RiwayatStok[]
 
@@ -348,6 +410,99 @@ model Blok {
   @@map("blok")
 }
 
+// ===================== MODUL PENJUALAN =====================
+// Alur: Penawaran -> Pesanan -> Pengiriman -> Proforma/Tukar Faktur -> Penagihan
+//   -> Piutang (Tagihan) -> Pembayaran -> Kas & Bank (TransaksiKas) -> COA.
+// Hanya PENAGIHAN yang menghasilkan Tagihan PIUTANG. Dokumen lain tidak
+// menyentuh Kas & Bank.
+
+model Pelanggan {
+  id        String   @id @default(cuid())
+  nama      String
+  email     String?
+  telepon   String?
+  alamat    String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  dokumen DokumenPenjualan[]
+
+  pengiriman PengirimanPenjualan[]
+
+  @@index([nama])
+  @@map("pelanggan")
+}
+
+model DokumenPenjualan {
+  id               String                @id @default(cuid())
+  tipe             TipeDokumenPenjualan
+  noDokumen        String                @unique // ex: INV-20260917-AB12 (auto)
+  pelangganId      String
+  pelanggan        Pelanggan             @relation(fields: [pelangganId], references: [id], onDelete: Restrict)
+  email            String?
+  alamat           String?               @db.Text
+  tanggal          DateTime              @default(now())
+  jatuhTempo       DateTime? // tempo / target / kedaluwarsa sesuai tipe
+  noRefPelanggan   String?
+  syaratPembayaran String?
+  pesan            String?               @db.Text
+  memo             String?               @db.Text
+  subtotal         Decimal               @db.Decimal(15, 2)
+  total            Decimal               @db.Decimal(15, 2)
+  status           String                @default("TERBUKA")
+  // Rantai dokumen: id Tagihan/Dokumen sumber (Tukar Faktur merujuk faktur asal)
+  referensiIds String[] @default([])
+  // Piutang yang dihasilkan (hanya tipe PENAGIHAN)
+  tagihanId String?  @unique
+  tagihan   Tagihan? @relation(fields: [tagihanId], references: [id], onDelete: SetNull)
+
+  adminId String
+  admin   User   @relation("DokumenCreatedBy", fields: [adminId], references: [id], onDelete: Restrict)
+
+  items    DokumenPenjualanItem[]
+  lampiran DokumenLampiran[]
+  pengiriman PengirimanPenjualan[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tipe])
+  @@index([pelangganId])
+  @@index([tanggal])
+  @@index([tagihanId])
+  @@map("dokumen_penjualan")
+}
+
+model DokumenPenjualanItem {
+  id           String           @id @default(cuid())
+  dokumenId    String
+  dokumen      DokumenPenjualan @relation(fields: [dokumenId], references: [id], onDelete: Cascade)
+  produkId     String? // id PersediaanBarang (snapshot, tanpa FK agar master bebas berubah)
+  deskripsi    String
+  kuantitas    Decimal          @db.Decimal(12, 2)
+  unit         String
+  harga        Decimal          @db.Decimal(15, 2)
+  diskonPersen Decimal          @db.Decimal(5, 2) @default(0)
+  jumlah       Decimal          @db.Decimal(15, 2)
+
+  @@index([dokumenId])
+  @@map("dokumen_penjualan_item")
+}
+
+model DokumenLampiran {
+  id        String           @id @default(cuid())
+  dokumenId String
+  dokumen   DokumenPenjualan @relation(fields: [dokumenId], references: [id], onDelete: Cascade)
+  fileName  String
+  fileUrl   String
+  fileType  String
+  fileSize  Int
+  createdAt DateTime         @default(now())
+
+  @@index([dokumenId])
+  @@map("dokumen_penjualan_lampiran")
+}
+
 model JadwalPerawatan {
   id             String         @id @default(cuid())
   blok           String
@@ -365,4 +520,153 @@ model JadwalPerawatan {
   @@index([tanggalRencana])
   @@index([status])
   @@map("jadwal_perawatan")
+}
+
+model PengirimanPenjualan {
+  id               String   @id @default(cuid())
+  noPengiriman     String   @unique
+  pesananId        String
+  pesanan          DokumenPenjualan @relation(fields: [pesananId], references: [id], onDelete: Restrict)
+  pelangganId      String
+  pelanggan        Pelanggan @relation(fields: [pelangganId], references: [id], onDelete: Restrict)
+  alamatPengiriman String?  @db.Text
+  tanggalPengiriman DateTime?
+  noTransaksi      String?
+  noRefPelanggan   String?
+  kirimMelalui     String?
+  noPelacakan      String?
+  gudang           String?
+  pesan            String?  @db.Text
+  memo             String?  @db.Text
+  adminId          String
+  admin            User     @relation("PengirimanAdmin", fields: [adminId], references: [id], onDelete: Restrict)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  items            PengirimanItem[]
+  lampiran         PengirimanLampiran[]
+
+  @@index([pesananId])
+  @@index([pelangganId])
+  @@map("pengiriman_penjualan")
+}
+
+model PengirimanItem {
+  id              String   @id @default(cuid())
+  pengirimanId    String
+  pengiriman      PengirimanPenjualan @relation(fields: [pengirimanId], references: [id], onDelete: Cascade)
+  deskripsi       String
+  kuantitas       Decimal  @db.Decimal(12,2)
+  unit            String
+  harga           Decimal  @db.Decimal(15,2)
+  jumlah          Decimal  @db.Decimal(15,2)
+
+  @@index([pengirimanId])
+  @@map("pengiriman_item")
+}
+
+model PengirimanLampiran {
+  id            String   @id @default(cuid())
+  pengirimanId  String
+  pengiriman    PengirimanPenjualan @relation(fields: [pengirimanId], references: [id], onDelete: Cascade)
+  fileName      String
+  fileUrl       String
+  fileType      String
+  fileSize      Int
+  createdAt     DateTime @default(now())
+
+  @@index([pengirimanId])
+  @@map("pengiriman_lampiran")
+}
+
+// ===================== MODUL PEMBELIAN =====================
+// Alur: Pesanan Pembelian -> Pengiriman Pembelian -> Faktur Pembelian
+//   -> Utang (Tagihan HUTANG) -> Pembayaran -> Kas & Bank (TransaksiKas) -> COA.
+// Hanya FAKTUR yang menghasilkan Tagihan HUTANG. Tanpa Kas & Bank saat faktur
+// dibuat (supplier belum dibayar). Sisi DEBIT dicatat per baris via kodeAkun
+// (1105/1106/1107 persediaan atau akun Beban); sisi KREDIT = 2101 Utang Usaha
+// yang diwakili Tagihan HUTANG. Pembayaran memakai alur Tagihan yang sudah ada
+// (tanpa mencatat pembelian/persediaan lagi). Tidak menyentuh RiwayatStok agar
+// tidak ganda dengan alur pembelian persediaan yang sudah ada.
+
+model Supplier {
+  id        String   @id @default(cuid())
+  nama      String
+  email     String?
+  telepon   String?
+  alamat    String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  faktur FakturPembelian[]
+
+  @@index([nama])
+  @@map("supplier")
+}
+
+model FakturPembelian {
+  id               String    @id @default(cuid())
+  noFaktur         String    @unique // ex: FB-20260918-AB12 (auto)
+  supplierId       String
+  supplier         Supplier  @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  email            String?
+  alamat           String?   @db.Text
+  tanggal          DateTime  @default(now())
+  jatuhTempo       DateTime?
+  noRefSupplier    String?
+  syaratPembayaran String?
+  gudang           String? // teks bebas (belum ada master gudang)
+  tag              String?
+  pesan            String?   @db.Text
+  memo             String?   @db.Text
+  subtotal         Decimal   @db.Decimal(15, 2)
+  total            Decimal   @db.Decimal(15, 2)
+  // Utang yang dihasilkan (satu faktur = satu utang)
+  tagihanId String?  @unique
+  tagihan   Tagihan? @relation(fields: [tagihanId], references: [id], onDelete: SetNull)
+
+  adminId String
+  admin   User   @relation("FakturBeliCreatedBy", fields: [adminId], references: [id], onDelete: Restrict)
+
+  items    FakturPembelianItem[]
+  lampiran FakturPembelianLampiran[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([supplierId])
+  @@index([tanggal])
+  @@index([tagihanId])
+  @@map("faktur_pembelian")
+}
+
+model FakturPembelianItem {
+  id           String          @id @default(cuid())
+  fakturId     String
+  faktur       FakturPembelian @relation(fields: [fakturId], references: [id], onDelete: Cascade)
+  produkId     String? // id PersediaanBarang (snapshot, tanpa FK agar master bebas berubah)
+  deskripsi    String
+  kuantitas    Decimal         @db.Decimal(12, 2)
+  unit         String
+  harga        Decimal         @db.Decimal(15, 2)
+  diskonPersen Decimal         @db.Decimal(5, 2) @default(0)
+  kodeAkun     String? // akun DEBIT baris ini (1105/1106/1107/Beban), dari COA database
+  jumlah       Decimal         @db.Decimal(15, 2)
+
+  @@index([fakturId])
+  @@map("faktur_pembelian_item")
+}
+
+model FakturPembelianLampiran {
+  id        String          @id @default(cuid())
+  fakturId  String
+  faktur    FakturPembelian @relation(fields: [fakturId], references: [id], onDelete: Cascade)
+  fileName  String
+  fileUrl   String
+  fileType  String
+  fileSize  Int
+  createdAt DateTime        @default(now())
+
+  @@index([fakturId])
+  @@map("faktur_pembelian_lampiran")
 }

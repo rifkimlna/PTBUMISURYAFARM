@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { KATEGORI_ASET, STATUS_ASET } from "@/lib/aset";
 
-export const TipeTransaksiEnum = z.enum(["PEMASUKAN", "PENGELUARAN"]);
+export const TipeTransaksiEnum = z.enum(["PEMASUKAN", "PENGELUARAN", "TRANSFER"]);
 export const SumberDanaEnum = z.enum(["KAS", "BANK", "TABUNGAN"]);
 export const StatusGajiEnum = z.enum(["SUDAH_DIBAYAR", "PENDING"]);
 
 export type TipeTransaksi = z.infer<typeof TipeTransaksiEnum>;
+export type TipeTransaksiValue = "PEMASUKAN" | "PENGELUARAN" | "TRANSFER";
 export type SumberDana = z.infer<typeof SumberDanaEnum>;
 
 export const createBuktiTransaksiSchema = z.object({
@@ -19,6 +20,8 @@ export const createTransaksiKasSchema = z.object({
   tipe: TipeTransaksiEnum,
   kategori: z.string().min(2, "Kategori minimal 2 karakter").max(100),
   sumberDana: SumberDanaEnum.default("KAS"),
+  // Akun tujuan (wajib utk TRANSFER antar Kas/Bank/Tabungan)
+  sumberDanaTujuan: SumberDanaEnum.optional().nullable(),
   jumlah: z
     .number({ message: "Jumlah harus angka" })
     .positive("Jumlah harus positif")
@@ -26,17 +29,33 @@ export const createTransaksiKasSchema = z.object({
     .max(10_000_000_000, "Jumlah terlalu besar"),
   keterangan: z.string().max(1000, "Keterangan maksimal 1000 karakter").optional().nullable(),
   tanggal: z.coerce.date().optional(), // default now()
+  // Field gaya Mekari (opsional; noTransaksi auto-generate bila kosong)
+  noTransaksi: z.string().trim().max(50, "No transaksi maksimal 50 karakter").optional().nullable(),
+  pihak: z.string().trim().max(150, "Nama pihak maksimal 150 karakter").optional().nullable(),
+  tag: z.string().trim().max(100, "Tag maksimal 100 karakter").optional().nullable(),
+  deskripsi: z.string().max(1000, "Deskripsi maksimal 1000 karakter").optional().nullable(),
   bukti: z.array(createBuktiTransaksiSchema).max(20, "Maksimal 20 bukti per transaksi").optional(),
   // adminId diambil dari session
-});
+}).refine(
+  (data) => data.tipe !== "TRANSFER" || (data.sumberDanaTujuan != null && data.sumberDanaTujuan !== data.sumberDana),
+  {
+    message: "Akun tujuan transfer wajib diisi dan tidak boleh sama dengan akun asal",
+    path: ["sumberDanaTujuan"],
+  }
+);
 
 export const updateTransaksiKasSchema = z.object({
   tipe: TipeTransaksiEnum.optional(),
   kategori: z.string().min(2).max(100).optional(),
   sumberDana: SumberDanaEnum.optional(),
+  sumberDanaTujuan: SumberDanaEnum.optional().nullable(),
   jumlah: z.number().positive().min(1000).max(10_000_000_000).optional(),
   keterangan: z.string().max(1000).optional().nullable(),
   tanggal: z.coerce.date().optional(),
+  noTransaksi: z.string().trim().max(50).optional().nullable(),
+  pihak: z.string().trim().max(150).optional().nullable(),
+  tag: z.string().trim().max(100).optional().nullable(),
+  deskripsi: z.string().max(1000).optional().nullable(),
   bukti: z.array(createBuktiTransaksiSchema).max(20, "Maksimal 20 bukti per transaksi").optional(),
 }).refine((data) => Object.keys(data).length > 0, {
   message: "Minimal satu field harus diisi",

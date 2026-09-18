@@ -1,8 +1,9 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuthAndRole, getSessionFromRequest } from "@/lib/auth";
-import { createTransaksiKasSchema, queryKeuanganSchema } from "@/lib/validations/keuanganValidation";
-import { kodeAkunByNama } from "@/lib/coa";
+import { createTransaksiKasSchema, queryKeuanganSchema, updateTransaksiKasSchema } from "@/lib/validations/keuanganValidation";
+import { kodeAkunByNama, SUMBER_DANA_KODE_MAP } from "@/lib/coa";
+import { getSaldoPerSumber, generateNoTransaksi } from "@/lib/keuangan-server";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 import { ZodError } from "zod";
 
@@ -46,7 +47,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const [data, total, summary, perSumberAgg] = await Promise.all([
+    const [data, total, summary, perSumber] = await Promise.all([
       prisma.transaksiKas.findMany({
         where,
         skip,
@@ -58,19 +59,14 @@ export async function GET(req: NextRequest) {
       prisma.transaksiKas.groupBy({ by: ["tipe"], where, _sum: { jumlah: true } }),
       // Posisi dana per sumber: hanya ikut filter tanggal (abaikan filter tipe/kategori/sumber
       // tabel) agar ketiga sumber selalu tampil utuh dalam periode yang sama.
-      prisma.transaksiKas.groupBy({
-        by: ["sumberDana", "tipe"],
-        where: where.tanggal ? { tanggal: where.tanggal } : {},
-        _sum: { jumlah: true },
-      }),
+      // Transfer dihitung dari sumberDana (keluar) DAN sumberDanaTujuan (masuk).
+      getSaldoPerSumber(where.tanggal ? { gte: where.tanggal.gte, lte: where.tanggal.lte } : undefined),
     ]);
 
-    const totalMasuk = summary.find((s) => s.tipe === "PEMASUKAN")?._sum.jumlah ?? 0;
-    const totalKeluar = summary.find((s) => s.tipe === "PENGELUARAN")?._sum.jumlah ?? 0;
-
-    const saldoSumber = (sumber: string) =>
-      Number(perSumberAgg.find((s) => s.sumberDana === sumber && s.tipe === "PEMASUKAN")?._sum.jumlah ?? 0) -
-      Number(perSumberAgg.find((s) => s.sumberDana === sumber && s.tipe === "PENGELUARAN")?._sum.jumlah ?? 0);
+    // Filter out TRANSFER from pemasukan/pengeluaran totals
+    const filteredSummary = summary.filter((s) => s.tipe !== "TRANSFER");
+    const totalMasuk = filteredSummary.find((s) => s.tipe === "PEMASUKAN")?._sum.jumlah ?? 0;
+    const totalKeluar = filteredSummary.find((s) => s.tipe === "PENGELUARAN")?._sum.jumlah ?? 0;
 
     return successResponse({
       data,
@@ -80,9 +76,9 @@ export async function GET(req: NextRequest) {
         pengeluaran: totalKeluar,
         saldo: Number(totalMasuk) - Number(totalKeluar),
         perSumber: {
-          KAS: saldoSumber("KAS"),
-          BANK: saldoSumber("BANK"),
-          TABUNGAN: saldoSumber("TABUNGAN"),
+          KAS: perSumber.KAS,
+          BANK: perSumber.BANK,
+          TABUNGAN: perSumber.TABUNGAN,
         },
       },
     });
@@ -106,16 +102,45 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const parsed = createTransaksiKasSchema.parse(body);
 
+    const tanggalTransaksi = parsed.tanggal ?? new Date();
+    // No transaksi: pakai kiriman form, atau auto-generate yang unik
+    const noTransaksi =
+      parsed.noTransaksi?.trim() ||
+      (await generateNoTransaksi(parsed.tipe as "PEMASUKAN" | "PENGELUARAN" | "TRANSFER", tanggalTransaksi));
+
     const transaksi = await prisma.$transaction(async (tx) => {
+      // Logika berdasarkan tipe transaksi
+      let resolvedKodeAkun: string | null = null;
+      let resolvedSumberDanaTujuan: "KAS" | "BANK" | "TABUNGAN" | null = null;
+
+      if (parsed.tipe === "TRANSFER") {
+        // Untuk TRANSFER: sumberDanaTujuan wajib diisi dan beda dari sumberDana
+        // kodeAkun = null (transfer bukan pemasukan/pengeluaran COA).
+        // Transfer dicatat sebagai SATU baris: saldo asal berkurang, tujuan bertambah.
+        resolvedKodeAkun = null;
+        resolvedSumberDanaTujuan = parsed.sumberDanaTujuan ?? null;
+      } else {
+        // Untuk PEMASUKAN/PENGELUARAN: tentukan kode akun dari kategori
+        resolvedKodeAkun = kodeAkunByNama(parsed.tipe as any, parsed.kategori);
+      }
+
       const created = await tx.transaksiKas.create({
         data: {
           tipe: parsed.tipe as any,
           kategori: parsed.kategori,
-          kodeAkun: kodeAkunByNama(parsed.tipe, parsed.kategori),
+          kodeAkun: resolvedKodeAkun,
           sumberDana: parsed.sumberDana ?? "KAS",
+          // Tambahkan sumberDanaTujuan untuk TRANSFER
+          ...(parsed.tipe === "TRANSFER" && resolvedSumberDanaTujuan
+            ? { sumberDanaTujuan: resolvedSumberDanaTujuan }
+            : {}),
           jumlah: parsed.jumlah as any,
           keterangan: parsed.keterangan ?? null,
-          tanggal: parsed.tanggal ?? new Date(),
+          tanggal: tanggalTransaksi,
+          noTransaksi,
+          pihak: parsed.pihak?.trim() || null,
+          tag: parsed.tag?.trim() || null,
+          deskripsi: parsed.deskripsi?.trim() || null,
           adminId: adminId!,
         },
         include: { admin: { select: { id: true, nama: true } }, _count: { select: { bukti: true } } },
