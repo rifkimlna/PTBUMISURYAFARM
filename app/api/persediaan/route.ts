@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
       id: b.id,
       namaBarang: b.namaBarang,
       kategori: b.kategori,
+      kodeAkunCOA: b.kodeAkunCOA,
       stokAwal: b.stokAwal,
       stok,
       satuan: b.satuan,

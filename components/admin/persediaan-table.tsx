@@ -11,9 +11,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Pencil, Trash2, Search, History, PackagePlus, PackageMinus, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, History, PackagePlus, PackageMinus, Loader2, ShoppingCart } from "lucide-react";
 import { kategoriPersediaanList } from "@/lib/validations/persediaanValidation";
 import { formatRupiah } from "@/lib/utils";
+import type { SumberDana } from "@/lib/validations/persediaanValidation";
 
 export type PersediaanStatus = "Tersedia" | "Stok Menipis" | "Habis";
 export type PersediaanRow = {
@@ -70,6 +71,22 @@ type RiwayatRow = {
   keterangan: string | null;
   tanggal: string;
 };
+
+type PembelianFormValues = {
+  jumlah: string;
+  hargaSatuan: string;
+  sumberDana: SumberDana;
+  tanggal: string;
+  keterangan: string;
+};
+
+const emptyPembelianForm = (): PembelianFormValues => ({
+  jumlah: "",
+  hargaSatuan: "",
+  sumberDana: "KAS",
+  tanggal: new Date().toISOString().slice(0, 10),
+  keterangan: "",
+});
 
 function Field({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (
@@ -136,6 +153,11 @@ export function PersediaanTable({
   const [riwayatDialog, setRiwayatDialog] = useState<{ id: string; nama: string } | null>(null);
   const [riwayat, setRiwayat] = useState<RiwayatRow[]>([]);
   const [loadingRiwayat, setLoadingRiwayat] = useState(false);
+
+  const [pembelianDialog, setPembelianDialog] = useState<{ row: PersediaanRow } | null>(null);
+  const [pembelianForm, setPembelianForm] = useState<PembelianFormValues>(emptyPembelianForm());
+  const [savingPembelian, setSavingPembelian] = useState(false);
+  const [pembelianError, setPembelianError] = useState("");
 
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -297,6 +319,53 @@ export function PersediaanTable({
     }
   };
 
+  const openPembelianDialog = (row: PersediaanRow) => {
+    setPembelianDialog({ row });
+    setPembelianForm(emptyPembelianForm());
+    setPembelianError("");
+  };
+
+  const updatePembelianForm = (key: keyof PembelianFormValues, value: string) => {
+    setPembelianForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const savePembelian = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!pembelianDialog) return;
+    setSavingPembelian(true);
+    setPembelianError("");
+
+    try {
+      const response = await fetch(`/api/persediaan/${encodeURIComponent(pembelianDialog.row.id)}/pembelian`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          barangId: pembelianDialog.row.id,
+          jumlah: Number(pembelianForm.jumlah),
+          hargaSatuan: Number(pembelianForm.hargaSatuan),
+          sumberDana: pembelianForm.sumberDana,
+          keterangan: pembelianForm.keterangan.trim() || null,
+          tanggal: pembelianForm.tanggal,
+        }),
+      });
+      const result = await response.json().catch(() => ({ message: "Gagal mencatat pembelian" }));
+      if (!response.ok) {
+        const detail = result.errors ? result.errors.map((e: { message: string }) => e.message).join(", ") : "";
+        throw new Error(detail ? `${result.message} — ${detail}` : result.message || "Gagal mencatat pembelian");
+      }
+      setNotice({ 
+        type: "success", 
+        text: `Pembelian berhasil: stok +${pembelianForm.jumlah} ${pembelianDialog.row.satuan}, transaksi keuangan Rp ${formatRupiah(Number(pembelianForm.hargaSatuan) * Number(pembelianForm.jumlah))} tercatat` 
+      });
+      setPembelianDialog(null);
+      await refreshList();
+    } catch (error) {
+      setPembelianError(error instanceof Error ? error.message : "Gagal mencatat pembelian");
+    } finally {
+      setSavingPembelian(false);
+    }
+  };
+
   return (
     <>
       <div className="grid gap-3 md:grid-cols-3">
@@ -390,6 +459,9 @@ export function PersediaanTable({
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="sm" className="h-7 w-7 rounded-full" title="Pembelian/Barang Masuk (Integrasi Kas & COA)" onClick={() => openPembelianDialog(row)}>
+                            <ShoppingCart className="h-3.5 w-3.5" />
+                          </Button>
                           <Button variant="ghost" size="sm" className="h-7 w-7 rounded-full" title="Stok Masuk" onClick={() => openStokDialog(row, "MASUK")}>
                             <PackagePlus className="h-3.5 w-3.5" />
                           </Button>
@@ -611,6 +683,97 @@ export function PersediaanTable({
               </Table>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(pembelianDialog)}
+        onOpenChange={(open) => {
+          if (!open) setPembelianDialog(null);
+        }}
+      >
+        <DialogContent onClose={() => setPembelianDialog(null)} className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Pembelian / Barang Masuk (Integrasi Kas & COA)</DialogTitle>
+            <DialogDescription>
+              {pembelianDialog ? `${pembelianDialog.row.id} - ${pembelianDialog.row.namaBarang} (${pembelianDialog.row.kategori}) • stok saat ini ${pembelianDialog.row.stok} ${pembelianDialog.row.satuan}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={savePembelian} className="grid gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Tanggal">
+                <Input
+                  type="date"
+                  value={pembelianForm.tanggal}
+                  onChange={(event) => updatePembelianForm("tanggal", event.target.value)}
+                  required
+                />
+              </Field>
+              <Field label="Jumlah">
+                <Input
+                  type="number"
+                  min="1"
+                  value={pembelianForm.jumlah}
+                  onChange={(event) => updatePembelianForm("jumlah", event.target.value)}
+                  placeholder="10"
+                  required
+                />
+              </Field>
+              <Field label="Harga Satuan (Rp)">
+                <Input
+                  type="number"
+                  min="1000"
+                  step="500"
+                  value={pembelianForm.hargaSatuan}
+                  onChange={(event) => updatePembelianForm("hargaSatuan", event.target.value)}
+                  placeholder="10000"
+                  required
+                />
+              </Field>
+              <Field label="Sumber Dana">
+                <Select value={pembelianForm.sumberDana} onChange={(event) => updatePembelianForm("sumberDana", event.target.value)}>
+                  <option value="KAS">Kas (1101)</option>
+                  <option value="BANK">Bank (1103)</option>
+                  <option value="TABUNGAN">Tabungan (1104)</option>
+                </Select>
+              </Field>
+              <Field label="Total Otomatis" className="sm:col-span-2">
+                <Input
+                  type="text"
+                  disabled
+                  value={pembelianForm.jumlah && pembelianForm.hargaSatuan 
+                    ? `Rp ${formatRupiah(Number(pembelianForm.jumlah) * Number(pembelianForm.hargaSatuan))}` 
+                    : "Rp 0"}
+                  className="bg-slate-50 text-slate-900 font-medium"
+                />
+              </Field>
+              <Field label="Keterangan" className="sm:col-span-2">
+                <Textarea
+                  value={pembelianForm.keterangan}
+                  onChange={(event) => updatePembelianForm("keterangan", event.target.value)}
+                  placeholder="Opsional (mis: nama supplier, nomor PO, dll)"
+                />
+              </Field>
+            </div>
+            <div className="rounded-lg bg-green-50 p-3 text-xs text-green-800">
+              <p className="font-medium">Aksi otomatis saat disimpan:</p>
+              <ul className="mt-1 list-disc list-inside space-y-0.5">
+                <li>Stok <strong>{pembelianDialog?.row.namaBarang}</strong> bertambah</li>
+                <li>Transaksi Kas & Bank: <strong>Pengeluaran</strong> ke akun COA persediaan</li>
+                <li>Sumber dana <strong>{pembelianForm.sumberDana === "KAS" ? "Kas (1101)" : pembelianForm.sumberDana === "BANK" ? "Bank (1103)" : "Tabungan (1104)"}</strong> berkurang</li>
+                <li>Terhubung ke COA: Persediaan ({pembelianDialog?.row.kategori === "Pupuk & Obat-obatan" ? "1105" : pembelianDialog?.row.kategori === "Pakan Ternak/Ikan" ? "1106" : "1107"}) & Sumber Dana</li>
+              </ul>
+            </div>
+            {pembelianError && <p className="text-sm text-red-600">{pembelianError}</p>}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setPembelianDialog(null)}>
+                Batal
+              </Button>
+              <Button type="submit" disabled={savingPembelian}>
+                {savingPembelian ? "Menyimpan..." : "Simpan Pembelian"}
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </>
