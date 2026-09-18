@@ -15,6 +15,7 @@ import { formatRupiah } from "@/lib/utils";
 
 type Produk = { id: string; namaBarang: string; kategori: string; satuan: string; hargaSatuan: number };
 type Lampiran = { fileName: string; fileUrl: string; fileType: string; fileSize: number };
+type Supplier = { id: string; nama: string; email?: string | null; telepon?: string | null; alamat?: string | null };
 
 export const SYARAT_OPTIONS = ["Tunai", "Tempo 7 hari", "Tempo 14 hari", "Tempo 30 hari"];
 
