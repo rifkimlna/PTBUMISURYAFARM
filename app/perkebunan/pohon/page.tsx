@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "../../../generated/prisma/client";
 import { StatusKesehatan } from "../../../generated/prisma/client";

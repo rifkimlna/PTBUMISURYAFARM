@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { cookies } from "next/headers";
 import { verifyToken } from "@/lib/auth";
 import { Building } from "lucide-react";
