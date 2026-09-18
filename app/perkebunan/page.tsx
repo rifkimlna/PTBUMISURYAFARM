@@ -13,16 +13,16 @@ import Link from "next/link";
 export default async function PertanianDashboard() {
   const tujuhHari = new Date();
   tujuhHari.setDate(tujuhHari.getDate() + 7);
-  const [total, sehat, perhatian, sakit, tanpaGeotag, pohon, sumHasil, panenTotal, sudahPanen, jadwalMendesak, antrean] = await Promise.all([
+  const [total, sehat, perhatian, sakit, tanpaGeotag, pohon, panenTotal, pohonPanen, jadwalMendesak, antrean] = await Promise.all([
     prisma.pohon.count(),
     prisma.pohon.count({ where: { status: "SEHAT" } }),
     prisma.pohon.count({ where: { status: "PERLU_PERHATIAN" } }),
     prisma.pohon.count({ where: { status: "SAKIT" } }),
     prisma.pohon.count({ where: { fotoGeotagUrl: null } }),
     prisma.pohon.findMany({ orderBy: { createdAt: "desc" }, take: 20, include: { _count: { select: { riwayat: true } } } }),
-    prisma.pohon.aggregate({ _sum: { hasilPanen: true } }),
+    // Sumber tunggal: tabel Panen. Pohon.hasilPanen hanya snapshot, tidak dipakai agregat.
     prisma.panen.aggregate({ _sum: { jumlahKg: true }, _count: { _all: true } }),
-    prisma.pohon.count({ where: { hasilPanen: { not: null } } }),
+    prisma.panen.groupBy({ by: ["pohonId"] }),
     prisma.jadwalPerawatan.count({ where: { status: "RENCANA", tanggalRencana: { lte: tujuhHari } } }),
     prisma.pohon.findMany({
       where: { status: { in: ["SAKIT", "PERLU_PERHATIAN"] } },
@@ -31,9 +31,8 @@ export default async function PertanianDashboard() {
       select: { id: true, lokasiBlok: true, status: true, varietas: true },
     }),
   ]);
-  const totalKg = Number(sumHasil._sum.hasilPanen ?? 0);
-  const panenKg = Number(panenTotal._sum.jumlahKg ?? 0);
-  const displayKg = panenKg > 0 ? panenKg : totalKg;
+  const sudahPanen = pohonPanen.length;
+  const displayKg = Number(panenTotal._sum.jumlahKg ?? 0);
   const rataKg = total ? displayKg / total : 0;
 
   return (
@@ -109,7 +108,7 @@ export default async function PertanianDashboard() {
         <Link href="/perkebunan/panen" className="text-xs font-medium text-green-800 hover:underline shrink-0">Kelola →</Link>
       </div>
       <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
-        <Card className="border-slate-100"><CardContent className="p-5"><div className="text-xs tracking-wide text-slate-400">Total Panen</div><div className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{displayKg.toLocaleString("id-ID", { maximumFractionDigits: 1 })} KG</div><div className="mt-1 text-xs text-slate-400">{panenTotal._count._all > 0 ? `${panenTotal._count._all} panen tercatat` : `${sudahPanen} pohon sudah panen`}</div></CardContent></Card>
+        <Card className="border-slate-100"><CardContent className="p-5"><div className="text-xs tracking-wide text-slate-400">Total Panen</div><div className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{displayKg.toLocaleString("id-ID", { maximumFractionDigits: 1 })} KG</div><div className="mt-1 text-xs text-slate-400">{`${panenTotal._count._all} panen tercatat`}</div></CardContent></Card>
         <Card className="border-slate-100"><CardContent className="p-5"><div className="text-xs tracking-wide text-slate-400">Rata-rata</div><div className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{rataKg.toLocaleString("id-ID", { maximumFractionDigits: 1 })} KG</div><div className="mt-1 text-xs text-slate-400">per pohon</div></CardContent></Card>
         <Card className="border-slate-100"><CardContent className="p-5"><div className="text-xs tracking-wide text-slate-400">Sudah Panen</div><div className="mt-2 text-2xl font-semibold tracking-tight text-green-700">{sudahPanen}/{total}</div><div className="mt-1 text-xs text-slate-400">{total ? Math.round((sudahPanen / total) * 100) : 0}% pohon</div></CardContent></Card>
       </div>

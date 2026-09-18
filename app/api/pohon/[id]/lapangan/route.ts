@@ -33,7 +33,8 @@ export async function GET(req: NextRequest, { params }: Params) {
   return successResponse(pohon);
 }
 
-// PUT /api/pohon/[id]/lapangan - update khusus lapangan (petugas)
+// PUT /api/pohon/[id]/lapangan - catat kejadian baru (petugas).
+// Koreksi admin JANGAN lewat sini (nambah baris) — pakai PUT /api/pohon/[id].
 export async function PUT(req: NextRequest, { params }: Params) {
 const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_PERTANIAN", "PETUGAS_LAPANGAN"]);
   if (auth instanceof Response) return auth;
@@ -53,21 +54,18 @@ const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_PERTANIAN", "P
 
     const updated = await prisma.pohon.update({ where: { id }, data });
 
-    // Create Panen history if hasilPanen changed and not null
+    // Catat Panen tiap submit bernilai > 0 (input = kejadian panen kali ini + tanggal otomatis)
     try {
       if (parsed.hasilPanen !== undefined && parsed.hasilPanen !== null && (parsed.hasilPanen as any) !== "" && Number(parsed.hasilPanen) > 0) {
-        const prev = exists.hasilPanen ? Number(exists.hasilPanen) : 0;
-        const next = Number(parsed.hasilPanen);
-        if (next !== prev) {
-          await prisma.panen.create({
-            data: {
-              pohonId: id,
-              jumlahKg: next as any,
-              petugasId: session?.userId ?? null,
-              catatan: `Update via lapangan: ${prev} -> ${next} KG`,
-            },
-          });
-        }
+        const nilai = Number(parsed.hasilPanen);
+        await prisma.panen.create({
+          data: {
+            pohonId: id,
+            jumlahKg: nilai as any,
+            petugasId: session?.userId ?? null,
+            catatan: `Input petugas lapangan: ${nilai} KG`,
+          },
+        });
       }
     } catch (e) {
       console.error("[Panen create]", e);

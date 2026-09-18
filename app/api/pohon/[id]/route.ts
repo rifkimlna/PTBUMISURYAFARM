@@ -55,6 +55,42 @@ export async function PUT(req: NextRequest, { params }: Params) {
       where: { id },
       data,
     });
+
+    // Koreksi panen (admin): ubah baris Panen TERAKHIR, jangan tambah baris baru.
+    // - nilai > 0 + ada history -> UPDATE baris terakhir
+    // - nilai > 0 + belum ada history -> CREATE satu baris (bukan duplikat)
+    // - nilai null/0 -> hanya snapshot dikosongkan, history dipertahankan
+    //   (hapus entri yang salah via menu Panen)
+    if (parsed.hasilPanen !== undefined) {
+      try {
+        const val = parsed.hasilPanen as unknown as number | null;
+        if (val !== null && Number(val) > 0) {
+          const latest = await prisma.panen.findFirst({
+            where: { pohonId: id },
+            orderBy: { tanggalPanen: "desc" },
+          });
+          if (latest) {
+            await prisma.panen.update({
+              where: { id: latest.id },
+              data: { jumlahKg: Number(val) as any },
+            });
+          } else {
+            await prisma.panen.create({
+              data: {
+                pohonId: id,
+                jumlahKg: Number(val) as any,
+                petugasId: (auth as any)?.userId ?? null,
+                catatan: "Koreksi admin via edit pohon",
+              },
+            });
+          }
+        }
+      } catch (e) {
+        console.error("[Panen koreksi]", e);
+        // don't fail main update
+      }
+    }
+
     return successResponse(updated, "Pohon berhasil diupdate");
   } catch (e) {
     if (e instanceof ZodError) return zodErrorResponse(e);
