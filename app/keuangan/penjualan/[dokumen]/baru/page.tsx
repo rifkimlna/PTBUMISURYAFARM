@@ -8,9 +8,15 @@ import {
   TukarFakturForm,
   PesananForm,
   PenawaranForm,
-  todayInput,
   type DocInitial,
 } from "@/components/admin/penjualan-forms";
+
+// Versi server dari todayInput (file form adalah Client Component,
+// fungsinya tidak bisa dipanggil dari Server Component).
+function todayInput() {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
 
 const JUDUL: Record<string, { judul: string; sub: string; tipe: "PENAGIHAN" | "PROFORMA" | "TUKAR_FAKTUR" | "PESANAN" | "PENAWARAN" }> = {
   penagihan: { judul: "Penagihan Penjualan", sub: "Invoice resmi ke pelanggan PT Bumi Surya Farm", tipe: "PENAGIHAN" },
@@ -26,9 +32,12 @@ function toYMD(value: Date | null | undefined) {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
 
-// Form baru mendukung prefill dari dokumen asal (?dari=<id>&mode=duplikat):
+// Form baru mendukung prefill dari dokumen asal (?dari=<id>&mode=duplikat)
+// dan dari pengiriman (?dariPengiriman=<id>):
 // - Penawaran -> Pesanan / Penagihan (data pelanggan & produk terbawa, referensi tersimpan).
 // - Pesanan -> Penagihan (data terbawa, referensi tersimpan).
+// - Pengiriman -> Penagihan (data pelanggan & produk dari pesanan asal pengiriman,
+//   referensi = pesanan asal; tanpa piutang/Kas ganda).
 // - Duplikat: tipe sama, salinan dapat diedit sebelum disimpan (nomor baru saat simpan).
 // Hanya PENAGIHAN yang kelak menghasilkan piutang (di API); dokumen lain tanpa Kas.
 export default async function DokumenBaruPage({
@@ -36,7 +45,7 @@ export default async function DokumenBaruPage({
   searchParams,
 }: {
   params: Promise<{ dokumen: string }>;
-  searchParams?: Promise<{ dari?: string; mode?: string }>;
+  searchParams?: Promise<{ dari?: string; mode?: string; dariPengiriman?: string }>;
 }) {
   const { dokumen } = await params;
   const sp = await searchParams;
@@ -46,7 +55,53 @@ export default async function DokumenBaruPage({
   let prefill: DocInitial | null = null;
   let asalLabel = "";
   const dari = sp?.dari?.trim() || "";
+  const dariPengiriman = sp?.dariPengiriman?.trim() || "";
   const duplikat = (sp?.mode || "").toLowerCase() === "duplikat";
+
+  if (!dari && dariPengiriman && meta.tipe === "PENAGIHAN") {
+    const kirim = await prisma.pengirimanPenjualan.findUnique({
+      where: { id: dariPengiriman },
+      include: {
+        pelanggan: true,
+        pesanan: { include: { pelanggan: true } },
+        items: { orderBy: { id: "asc" } },
+      },
+    });
+    if (kirim && kirim.pesanan) {
+      const pesanan = kirim.pesanan;
+      asalLabel = `Dari Pengiriman ${kirim.noPengiriman} (Pesanan ${pesanan.noDokumen} · ${kirim.pelanggan.nama})`;
+      const itemsSumber = kirim.items.length > 0 ? kirim.items : [];
+      prefill = {
+        id: "",
+        header: {
+          pelangganId: kirim.pelangganId,
+          email: kirim.pelanggan.email ?? "",
+          alamat: kirim.alamatPengiriman ?? "",
+          tanggal: todayInput(),
+          jatuhTempo: toYMD(pesanan.jatuhTempo),
+          noRef: kirim.noRefPelanggan ?? pesanan.noRefPelanggan ?? "",
+          syarat: pesanan.syaratPembayaran ?? "",
+          pesan: kirim.pesan ?? pesanan.pesan ?? "",
+          memo: kirim.memo ?? pesanan.memo ?? "",
+          jenis: "HASIL_KEBUN",
+        },
+        items: itemsSumber.map((it, i) => ({
+          key: i + 1,
+          produkId: "",
+          deskripsi: it.deskripsi,
+          kuantitas: String(Number(it.kuantitas)),
+          unit: it.unit,
+          harga: String(Number(it.harga)),
+          diskon: "0",
+        })),
+        lampiran: [],
+        lockedTotal: false,
+        // Rantai dokumen: merujuk pesanan asal (pengiriman sudah tertaut ke pesanan itu).
+        referensiIds: [pesanan.id],
+        pelangganNama: kirim.pelanggan.nama,
+      };
+    }
+  }
 
   if (dari) {
     const sumber = await prisma.dokumenPenjualan.findUnique({

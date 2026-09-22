@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Loader2, Paperclip, Plus, Trash2, X } from "lucide-react";
 import { formatRupiah } from "@/lib/utils";
+import { jatuhTempoDari } from "@/lib/tempo";
 
 type TipeDokumen = "PENAWARAN" | "PESANAN" | "PROFORMA" | "TUKAR_FAKTUR" | "PENAGIHAN";
 
@@ -452,11 +453,26 @@ function LampiranUploader({
   };
 
   return (
-    <div>
-      <span className="text-xs font-medium text-slate-600">Lampiran</span>
-      <input ref={inputRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" className="hidden" onChange={(e) => handleFiles(e.target.files)} />
-      {value.length > 0 && (
-        <ul className="mt-2 space-y-1.5">
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-slate-600">Lampiran</span>
+        <input ref={inputRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" className="hidden" onChange={(e) => handleFiles(e.target.files)} />
+        <Button type="button" variant="outline" size="sm" disabled={uploading} onClick={() => inputRef.current?.click()}>
+          {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
+          {uploading ? "Mengunggah..." : "Tambah lampiran"}
+        </Button>
+      </div>
+      {errors.length > 0 && (
+        <div className="rounded-md bg-red-50 p-2 text-xs text-red-600">
+          <ul className="list-disc space-y-0.5 pl-4">
+            {errors.map((error) => (
+              <li key={error}>{error}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {value.length > 0 ? (
+        <ul className="space-y-1.5">
           {value.map((item) => (
             <li key={item.key} className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50/50 px-3 py-2">
               <div className="flex min-w-0 items-center gap-2 text-xs text-slate-600">
@@ -469,20 +485,9 @@ function LampiranUploader({
             </li>
           ))}
         </ul>
+      ) : (
+        <p className="text-xs text-slate-400">Belum ada lampiran</p>
       )}
-      {errors.length > 0 && (
-        <div className="mt-2 rounded-md bg-red-50 p-2 text-xs text-red-600">
-          <ul className="list-disc space-y-0.5 pl-4">
-            {errors.map((error) => (
-              <li key={error}>{error}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <Button type="button" variant="outline" size="sm" className="mt-2" disabled={uploading} onClick={() => inputRef.current?.click()}>
-        {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
-        {uploading ? "Mengupload..." : "+ Tambah Lampiran"}
-      </Button>
     </div>
   );
 }
@@ -698,6 +703,20 @@ function HeaderFields({
   showNoRef?: boolean;
   showSyarat?: boolean;
 }) {
+  // Pilih syarat -> tanggal jatuh tempo terisi otomatis sesuai durasi tempo.
+  // Ubah tanggal -> jatuh tempo ikut bergeser bila syarat berupa tempo.
+  const pilihSyarat = (s: string) => {
+    set("syarat", s);
+    const jt = jatuhTempoDari(header.tanggal, s);
+    if (jt) set("jatuhTempo", jt);
+  };
+  const ubahTanggal = (tgl: string) => {
+    set("tanggal", tgl);
+    if (header.syarat) {
+      const jt = jatuhTempoDari(tgl, header.syarat);
+      if (jt) set("jatuhTempo", jt);
+    }
+  };
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="sm:col-span-2">
@@ -718,7 +737,7 @@ function HeaderFields({
         <Input value={header.alamat} onChange={(e) => set("alamat", e.target.value)} placeholder="Alamat pelanggan" maxLength={1000} />
       </Field>
       <Field label={tanggalLabel}>
-        <Input type="date" value={header.tanggal} onChange={(e) => set("tanggal", e.target.value)} required />
+        <Input type="date" value={header.tanggal} onChange={(e) => ubahTanggal(e.target.value)} required />
       </Field>
       <Field label={`${tempoLabel}${tempoRequired ? " *" : ""}`}>
         <Input type="date" value={header.jatuhTempo} onChange={(e) => set("jatuhTempo", e.target.value)} required={tempoRequired} />
@@ -730,7 +749,7 @@ function HeaderFields({
       )}
       {showSyarat && (
         <Field label="Syarat pembayaran">
-          <Select value={header.syarat} onChange={(e) => set("syarat", e.target.value)}>
+          <Select value={header.syarat} onChange={(e) => pilihSyarat(e.target.value)}>
             <option value="">Pilih syarat</option>
             {SYARAT_OPTIONS.map((s) => (
               <option key={s} value={s}>
@@ -775,6 +794,9 @@ function PesanMemoLampiran({
 // ================= 1. PENAGIHAN (menghasilkan PIUTANG, tanpa Kas) =================
 export function PenagihanForm({ initial }: { initial?: DocInitial | null }) {
   const f = useDocForm("PENAGIHAN", initial);
+  const bruto = f.items.reduce((s,it)=> s + (Number(it.kuantitas)||0)*(Number(it.harga)||0),0);
+  const subtotal = f.items.reduce((s,it)=> s + hitungBaris(it),0);
+  const pemotongan = Math.round((bruto - subtotal)*100)/100;
   return (
     <DocShell
       title={f.isEdit ? "Ubah Penagihan Penjualan" : "Penagihan Penjualan"}
@@ -801,6 +823,23 @@ export function PenagihanForm({ initial }: { initial?: DocInitial | null }) {
       </p>
       <ItemsTable items={f.items} setItems={f.setItems} locked={f.lockedTotal} />
       <PesanMemoLampiran header={f.header} set={f.set} lampiran={f.lampiran} tambahLampiran={f.tambahLampiran} hapusLampiran={f.hapusLampiran} />
+      <div className="ml-auto w-full max-w-sm space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-sm">
+        <div className="flex items-center justify-between text-slate-600">
+          <span>Subtotal</span>
+          <span className="font-medium tabular-nums text-slate-900">Rp {formatRupiah(subtotal)}</span>
+        </div>
+        <div className="flex items-center justify-between text-slate-600">
+          <span>Pemotongan (diskon per baris)</span>
+          <span className="font-medium tabular-nums text-slate-900">Rp {formatRupiah(pemotongan)}</span>
+        </div>
+        <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-base font-semibold text-slate-900">
+          <span>Total</span>
+          <span className="tabular-nums">Rp {formatRupiah(subtotal)}</span>
+        </div>
+        <p className="text-[11px] leading-relaxed text-slate-400">
+          Belum dibayar: debit 1102 - Piutang, kredit pendapatan otomatis. Kas/Bank bertambah saat pelanggan membayar di Hutang & Piutang.
+        </p>
+      </div>
     </DocShell>
   );
 }
@@ -808,6 +847,9 @@ export function PenagihanForm({ initial }: { initial?: DocInitial | null }) {
 // ================= 2. PROFORMA (dokumen sementara, tanpa piutang/Kas) =================
 export function ProformaForm({ initial }: { initial?: DocInitial | null }) {
   const f = useDocForm("PROFORMA", initial);
+  const bruto = f.items.reduce((s,it)=> s + (Number(it.kuantitas)||0)*(Number(it.harga)||0),0);
+  const subtotal = f.items.reduce((s,it)=> s + hitungBaris(it),0);
+  const pemotongan = Math.round((bruto - subtotal)*100)/100;
   return (
     <DocShell
       title={f.isEdit ? "Ubah Faktur Proforma" : "Faktur Proforma"}
@@ -827,6 +869,23 @@ export function ProformaForm({ initial }: { initial?: DocInitial | null }) {
       />
       <ItemsTable items={f.items} setItems={f.setItems} locked={f.lockedTotal} />
       <PesanMemoLampiran header={f.header} set={f.set} lampiran={f.lampiran} tambahLampiran={f.tambahLampiran} hapusLampiran={f.hapusLampiran} />
+      <div className="ml-auto w-full max-w-sm space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-sm">
+        <div className="flex items-center justify-between text-slate-600">
+          <span>Subtotal</span>
+          <span className="font-medium tabular-nums text-slate-900">Rp {formatRupiah(subtotal)}</span>
+        </div>
+        <div className="flex items-center justify-between text-slate-600">
+          <span>Pemotongan (diskon per baris)</span>
+          <span className="font-medium tabular-nums text-slate-900">Rp {formatRupiah(pemotongan)}</span>
+        </div>
+        <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-base font-semibold text-slate-900">
+          <span>Total</span>
+          <span className="tabular-nums">Rp {formatRupiah(subtotal)}</span>
+        </div>
+        <p className="text-[11px] leading-relaxed text-slate-400">
+          Proforma tidak menghasilkan piutang maupun transaksi Kas & Bank.
+        </p>
+      </div>
     </DocShell>
   );
 }
@@ -834,6 +893,9 @@ export function ProformaForm({ initial }: { initial?: DocInitial | null }) {
 // ================= 4. PESANAN (tanpa piutang/Kas) =================
 export function PesananForm({ initial }: { initial?: DocInitial | null }) {
   const f = useDocForm("PESANAN", initial);
+  const bruto = f.items.reduce((s,it)=> s + (Number(it.kuantitas)||0)*(Number(it.harga)||0),0);
+  const subtotal = f.items.reduce((s,it)=> s + hitungBaris(it),0);
+  const pemotongan = Math.round((bruto - subtotal)*100)/100;
   return (
     <DocShell
       title={f.isEdit ? "Ubah Pesanan Penjualan" : "Pesanan Penjualan"}
@@ -855,6 +917,23 @@ export function PesananForm({ initial }: { initial?: DocInitial | null }) {
       />
       <ItemsTable items={f.items} setItems={f.setItems} locked={f.lockedTotal} />
       <PesanMemoLampiran header={f.header} set={f.set} lampiran={f.lampiran} tambahLampiran={f.tambahLampiran} hapusLampiran={f.hapusLampiran} />
+      <div className="ml-auto w-full max-w-sm space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-sm">
+        <div className="flex items-center justify-between text-slate-600">
+          <span>Subtotal</span>
+          <span className="font-medium tabular-nums text-slate-900">Rp {formatRupiah(subtotal)}</span>
+        </div>
+        <div className="flex items-center justify-between text-slate-600">
+          <span>Pemotongan (diskon per baris)</span>
+          <span className="font-medium tabular-nums text-slate-900">Rp {formatRupiah(pemotongan)}</span>
+        </div>
+        <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-base font-semibold text-slate-900">
+          <span>Total</span>
+          <span className="tabular-nums">Rp {formatRupiah(subtotal)}</span>
+        </div>
+        <p className="text-[11px] leading-relaxed text-slate-400">
+          Pesanan tidak menghasilkan piutang maupun transaksi Kas & Bank.
+        </p>
+      </div>
     </DocShell>
   );
 }
@@ -862,6 +941,9 @@ export function PesananForm({ initial }: { initial?: DocInitial | null }) {
 // ================= 5. PENAWARAN (tanpa piutang/Kas) =================
 export function PenawaranForm({ initial }: { initial?: DocInitial | null }) {
   const f = useDocForm("PENAWARAN", initial);
+  const bruto = f.items.reduce((s,it)=> s + (Number(it.kuantitas)||0)*(Number(it.harga)||0),0);
+  const subtotal = f.items.reduce((s,it)=> s + hitungBaris(it),0);
+  const pemotongan = Math.round((bruto - subtotal)*100)/100;
   return (
     <DocShell
       title={f.isEdit ? "Ubah Penawaran Penjualan" : "Penawaran Penjualan"}
@@ -883,6 +965,23 @@ export function PenawaranForm({ initial }: { initial?: DocInitial | null }) {
       />
       <ItemsTable items={f.items} setItems={f.setItems} locked={f.lockedTotal} />
       <PesanMemoLampiran header={f.header} set={f.set} lampiran={f.lampiran} tambahLampiran={f.tambahLampiran} hapusLampiran={f.hapusLampiran} />
+      <div className="ml-auto w-full max-w-sm space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-sm">
+        <div className="flex items-center justify-between text-slate-600">
+          <span>Subtotal</span>
+          <span className="font-medium tabular-nums text-slate-900">Rp {formatRupiah(subtotal)}</span>
+        </div>
+        <div className="flex items-center justify-between text-slate-600">
+          <span>Pemotongan (diskon per baris)</span>
+          <span className="font-medium tabular-nums text-slate-900">Rp {formatRupiah(pemotongan)}</span>
+        </div>
+        <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-base font-semibold text-slate-900">
+          <span>Total</span>
+          <span className="tabular-nums">Rp {formatRupiah(subtotal)}</span>
+        </div>
+        <p className="text-[11px] leading-relaxed text-slate-400">
+          Penawaran tidak menghasilkan piutang maupun transaksi Kas & Bank.
+        </p>
+      </div>
     </DocShell>
   );
 }
@@ -1091,13 +1190,25 @@ export function TukarFakturForm({ initial }: { initial?: DocInitial | null }) {
           <Input value={alamat} onChange={(e) => setAlamat(e.target.value)} placeholder="Alamat pelanggan" maxLength={1000} />
         </Field>
         <Field label="Tanggal transaksi">
-          <Input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} required />
+          <Input type="date" value={tanggal} onChange={(e) => {
+            const tgl = e.target.value;
+            setTanggal(tgl);
+            if (syarat) {
+              const jt = jatuhTempoDari(tgl, syarat);
+              if (jt) setJatuhTempo(jt);
+            }
+          }} required />
         </Field>
         <Field label="Tanggal jatuh tempo">
           <Input type="date" value={jatuhTempo} onChange={(e) => setJatuhTempo(e.target.value)} />
         </Field>
         <Field label="Syarat pembayaran" className="sm:col-span-2">
-          <Select value={syarat} onChange={(e) => setSyarat(e.target.value)}>
+          <Select value={syarat} onChange={(e) => {
+            const s = e.target.value;
+            setSyarat(s);
+            const jt = jatuhTempoDari(tanggal, s);
+            if (jt) setJatuhTempo(jt);
+          }}>
             <option value="">Pilih syarat</option>
             {SYARAT_OPTIONS.map((s) => (
               <option key={s} value={s}>

@@ -2,13 +2,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Wallet, ArrowLeftRight, Users, Package, Boxes, LogOut, Leaf, BookOpen, Settings, Receipt, FileText, ShoppingBag } from "lucide-react";
+import { LayoutDashboard, Wallet, ArrowLeftRight, Users, Package, Boxes, LogOut, Leaf, BookOpen, Settings, Receipt, FileText, ShoppingBag, Banknote } from "lucide-react";
 
 const keuanganMenu = [
   { label: "Dashboard", href: "/keuangan", icon: LayoutDashboard },
   { label: "Kas & Bank", href: "/keuangan/kas", icon: Wallet },
   { label: "Penjualan", href: "/keuangan/penjualan", icon: Receipt },
   { label: "Pembelian", href: "/keuangan/pembelian", icon: ShoppingBag },
+  { label: "Biaya", href: "/keuangan/biaya", icon: Banknote },
   { label: "Hutang & Piutang", href: "/keuangan/tagihan", icon: ArrowLeftRight },
   { label: "Laporan", href: "/keuangan/laporan", icon: FileText },
 ];

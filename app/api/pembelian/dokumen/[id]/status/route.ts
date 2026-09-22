@@ -6,14 +6,12 @@ import { z } from "zod";
 
 type Params = { params: Promise<{ id: string }> };
 
-// Status dokumen non-penagihan (Pesanan/Penawaran): BELUM_DITAGIH <-> DITUTUP/SELESAI.
-// TERBUKA tetap diterima untuk kompatibilitas data lama.
-// Penagihan tidak diubah lewat sini (status bayarnya milik Tagihan).
+// Status dokumen pembelian: BELUM_DITAGIH <-> SELESAI.
 const schema = z.object({
-  status: z.enum(["BELUM_DITAGIH", "TERBUKA", "DITUTUP", "SELESAI"]),
+  status: z.enum(["BELUM_DITAGIH", "SELESAI"]),
 });
 
-// PATCH /api/penjualan/dokumen/[id]/status - tutup/buka kembali pesanan/penawaran
+// PATCH /api/pembelian/dokumen/[id]/status - tutup/buka kembali dokumen
 export async function PATCH(req: NextRequest, { params }: Params) {
   const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_KEUANGAN"]);
   if (auth instanceof Response) return auth;
@@ -23,16 +21,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const body = await req.json().catch(() => ({}));
     const parsed = schema.parse(body);
 
-    const dokumen = await prisma.dokumenPenjualan.findUnique({
+    const dokumen = await prisma.dokumenPembelian.findUnique({
       where: { id },
       select: { id: true, tipe: true, status: true },
     });
     if (!dokumen) return errorResponse("Dokumen tidak ditemukan", 404);
-    if (dokumen.tipe !== "PESANAN" && dokumen.tipe !== "PENAWARAN") {
-      return errorResponse("Hanya pesanan/penawaran yang bisa ditutup", 400);
-    }
 
-    const updated = await prisma.dokumenPenjualan.update({
+    const updated = await prisma.dokumenPembelian.update({
       where: { id },
       data: { status: parsed.status },
       select: { id: true, tipe: true, noDokumen: true, status: true },

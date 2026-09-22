@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { formatRupiah } from "@/lib/utils";
 
 function formatDate(value: Date | null | undefined) {
   if (!value) return "—";
@@ -12,17 +13,17 @@ function formatDate(value: Date | null | undefined) {
   return d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
 }
 
-// Detail Pengiriman: terhubung ke Pesanan asal, tanpa transaksi keuangan.
-export default async function DetailPengirimanPage({
+// Detail Penerimaan: terhubung ke Pesanan asal, tanpa transaksi keuangan.
+export default async function DetailPengirimanBeliPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const data = await prisma.pengirimanPenjualan.findUnique({
+  const data = await prisma.pengirimanPembelian.findUnique({
     where: { id },
     include: {
-      pelanggan: true,
+      supplier: true,
       pesanan: { select: { id: true, noDokumen: true, tanggal: true, total: true, status: true } },
       items: { orderBy: { id: "asc" } },
       lampiran: { orderBy: { createdAt: "asc" } },
@@ -35,46 +36,46 @@ export default async function DetailPengirimanPage({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <Link
-            href="/keuangan/penjualan?tab=pengiriman"
+            href="/keuangan/pembelian?tab=pengiriman"
             className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"
           >
             <ChevronLeft className="h-3.5 w-3.5" /> Kembali ke Pengiriman
           </Link>
           <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
-            Detail Pengiriman {data.noPengiriman}
+            Detail Penerimaan {data.noPengiriman}
           </h1>
           <p className="mt-1 text-sm text-slate-400">
             Dari Pesanan{" "}
-            <Link href={`/keuangan/penjualan/pesanan/${data.pesanan.id}`} className="text-green-700 hover:underline">
+            <Link href={`/keuangan/pembelian/dokumen/pesanan/${data.pesanan.id}`} className="text-green-700 hover:underline">
               {data.pesanan.noDokumen}
             </Link>{" "}
-            · {data.pelanggan.nama}
+            · {data.supplier.nama}
           </p>
         </div>
         <Link
-          href={`/keuangan/penjualan/penagihan/baru?dariPengiriman=${data.id}`}
+          href={`/keuangan/pembelian/faktur/baru?dariPengiriman=${data.id}`}
           className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
         >
-          Buat Penagihan
+          Buat Faktur
         </Link>
       </div>
 
       <Card className="border-slate-200">
         <CardHeader className="border-b border-slate-100">
-          <CardTitle className="text-base">Informasi Pengiriman</CardTitle>
+          <CardTitle className="text-base">Informasi Penerimaan</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 p-5 sm:grid-cols-3">
           <div>
-            <div className="text-[11px] uppercase tracking-wide text-slate-400">No. Pengiriman</div>
+            <div className="text-[11px] uppercase tracking-wide text-slate-400">No. Penerimaan</div>
             <div className="mt-0.5 text-sm font-medium">{data.noPengiriman}</div>
           </div>
           <div>
-            <div className="text-[11px] uppercase tracking-wide text-slate-400">Pelanggan</div>
-            <div className="mt-0.5 text-sm font-medium">{data.pelanggan.nama}</div>
-            {data.pelanggan.email && <div className="text-xs text-slate-500">{data.pelanggan.email}</div>}
+            <div className="text-[11px] uppercase tracking-wide text-slate-400">Supplier</div>
+            <div className="mt-0.5 text-sm font-medium">{data.supplier.nama}</div>
+            {data.supplier.email && <div className="text-xs text-slate-500">{data.supplier.email}</div>}
           </div>
           <div>
-            <div className="text-[11px] uppercase tracking-wide text-slate-400">Tgl. Pengiriman</div>
+            <div className="text-[11px] uppercase tracking-wide text-slate-400">Tgl. Penerimaan</div>
             <div className="mt-0.5 text-sm">{formatDate(data.tanggalPengiriman ?? data.createdAt)}</div>
           </div>
           <div>
@@ -86,20 +87,12 @@ export default async function DetailPengirimanPage({
             <div className="mt-0.5 text-sm">{data.noTransaksi || "—"}</div>
           </div>
           <div>
-            <div className="text-[11px] uppercase tracking-wide text-slate-400">Kirim Melalui</div>
-            <div className="mt-0.5 text-sm">{data.kirimMelalui || "—"}</div>
-          </div>
-          <div>
-            <div className="text-[11px] uppercase tracking-wide text-slate-400">No. Pelacakan</div>
-            <div className="mt-0.5 text-sm">{data.noPelacakan || "—"}</div>
+            <div className="text-[11px] uppercase tracking-wide text-slate-400">No. Referensi Supplier</div>
+            <div className="mt-0.5 text-sm">{data.noRefSupplier || "—"}</div>
           </div>
           <div>
             <div className="text-[11px] uppercase tracking-wide text-slate-400">Gudang</div>
             <div className="mt-0.5 text-sm">{data.gudang || "—"}</div>
-          </div>
-          <div>
-            <div className="text-[11px] uppercase tracking-wide text-slate-400">No. Referensi Pelanggan</div>
-            <div className="mt-0.5 text-sm">{data.noRefPelanggan || "—"}</div>
           </div>
           {data.alamatPengiriman && (
             <div className="sm:col-span-3">
@@ -112,7 +105,7 @@ export default async function DetailPengirimanPage({
 
       <Card className="border-slate-200">
         <CardHeader className="border-b border-slate-100">
-          <CardTitle className="text-base">Produk Dikirim</CardTitle>
+          <CardTitle className="text-base">Produk Diterima</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -136,7 +129,8 @@ export default async function DetailPengirimanPage({
             </Table>
           </div>
           <div className="border-t border-slate-100 px-5 py-3 text-[11px] text-slate-400">
-            Pengiriman tidak mencatat pemasukan — piutang baru terbentuk saat dibuat Penagihan.
+            Penerimaan tidak mencatat utang — utang baru terbentuk saat Faktur dibuat. Nilai barang Rp{" "}
+            {formatRupiah(data.items.reduce((s, it) => s + Number(it.jumlah), 0))} hanya informasi.
           </div>
         </CardContent>
       </Card>
