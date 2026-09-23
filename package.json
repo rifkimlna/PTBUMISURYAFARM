@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx prisma/seed.ts",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "storage:verify": "node scripts/verify-storage.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
