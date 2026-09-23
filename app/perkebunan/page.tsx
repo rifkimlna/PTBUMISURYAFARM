@@ -37,15 +37,15 @@ export default async function PertanianDashboard() {
 
   return (
     <div className="space-y-6 sm:space-y-8 min-w-0">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 sm:gap-4">
-        <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900">
+      <div className="flex flex-row items-center justify-between gap-2 sm:gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-base sm:text-2xl font-semibold tracking-tight text-slate-900 truncate">
             Perkebunan
           </h1>
-          <p className="mt-1 text-sm text-slate-400">Ringkasan kebun</p>
+          <p className="mt-0.5 sm:mt-1 text-[11px] sm:text-sm text-slate-400">Ringkasan kebun</p>
         </div>
-        <Link href="/perkebunan/scan" className="shrink-0">
-          <Button className="rounded-full px-5 w-full sm:w-auto cursor-pointer">
+        <Link href="/perkebunan/scan" className="shrink-0 ml-auto">
+          <Button size="sm" className="rounded-full bg-green-700 hover:bg-green-800 h-9 px-3.5 text-xs sm:h-10 sm:px-5 sm:text-sm cursor-pointer shadow-sm">
             <ScanLine className="h-3.5 w-3.5" /> Scan
           </Button>
         </Link>

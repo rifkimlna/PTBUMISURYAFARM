@@ -42,8 +42,8 @@ export default async function RiwayatPage({ searchParams }: { searchParams: Prom
   return (
     <div className="space-y-4 sm:space-y-6 min-w-0">
       <div className="min-w-0">
-        <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-slate-900">Riwayat</h1>
-        <p className="text-xs sm:text-sm text-slate-500">{total} catatan</p>
+        <h1 className="text-base sm:text-xl font-semibold tracking-tight text-slate-900 truncate">Riwayat</h1>
+        <p className="text-[11px] sm:text-sm text-slate-500">{total} catatan</p>
       </div>
 
       <form method="get" action="/perkebunan/riwayat" className="flex gap-2">

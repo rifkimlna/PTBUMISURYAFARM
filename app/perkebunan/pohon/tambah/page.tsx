@@ -299,7 +299,7 @@ export default function TambahPohonPage() {
             </div>
 
             <div className="sticky bottom-0 -mx-1 px-1 pb-1 pt-2 bg-white">
-            <Button type="submit" disabled={loading} className="w-full bg-green-700 hover:bg-green-800 h-12 text-base rounded-full">
+            <Button type="submit" disabled={loading} className="w-full bg-green-700 hover:bg-green-800 h-11 text-sm rounded-full cursor-pointer">
               {loading ? "Menyimpan..." : "Simpan"}
             </Button>
             </div>

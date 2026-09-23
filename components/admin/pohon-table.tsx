@@ -82,75 +82,66 @@ function HapusButton({ id, className }: { id: string; className?: string }) {
   );
 }
 
-// Mobile card - minimalis, auto layout HP
+// Kartu mobile — ringkas horizontal, foto hanya thumbnail kecil
 function PohonCard({ p, onQr }: { p: Pohon; onQr: (id: string) => void }) {
   const usia = hitungUsia(p.tanggalTanam);
-  const tgl = new Date(p.tanggalTanam).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
   const hasil = p.hasilPanen != null && p.hasilPanen !== "" && Number(p.hasilPanen) > 0 ? `${Number(p.hasilPanen).toFixed(1)} KG` : "Belum panen";
   const riwayatCount = p._count?.riwayat ?? p.riwayatCount ?? 0;
   const hasGeotag = isRealFotoUrl(p.fotoGeotagUrl);
+  const aksi = "flex flex-col items-center justify-center gap-0.5 h-11 rounded-xl text-[10px] font-medium cursor-pointer border-slate-200";
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm flex flex-col">
-      {/* Foto hero - auto read */}
-      {hasGeotag ? (
-        <a href={p.fotoGeotagUrl!} target="_blank" className="block relative">
-          <img src={p.fotoGeotagUrl!} alt={p.namaPohon || p.id} className="h-44 w-full object-cover" loading="lazy" />
-          <span className={`absolute left-3 top-3 text-xs px-2.5 py-1 rounded-full font-medium border bg-white ${p.geotagSource === "GPS" ? "text-green-700 border-green-200" : p.geotagSource === "EXIF" ? "text-blue-700 border-blue-200" : "text-amber-700 border-amber-200"}`}>{p.geotagSource || "GPS"} • Geotag ✓</span>
-          <span className="absolute right-3 top-3"><StatusBadge s={p.status} /></span>
-        </a>
-      ) : (
-        <div className="h-24 w-full bg-slate-50 flex flex-col items-center justify-center gap-1 border-b border-slate-100">
-          <span className="text-xs font-medium text-slate-500">Belum ada foto</span>
-        </div>
-      )}
-      <div className="p-4 space-y-3 flex-1 flex flex-col">
-        <div className="min-w-0">
-          <div className="font-mono text-xs font-bold tracking-tight text-slate-500">{p.id}</div>
-          <div className="text-base font-semibold tracking-tight text-slate-900 truncate leading-tight">{p.namaPohon || p.jenis || p.varietas}</div>
-          <div className="text-sm text-slate-600 flex items-center gap-1.5 mt-0.5 flex-wrap">
-            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium">{p.lokasiBlok}</span>
-            <span className="text-xs text-slate-500">{p.jenis || p.varietas} • {usia}</span>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2.5">
-            <div className="text-xs text-emerald-700 font-medium">Hasil Panen</div>
-            <div className="text-sm font-semibold text-emerald-900 tracking-tight">{hasil}</div>
-            <div className="text-xs text-emerald-600">{tgl}</div>
-          </div>
-          <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5">
-            <div className="text-xs text-slate-500 font-medium">Riwayat</div>
-            <div className="text-sm font-semibold text-slate-900">{riwayatCount} entri</div>
-            <div className="text-xs text-slate-500">tindakan tercatat</div>
-          </div>
-        </div>
-        {p.koordinat && (
-          <a href={`https://maps.google.com/?q=${encodeURIComponent(p.koordinat)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-emerald-700 font-medium hover:underline">
-            <MapPin className="h-4 w-4" /> {p.koordinat}
+    <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="flex gap-3 min-w-0">
+        {hasGeotag ? (
+          <a href={p.fotoGeotagUrl!} target="_blank" className="relative block h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
+            <img src={p.fotoGeotagUrl!} alt={p.namaPohon || p.id} className="h-full w-full object-cover" loading="lazy" />
           </a>
-        )}
-        {(p.pemupukan || p.pengobatan) && (
-          <div className="text-sm text-slate-600 space-y-1 border-t border-slate-100 pt-3">
-            {p.pemupukan && <div className="truncate"><span className="font-medium text-slate-700">Pupuk:</span> {p.pemupukan}</div>}
-            {p.pengobatan && <div className="truncate"><span className="font-medium text-slate-700">Obat:</span> {p.pengobatan}</div>}
+        ) : (
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-center text-[10px] font-medium text-slate-400">
+            Tanpa<br />foto
           </div>
         )}
-        <div className="grid grid-cols-4 gap-2 pt-2 mt-auto">
-          <Button type="button" variant="outline" size="sm" className="rounded-full text-xs h-11 cursor-pointer border-slate-200" onClick={() => onQr(p.id)}>
-            <QrCode className="h-4 w-4" /> QR
-          </Button>
-          <Link href={`/pohon/${p.id}`} target="_blank" className="block">
-            <Button variant="outline" size="sm" className="w-full rounded-full h-11 cursor-pointer border-slate-200" type="button">
-              <Eye className="h-4 w-4" />
-            </Button>
-          </Link>
-          <Link href={`/perkebunan/pohon/${p.id}/edit`} className="block">
-            <Button variant="outline" size="sm" className="w-full rounded-full h-11 cursor-pointer border-slate-200" type="button">
-              <Pencil className="h-4 w-4" />
-            </Button>
-          </Link>
-          <HapusButton id={p.id} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <div className="font-mono text-[11px] font-bold tracking-tight text-slate-500 truncate">{p.id}</div>
+            <span className="ml-auto shrink-0"><StatusBadge s={p.status} /></span>
+          </div>
+          <div className="text-sm font-semibold tracking-tight text-slate-900 truncate leading-snug">{p.namaPohon || p.jenis || p.varietas}</div>
+          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-500 truncate">
+            <span className="shrink-0 rounded-full bg-slate-100 px-2 py-px font-medium">{p.lokasiBlok}</span>
+            <span className="truncate">{p.jenis || p.varietas} • {usia}</span>
+          </div>
+          <div className="mt-1 flex items-center gap-2 text-[11px] truncate">
+            <span className="font-semibold text-emerald-700 truncate">{hasil}</span>
+            <span className="text-slate-300 shrink-0">|</span>
+            <span className="text-slate-500 shrink-0">{riwayatCount} riwayat</span>
+            {p.koordinat && (
+              <>
+                <span className="text-slate-300 shrink-0">|</span>
+                <a href={`https://maps.google.com/?q=${encodeURIComponent(p.koordinat)}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-w-0 items-center gap-0.5 font-medium text-emerald-700">
+                  <MapPin className="h-3 w-3 shrink-0" />
+                  <span className="truncate">Lokasi</span>
+                </a>
+              </>
+            )}
+          </div>
         </div>
+      </div>
+      <div className="grid grid-cols-4 gap-1.5 pt-2.5 mt-2.5 border-t border-slate-50">
+        <Button type="button" variant="outline" size="sm" className={aksi} onClick={() => onQr(p.id)}>
+          <QrCode className="h-4 w-4" /> QR
+        </Button>
+        <Link href={`/pohon/${p.id}`} target="_blank" className="block">
+          <Button variant="outline" size="sm" className={`${aksi} w-full`} type="button">
+            <Eye className="h-4 w-4" /> Lihat
+          </Button>
+        </Link>
+        <Link href={`/perkebunan/pohon/${p.id}/edit`} className="block">
+          <Button variant="outline" size="sm" className={`${aksi} w-full`} type="button">
+            <Pencil className="h-4 w-4" /> Edit
+          </Button>
+        </Link>
+        <HapusButton id={p.id} className={`${aksi} w-full text-red-600 hover:text-red-700 hover:bg-red-50`} />
       </div>
     </div>
   );

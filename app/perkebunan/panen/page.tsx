@@ -66,12 +66,15 @@ export default async function PanenPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="space-y-4 sm:space-y-6 min-w-0">
-      <div className="min-w-0">
-        <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-slate-900">Panen</h1>
-        <p className="text-xs sm:text-sm text-slate-500">{total} catatan • {totalKg.toLocaleString("id-ID", { maximumFractionDigits: 1 })} KG</p>
+      <div className="flex flex-row items-center justify-between gap-2 sm:gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-base sm:text-xl font-semibold tracking-tight text-slate-900 truncate">Panen</h1>
+          <p className="text-[11px] sm:text-sm text-slate-500 truncate">{total} catatan • {totalKg.toLocaleString("id-ID", { maximumFractionDigits: 1 })} KG</p>
+        </div>
+        <div className="shrink-0 ml-auto">
+          <TambahPanenForm />
+        </div>
       </div>
-
-      <TambahPanenForm />
 
       <form method="get" action="/perkebunan/panen" className="flex flex-col sm:flex-row gap-2">
         <Input type="month" name="bulan" defaultValue={bulan === "semua" ? "" : bulan} className="h-11 rounded-full bg-white sm:max-w-[200px]" />

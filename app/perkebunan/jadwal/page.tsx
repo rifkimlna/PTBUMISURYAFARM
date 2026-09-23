@@ -57,12 +57,15 @@ export default async function JadwalPage({ searchParams }: { searchParams: Promi
 
   return (
     <div className="space-y-4 sm:space-y-6 min-w-0">
-      <div className="min-w-0">
-        <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-slate-900">Jadwal Perawatan</h1>
-        <p className="text-xs sm:text-sm text-slate-500">{total} jadwal</p>
+      <div className="flex flex-row items-center justify-between gap-2 sm:gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-base sm:text-xl font-semibold tracking-tight text-slate-900 truncate">Jadwal Perawatan</h1>
+          <p className="text-[11px] sm:text-sm text-slate-500">{total} jadwal</p>
+        </div>
+        <div className="shrink-0 ml-auto">
+          <TambahJadwalForm bloks={blokRows.map((b) => b.nama)} />
+        </div>
       </div>
-
-      <TambahJadwalForm bloks={blokRows.map((b) => b.nama)} />
 
       <form method="get" action="/perkebunan/jadwal" className="flex gap-2">
         <select name="status" defaultValue={status} className="h-11 rounded-full border border-slate-200 bg-white px-3 text-sm flex-1 sm:flex-none">

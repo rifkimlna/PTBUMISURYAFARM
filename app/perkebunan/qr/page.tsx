@@ -27,8 +27,8 @@ export default async function QrPage({ searchParams }: { searchParams: Promise<{
   return (
     <div className="space-y-4 sm:space-y-6 min-w-0">
       <div className="min-w-0">
-        <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-slate-900">Cetak QR</h1>
-        <p className="text-xs sm:text-sm text-slate-500">
+        <h1 className="text-base sm:text-xl font-semibold tracking-tight text-slate-900 truncate">Cetak QR</h1>
+        <p className="text-[11px] sm:text-sm text-slate-500">
           Tempel di batang pohon • Scan membuka halaman pohon
         </p>
       </div>

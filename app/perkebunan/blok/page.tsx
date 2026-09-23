@@ -11,12 +11,15 @@ export default async function BlokPage() {
 
   return (
     <div className="space-y-4 sm:space-y-6 min-w-0">
-      <div className="min-w-0">
-        <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-slate-900">Blok</h1>
-        <p className="text-xs sm:text-sm text-slate-500">{bloks.length} blok • 120 Ha</p>
+      <div className="flex flex-row items-center justify-between gap-2 sm:gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-base sm:text-xl font-semibold tracking-tight text-slate-900 truncate">Blok</h1>
+          <p className="text-[11px] sm:text-sm text-slate-500">{bloks.length} blok • 120 Ha</p>
+        </div>
+        <div className="shrink-0 ml-auto">
+          <TambahBlokForm />
+        </div>
       </div>
-
-      <TambahBlokForm />
 
       <Card className="border-slate-200">
         <CardHeader>

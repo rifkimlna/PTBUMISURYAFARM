@@ -44,7 +44,7 @@ export function TambahPanenForm() {
 
   if (!open) {
     return (
-      <Button onClick={() => setOpen(true)} className="rounded-full bg-green-700 hover:bg-green-800 w-full sm:w-auto">
+      <Button size="sm" onClick={() => setOpen(true)} className="rounded-full bg-green-700 hover:bg-green-800 h-9 px-3.5 text-xs sm:h-10 sm:px-4 sm:text-sm cursor-pointer shadow-sm">
         + Catat Panen
       </Button>
     );

@@ -22,9 +22,9 @@ export default async function EditPohonMasterPage({ params }: { params: Promise<
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-slate-900">Edit Pohon — {pohon.id}</h1>
-        <p className="text-xs sm:text-sm text-slate-500">
+      <div className="min-w-0">
+        <h1 className="text-base sm:text-xl font-semibold tracking-tight text-slate-900 truncate">Edit Pohon — {pohon.id}</h1>
+        <p className="text-[11px] sm:text-sm text-slate-500">
           Ubah data pohon
         </p>
       </div>
