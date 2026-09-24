@@ -4,8 +4,6 @@ import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { CalendarDays, Clock, FileText, PackageSearch, Plus, Search, Wallet, X } from "lucide-react";
@@ -53,12 +51,6 @@ function formatDate(value: string | null) {
   return d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
 }
 
-function displayStatus(status: BiayaRow["status"]): { label: string; variant: "sehat" | "info" | "warning" } {
-  if (status === "LUNAS") return { label: "Dibayar", variant: "sehat" };
-  if (status === "LUNAS_SEBAGIAN") return { label: "Dibayar Sebagian", variant: "info" };
-  return { label: "Belum Dibayar", variant: "warning" };
-}
-
 function SummaryCard({
   label,
   value,
@@ -95,18 +87,16 @@ function SummaryCard({
 
 export function BiayaContent({ summary, rows }: { summary: BiayaSummary; rows: BiayaRow[] }) {
   const [tab, setTab] = useState<TabKey>("biaya");
-  const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
   const [detailRow, setDetailRow] = useState<BiayaRow | null>(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
-      if (status && r.status !== status) return false;
       if (q && !`${r.nomor} ${r.kategori} ${r.penerima}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [rows, status, search]);
+  }, [rows, search]);
 
   return (
     <div className="space-y-6">
@@ -166,12 +156,6 @@ export function BiayaContent({ summary, rows }: { summary: BiayaSummary; rows: B
         <Card className="border-slate-200">
           <CardContent className="p-0">
             <div className="flex flex-col gap-2 border-b border-slate-100 p-4 sm:flex-row">
-              <Select value={status} onChange={(e) => setStatus(e.target.value)} className="sm:max-w-56" aria-label="Filter status">
-                <option value="">Semua Status</option>
-                <option value="BELUM_LUNAS">Belum Dibayar</option>
-                <option value="LUNAS_SEBAGIAN">Dibayar Sebagian</option>
-                <option value="LUNAS">Dibayar</option>
-              </Select>
               <div className="relative sm:max-w-xs sm:flex-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <Input
@@ -202,7 +186,6 @@ export function BiayaContent({ summary, rows }: { summary: BiayaSummary; rows: B
                     <TableHead>Nomor</TableHead>
                     <TableHead>Kategori</TableHead>
                     <TableHead>Penerima</TableHead>
-                    <TableHead>Status</TableHead>
                     <TableHead className="text-right">Sisa Tagihan</TableHead>
                     <TableHead className="text-right">Total</TableHead>
                     <TableHead>Tags</TableHead>
@@ -212,7 +195,7 @@ export function BiayaContent({ summary, rows }: { summary: BiayaSummary; rows: B
                 <TableBody>
                   {filtered.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="py-10 text-center">
+                      <TableCell colSpan={8} className="py-10 text-center">
                         <div className="flex flex-col items-center gap-2">
                           <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-400">
                             <PackageSearch className="h-5 w-5" />
@@ -225,7 +208,6 @@ export function BiayaContent({ summary, rows }: { summary: BiayaSummary; rows: B
                     </TableRow>
                   ) : (
                     filtered.map((r) => {
-                      const st = displayStatus(r.status);
                       return (
                         <TableRow key={r.id}>
                           <TableCell className="text-xs text-slate-500">{formatDate(r.tanggal)}</TableCell>
@@ -241,11 +223,6 @@ export function BiayaContent({ summary, rows }: { summary: BiayaSummary; rows: B
                           </TableCell>
                           <TableCell className="text-sm text-slate-700">{r.kategori}</TableCell>
                           <TableCell className="text-sm text-slate-700">{r.penerima}</TableCell>
-                          <TableCell>
-                            <Badge variant={st.variant} className="text-[11px]">
-                              {st.label}
-                            </Badge>
-                          </TableCell>
                           <TableCell className="text-right text-sm font-medium tracking-tight">
                             {r.sisa === 0 ? <span className="text-slate-300">—</span> : `Rp ${formatRupiah(r.sisa)}`}
                           </TableCell>
@@ -292,7 +269,6 @@ export function BiayaContent({ summary, rows }: { summary: BiayaSummary; rows: B
                     <TableHead>Nomor</TableHead>
                     <TableHead>Kategori</TableHead>
                     <TableHead>Penerima</TableHead>
-                    <TableHead>Status</TableHead>
                     <TableHead className="text-right">Sisa Tagihan</TableHead>
                     <TableHead className="text-right">Total</TableHead>
                     <TableHead>Tags</TableHead>
@@ -301,7 +277,7 @@ export function BiayaContent({ summary, rows }: { summary: BiayaSummary; rows: B
                 </TableHeader>
                 <TableBody>
                   <TableRow>
-                    <TableCell colSpan={9} className="py-10 text-center">
+                    <TableCell colSpan={8} className="py-10 text-center">
                       <div className="flex flex-col items-center gap-2">
                         <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-400">
                           <FileText className="h-5 w-5" />
@@ -338,14 +314,6 @@ export function BiayaContent({ summary, rows }: { summary: BiayaSummary; rows: B
                 <div>
                   <div className="text-[11px] uppercase tracking-wide text-slate-400">Kategori</div>
                   <div>{detailRow.kategori}</div>
-                </div>
-                <div>
-                  <div className="text-[11px] uppercase tracking-wide text-slate-400">Status</div>
-                  <div>
-                    <Badge variant={displayStatus(detailRow.status).variant} className="text-[11px]">
-                      {displayStatus(detailRow.status).label}
-                    </Badge>
-                  </div>
                 </div>
                 <div>
                   <div className="text-[11px] uppercase tracking-wide text-slate-400">Tags</div>

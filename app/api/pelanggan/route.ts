@@ -3,6 +3,7 @@ import { z, ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAuthAndRole, getSessionFromRequest } from "@/lib/auth";
 import { createPelangganSchema } from "@/lib/validations/penjualanValidation";
+import { ensureKontakForPelanggan } from "@/lib/kontak-sync";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 
 const querySchema = z.object({
@@ -60,6 +61,19 @@ export async function POST(req: NextRequest) {
         alamat: parsed.alamat?.trim() || null,
       },
     });
+
+    // Dua arah: pelanggan dari Penjualan otomatis menjadi Kontak PELANGGAN
+    // (best-effort; kegagalan sinkron tidak menggagalkan tambah pelanggan).
+    try {
+      await ensureKontakForPelanggan(prisma, {
+        nama: pelanggan.nama,
+        email: pelanggan.email,
+        telepon: pelanggan.telepon,
+        alamat: pelanggan.alamat,
+      });
+    } catch {
+      // abaikan
+    }
 
     return successResponse(pelanggan, "Pelanggan berhasil ditambahkan", 201);
   } catch (e) {

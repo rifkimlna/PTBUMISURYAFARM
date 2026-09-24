@@ -69,6 +69,13 @@ enum StatusTagihan {
   LUNAS
 }
 
+enum TipeKontak {
+  PELANGGAN
+  SUPPLIER
+  KARYAWAN
+  LAINNYA
+}
+
 enum SumberDana {
   KAS
   BANK
@@ -267,9 +274,35 @@ model Aset {
   jumlah            Int      @default(1)
   kategori          String // kategori COA aset, ex: Tanah, Mesin & Peralatan Pertanian/Peternakan
   kondisi           String // ex: Baik, Rusak Ringan, Rusak Berat
-  status            String   @default("Aktif") // status penggunaan/keberadaan aset
+  status            String   @default("Aktif") // status penggunaan lama (dipertahankan apa adanya)
   nilaiAset         Decimal  @db.Decimal(15, 2)
   tanggalPerolehan  DateTime? // tanggal perolehan aset
+  // --- Aset Tetap (lifecycle baru; kolom lama di atas tidak diubah) ---
+  statusAset        String   @default("AKTIF") // TERTUNDA | AKTIF | DIJUAL | DILEPAS
+  deskripsi         String?  @db.Text
+  tanggalAkuisisi   DateTime?
+  biayaAkuisisi     Decimal? @db.Decimal(15, 2) // total biaya perolehan
+  akunAset          String?  // kode COA aset tetap, ex: 1203
+  akunKredit        String?  // kode COA kredit, ex: 1101 / 2101
+  tags              String?
+  noTransaksiAset   String?
+  // Jurnal akuisisi yang dibuat form Tambah Aset (id polos, tanpa FK agar
+  // modul Kas & Bank / Tagihan tidak tersentuh strukturnya).
+  transaksiKasId    String?
+  tagihanId         String?
+  // --- Penyusutan (dihitung, belum dijurnal: akun akumulasi belum ada di COA) ---
+  metodeSusut       String?  // NON_DEP | GARIS_LURUS | SALDO_MENURUN
+  masaManfaatBulan  Int?
+  nilaiResidu       Decimal? @db.Decimal(15, 2)
+  akunBebanSusut    String?  // default 5408 - Beban Penyusutan Aset Tetap
+  akunAkumulasi     String?  // teks bebas; COA akumulasi belum tersedia
+  tanggalMulaiSusut DateTime?
+  // --- Pelepasan (jual/lepas dicatat, tanpa Kas otomatis) ---
+  tanggalLepas      DateTime?
+  hargaJual         Decimal? @db.Decimal(15, 2)
+  noTransaksiLepas  String?
+  caraLepas         String?  // DIJUAL | DILEPAS
+  keteranganLepas   String?  @db.Text
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -372,6 +405,12 @@ model PersediaanBarang {
   satuan          String // kg, liter, pcs, karung
   hargaSatuan     Decimal  @db.Decimal(15, 2)
   keterangan      String? @db.Text
+  // --- Modul Produk (opsional, backward compat; form COA disembunyikan dari user) ---
+  barcode         String?  @unique // kode batang / SKU tambahan
+  tipeProduk      String?  // BARANG (stok terlacak) | JASA (tanpa stok); null = BARANG
+  hargaBeli       Decimal? @db.Decimal(15, 2)
+  hargaJual       Decimal? @db.Decimal(15, 2)
+  batasMinimum    Int      @default(0) // ambang "segera habis" per produk
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -388,12 +427,30 @@ model RiwayatStok {
   jenis      JenisStok
   jumlah     Int
   keterangan String?        @db.Text
+  sumber     String? // asal catatan: PENYESUAIAN (opname) | PEMBELIAN | MANUAL; null = data lama
   tanggal    DateTime       @default(now())
   createdAt  DateTime       @default(now())
 
   @@index([barangId])
   @@index([tanggal])
   @@map("riwayat_stok")
+}
+
+// ===================== MODUL PRODUK: GUDANG =====================
+// Master gudang sederhana PT BST (tanpa Transfer Gudang).
+// Dipakai sebagai pilihan pada transaksi Pembelian/Penjualan tahap berikut;
+// saat ini pilihan gudang pada dokumen masih teks bebas (backward compat).
+model Gudang {
+  id        String   @id @default(cuid())
+  kode      String   @unique // ex: GDG-001 (otomatis)
+  nama      String
+  alamat    String?  @db.Text
+  status    String   @default("AKTIF") // AKTIF | NONAKTIF
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@map("gudang")
 }
 
 model Panen {
@@ -617,6 +674,42 @@ model Supplier {
 
   @@index([nama])
   @@map("supplier")
+}
+
+// ===================== MASTER KONTAK =====================
+// Master data terpadu: Pelanggan (dipakai Penjualan), Supplier (dipakai
+// Pembelian), Karyawan (internal, satu-satunya sumber data karyawan),
+// Lainnya. Model Pelanggan / Supplier yang sudah ada TIDAK diubah agar modul
+// berjalan tidak terganggu; Kontak dirancang sebagai master bersama.
+// Model Karyawan / RiwayatGaji lawas DIPERTAHANKAN hanya sebagai arsip baca
+// (riwayat gaji + statistik lama) — tulis baru karyawan via Kontak.
+// Field khusus karyawan (kodeKaryawan s/d jenisKelamin) hanya diisi bila
+// tipe = KARYAWAN.
+model Kontak {
+  id        String    @id @default(cuid())
+  nama      String // nama panggilan / nama kontak
+  tipe      TipeKontak
+  perusahaan String?
+  email     String?
+  noHp      String? // nomor handphone
+  noTelepon String? // nomor telepon
+  alamat    String?   @db.Text
+  catatan   String?   @db.Text
+  // --- Khusus Karyawan ---
+  kodeKaryawan String?        @unique // ID karyawan ex: EMP-001 (unik global)
+  jabatan      String?
+  statusKerja  StatusKaryawan?
+  lokasiKerja  String?
+  tanggalMasuk DateTime?
+  gajiPokok    Decimal?       @db.Decimal(15, 2)
+  tanggalLahir DateTime?
+  jenisKelamin JenisKelamin?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([tipe])
+  @@index([nama])
+  @@map("kontak")
 }
 
 model FakturPembelian {
