@@ -86,7 +86,7 @@ function HapusButton({ id, className }: { id: string; className?: string }) {
 function PohonCard({ p, onQr }: { p: Pohon; onQr: (id: string) => void }) {
   const usia = hitungUsia(p.tanggalTanam);
   const tgl = new Date(p.tanggalTanam).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
-  const hasil = p.hasilPanen != null && p.hasilPanen !== "" ? `${Number(p.hasilPanen).toFixed(1)} KG` : "Belum panen";
+  const hasil = p.hasilPanen != null && p.hasilPanen !== "" && Number(p.hasilPanen) > 0 ? `${Number(p.hasilPanen).toFixed(1)} KG` : "Belum panen";
   const riwayatCount = p._count?.riwayat ?? p.riwayatCount ?? 0;
   const hasGeotag = isRealFotoUrl(p.fotoGeotagUrl);
   return (
@@ -202,7 +202,7 @@ export function PohonTable({ data }: { data: Pohon[] }) {
                   const no = idx + 1;
                   const usia = hitungUsia(p.tanggalTanam);
                   const tgl = new Date(p.tanggalTanam).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
-                  const hasil = p.hasilPanen != null && p.hasilPanen !== "" ? `${Number(p.hasilPanen).toFixed(1)} KG` : "-";
+                  const hasil = p.hasilPanen != null && p.hasilPanen !== "" && Number(p.hasilPanen) > 0 ? `${Number(p.hasilPanen).toFixed(1)} KG` : "-";
                   const riwayatCount = p._count?.riwayat ?? p.riwayatCount ?? 0;
                   const koordinat = p.koordinat || "-";
                   return (

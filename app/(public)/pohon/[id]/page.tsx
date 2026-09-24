@@ -88,7 +88,7 @@ export default async function PublicPohonPage({ params }: { params: Promise<{ id
           </div>
           <div className="rounded-2xl bg-green-700 px-4 py-3.5 text-white">
             <div className="text-[11px] font-medium tracking-wide text-green-100">PANEN</div>
-            <div className="mt-1 text-sm font-semibold">{p.hasilPanen != null ? `${Number(p.hasilPanen).toFixed(1)} KG` : "Belum panen"}</div>
+            <div className="mt-1 text-sm font-semibold">{p.hasilPanen != null && Number(p.hasilPanen) > 0 ? `${Number(p.hasilPanen).toFixed(1)} KG` : "Belum panen"}</div>
           </div>
         </div>
 

@@ -53,48 +53,50 @@ export async function GET(req: NextRequest) {
       return successResponse({ type, items });
     }
 
-    // Blok bar - sum hasilPanen per lokasiBlok
+    // Blok bar - sum Panen.jumlahKg per lokasiBlok (sumber tunggal: tabel Panen)
     if (type === "blok") {
-      const rows = await prisma.pohon.groupBy({
-        by: ["lokasiBlok"],
-        _sum: { hasilPanen: true },
-        _count: { lokasiBlok: true },
-      });
+      const rows = await prisma.$queryRaw<{ blok: string; kg: number; pohon: number; n: number }[]>`
+        SELECT p."lokasiBlok" AS blok,
+               COALESCE(SUM(pn."jumlahKg"), 0)::float AS kg,
+               COUNT(DISTINCT pn."pohonId")::int AS pohon,
+               COUNT(pn.id)::int AS n
+        FROM panen pn JOIN pohon p ON p.id = pn."pohonId"
+        GROUP BY 1 ORDER BY kg DESC`;
       const items = rows
         .map((r) => ({
-          key: r.lokasiBlok,
-          label: r.lokasiBlok,
-          value: Number(r._sum.hasilPanen ?? 0),
-          count: r._count.lokasiBlok,
+          key: r.blok,
+          label: r.blok,
+          value: Number(r.kg ?? 0),
+          count: Number(r.pohon ?? 0),
         }))
         .sort((a, b) => b.value - a.value);
       return successResponse({ type, items });
     }
 
-    // Jenis bar - sum hasilPanen per jenis
+    // Jenis bar - sum Panen.jumlahKg per jenis (sumber tunggal: tabel Panen)
     if (type === "jenis") {
-      const rows = await prisma.pohon.groupBy({
-        by: ["jenis"],
-        _sum: { hasilPanen: true },
-        _count: { jenis: true },
-      });
+      const rows = await prisma.$queryRaw<{ jenis: string | null; kg: number; pohon: number; n: number }[]>`
+        SELECT COALESCE(p.jenis, 'Tidak Diketahui') AS jenis,
+               COALESCE(SUM(pn."jumlahKg"), 0)::float AS kg,
+               COUNT(DISTINCT pn."pohonId")::int AS pohon,
+               COUNT(pn.id)::int AS n
+        FROM panen pn JOIN pohon p ON p.id = pn."pohonId"
+        GROUP BY 1 ORDER BY kg DESC`;
       const items = rows
         .map((r) => ({
           key: r.jenis ?? "Tidak Diketahui",
           label: r.jenis ?? "Tidak Diketahui",
-          value: Number(r._sum.hasilPanen ?? 0),
-          count: r._count.jenis,
+          value: Number(r.kg ?? 0),
+          count: Number(r.pohon ?? 0),
         }))
         .sort((a, b) => b.value - a.value);
       return successResponse({ type, items });
     }
 
-    // Trend - sum Panen.jumlahKg per periode (fallback to Pohon.hasilPanen if Panen empty)
-    // Use Panen table if exists
+    // Trend - sum Panen.jumlahKg per periode (sumber tunggal: tabel Panen, tanpa fallback Pohon)
     const now = startOfDay(new Date());
     const latestPanen = await prisma.panen.findFirst({ orderBy: { tanggalPanen: "desc" }, select: { tanggalPanen: true } });
-    const latestPohon = await prisma.pohon.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } });
-    const refDate = latestPanen ? startOfDay(latestPanen.tanggalPanen) : latestPohon ? startOfDay(latestPohon.updatedAt) : now;
+    const refDate = latestPanen ? startOfDay(latestPanen.tanggalPanen) : now;
     const today = refDate > now ? refDate : now;
 
     const buckets: string[] = [];
@@ -148,7 +150,7 @@ export async function GET(req: NextRequest) {
           })()
         : new Date(Number(lastKey.slice(0, 4)), Number(lastKey.slice(5, 7)), 0, 23, 59, 59, 999);
 
-    // Try Panen first
+    // Hanya dari tabel Panen — jika kosong, buckets tetap 0 agar frontend tampil empty-state
     const panenRows = await prisma.panen.findMany({
       where: { tanggalPanen: { gte: start, lte: end } },
       select: { jumlahKg: true, tanggalPanen: true },
@@ -157,27 +159,12 @@ export async function GET(req: NextRequest) {
     const map = new Map<string, { key: string; value: number; count: number }>();
     for (const k of buckets) map.set(k, { key: k, value: 0, count: 0 });
 
-    if (panenRows.length > 0) {
-      for (const r of panenRows) {
-        const key = bucketKey(r.tanggalPanen);
-        const item = map.get(key);
-        if (!item) continue;
-        item.value += Number(r.jumlahKg);
-        item.count += 1;
-      }
-    } else {
-      // Fallback: use Pohon.createdAt as proxy for trend (if no Panen yet)
-      const pohonRows = await prisma.pohon.findMany({
-        where: { createdAt: { gte: start, lte: end }, hasilPanen: { not: null } },
-        select: { hasilPanen: true, createdAt: true },
-      });
-      for (const r of pohonRows) {
-        const key = bucketKey(r.createdAt);
-        const item = map.get(key);
-        if (!item) continue;
-        item.value += Number(r.hasilPanen ?? 0);
-        item.count += 1;
-      }
+    for (const r of panenRows) {
+      const key = bucketKey(r.tanggalPanen);
+      const item = map.get(key);
+      if (!item) continue;
+      item.value += Number(r.jumlahKg);
+      item.count += 1;
     }
 
     const items = buckets.map((k) => map.get(k)!);
