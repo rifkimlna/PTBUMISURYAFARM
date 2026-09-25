@@ -224,7 +224,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 
   const dokumen = await prisma.dokumenPenjualan.findUnique({
     where: { id },
-    select: { id: true, tagihanId: true },
+    select: { id: true, tipe: true, tagihanId: true, referensiIds: true },
   });
   if (!dokumen) return errorResponse("Dokumen tidak ditemukan", 404);
 
@@ -245,6 +245,29 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 
   for (const l of lampiran) {
     await deleteBuktiFile(l.fileUrl);
+  }
+
+  // Kembalikan dokumen asal ke Belum Ditagih bila sudah tidak dirujuk dokumen lain
+  // dan (untuk pesanan) sudah tidak ada pengirimannya.
+  if (dokumen.referensiIds.length > 0) {
+    const asal = await prisma.dokumenPenjualan.findMany({
+      where: { id: { in: dokumen.referensiIds }, tipe: { in: ["PESANAN", "PENAWARAN"] } },
+      select: { id: true, tipe: true },
+    });
+    for (const a of asal) {
+      const [masihDirujuk, sisaKirim] = await Promise.all([
+        prisma.dokumenPenjualan.count({ where: { referensiIds: { has: a.id } } }),
+        a.tipe === "PESANAN"
+          ? prisma.pengirimanPenjualan.count({ where: { pesananId: a.id } })
+          : Promise.resolve(1),
+      ]);
+      if (masihDirujuk === 0 && sisaKirim === 0) {
+        await prisma.dokumenPenjualan.updateMany({
+          where: { id: a.id },
+          data: { status: "BELUM_DITAGIH" },
+        });
+      }
+    }
   }
 
   return successResponse(null, "Dokumen berhasil dihapus");

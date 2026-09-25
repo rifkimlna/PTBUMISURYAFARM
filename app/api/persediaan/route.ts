@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuthAndRole } from "@/lib/auth";
 import { createPersediaanBarangSchema } from "@/lib/validations/persediaanValidation";
-import { hitungStokSaatIni, tentukanStatusStok } from "@/lib/persediaan";
+import { hitungStokSaatIni, tentukanStatusStok, generateKodeProduk } from "@/lib/persediaan";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 import { ZodError } from "zod";
 
@@ -42,6 +42,12 @@ export async function GET(req: NextRequest) {
       keterangan: b.keterangan,
       status: tentukanStatusStok(stok),
       createdAt: b.createdAt.toISOString(),
+      // Modul Produk (tambahan, opsional; form lama mengabaikan).
+      barcode: b.barcode,
+      tipeProduk: b.tipeProduk ?? "BARANG",
+      hargaBeli: b.hargaBeli == null ? null : Number(b.hargaBeli),
+      hargaJual: b.hargaJual == null ? null : Number(b.hargaJual),
+      batasMinimum: b.batasMinimum,
     };
   });
 
@@ -61,18 +67,32 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const parsed = createPersediaanBarangSchema.parse(body);
-    const exists = await prisma.persediaanBarang.findUnique({ where: { id: parsed.kode } });
-    if (exists) return errorResponse(`Kode barang ${parsed.kode} sudah dipakai`, 409);
+    const kode = parsed.kode?.toUpperCase() ?? (await generateKodeProduk(prisma));
+    const exists = await prisma.persediaanBarang.findUnique({ where: { id: kode } });
+    if (exists) return errorResponse(`Kode barang ${kode} sudah dipakai`, 409);
+    if (parsed.barcode) {
+      const tabrakan = await prisma.persediaanBarang.findUnique({ where: { barcode: parsed.barcode } });
+      if (tabrakan) return errorResponse(`Barcode ${parsed.barcode} sudah dipakai`, 409);
+    }
+
+    // hargaSatuan dijaga terisi untuk saran harga di form Penjualan/Pembelian
+    // dan nilai persediaan: utamakan Harga Jual, lalu Harga Beli.
+    const hargaSatuan = parsed.hargaSatuan ?? parsed.hargaJual ?? parsed.hargaBeli ?? 0;
 
     const barang = await prisma.persediaanBarang.create({
       data: {
-        id: parsed.kode,
+        id: kode,
         namaBarang: parsed.namaBarang,
         kategori: parsed.kategori,
         stokAwal: parsed.stokAwal,
         satuan: parsed.satuan,
-        hargaSatuan: parsed.hargaSatuan,
+        hargaSatuan,
         keterangan: parsed.keterangan ?? null,
+        barcode: parsed.barcode ?? null,
+        tipeProduk: parsed.tipeProduk ?? "BARANG",
+        hargaBeli: parsed.hargaBeli ?? null,
+        hargaJual: parsed.hargaJual ?? null,
+        batasMinimum: parsed.batasMinimum ?? 0,
       },
     });
     return successResponse(barang, "Barang ditambahkan", 201);

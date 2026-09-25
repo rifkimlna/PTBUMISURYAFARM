@@ -3,6 +3,7 @@ import { z, ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAuthAndRole, getSessionFromRequest } from "@/lib/auth";
 import { createSupplierSchema } from "@/lib/validations/pembelianValidation";
+import { ensureKontakForSupplier } from "@/lib/kontak-sync";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 
 const querySchema = z.object({
@@ -60,6 +61,18 @@ export async function POST(req: NextRequest) {
         alamat: parsed.alamat?.trim() || null,
       },
     });
+
+    // Dua arah: supplier dari Pembelian otomatis menjadi Kontak SUPPLIER.
+    try {
+      await ensureKontakForSupplier(prisma, {
+        nama: supplier.nama,
+        email: supplier.email,
+        telepon: supplier.telepon,
+        alamat: supplier.alamat,
+      });
+    } catch {
+      // abaikan
+    }
 
     return successResponse(supplier, "Supplier berhasil ditambahkan", 201);
   } catch (e) {

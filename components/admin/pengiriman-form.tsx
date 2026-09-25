@@ -37,14 +37,16 @@ function todayInput() {
 }
 
 // Form Pengiriman Penjualan mengikuti struktur Mekari (disesuaikan PT BST).
-// Pelanggan & produk diambil dari Pesanan asal (read-only); yang diisi:
-// alamat, tgl pengiriman, kirim melalui, no pelacakan, gudang, pesan, memo, lampiran.
+// Pelanggan, email, nomor pesanan & produk diambil dari Pesanan asal (read-only);
+// yang diisi: alamat, tgl pengiriman, kirim melalui, no pelacakan, no transaksi
+// (otomatis bila dikosongkan), no referensi, gudang, pesan, memo, lampiran.
 // Menyimpan TIDAK membuat transaksi keuangan/pemasukan.
 export function PengirimanForm({ pesanan }: { pesanan: PengirimanPesanan }) {
   const router = useRouter();
   const [alamat, setAlamat] = useState(pesanan.alamat ?? "");
   const [tanggal, setTanggal] = useState(todayInput());
   const [noRef, setNoRef] = useState(pesanan.noRefPelanggan ?? "");
+  const [noTransaksi, setNoTransaksi] = useState("");
   const [kirimMelalui, setKirimMelalui] = useState("");
   const [noPelacakan, setNoPelacakan] = useState("");
   const [gudang, setGudang] = useState("");
@@ -94,6 +96,7 @@ export function PengirimanForm({ pesanan }: { pesanan: PengirimanPesanan }) {
           pesananId: pesanan.id,
           alamatPengiriman: alamat.trim() || undefined,
           tanggalPengiriman: tanggal || undefined,
+          noTransaksi: noTransaksi.trim() || undefined,
           noRefPelanggan: noRef.trim() || undefined,
           kirimMelalui: kirimMelalui.trim() || undefined,
           noPelacakan: noPelacakan.trim() || undefined,
@@ -139,8 +142,16 @@ export function PengirimanForm({ pesanan }: { pesanan: PengirimanPesanan }) {
               <Input value={pesanan.pelangganNama} disabled />
             </label>
             <label className="grid gap-1.5">
+              <span className="text-xs font-medium text-slate-600">Email</span>
+              <Input value={pesanan.pelangganEmail ?? ""} disabled placeholder="—" />
+            </label>
+            <label className="grid gap-1.5">
               <span className="text-xs font-medium text-slate-600">Nomor Pesanan Penjualan</span>
               <Input value={pesanan.noDokumen} disabled />
+            </label>
+            <label className="grid gap-1.5">
+              <span className="text-xs font-medium text-slate-600">No. Transaksi</span>
+              <Input value={noTransaksi} onChange={(e) => setNoTransaksi(e.target.value)} placeholder="Otomatis bila dikosongkan" maxLength={50} />
             </label>
             <label className="grid gap-1.5 sm:col-span-2">
               <span className="text-xs font-medium text-slate-600">Alamat Pengiriman</span>
@@ -204,8 +215,14 @@ export function PengirimanForm({ pesanan }: { pesanan: PengirimanPesanan }) {
               <Textarea value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Catatan internal (opsional)" />
             </label>
             <div className="sm:col-span-2">
-              <span className="text-xs font-medium text-slate-600">Lampiran</span>
-              <input ref={inputRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" className="hidden" onChange={(e) => handleFiles(e.target.files)} />
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-medium text-slate-600">Lampiran</span>
+                <input ref={inputRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" className="hidden" onChange={(e) => handleFiles(e.target.files)} />
+                <Button type="button" variant="outline" size="sm" disabled={uploading} onClick={() => inputRef.current?.click()}>
+                  {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
+                  {uploading ? "Mengupload..." : "+ Tambah Lampiran"}
+                </Button>
+              </div>
               {lampiran.length > 0 && (
                 <ul className="mt-2 space-y-1.5">
                   {lampiran.map((item) => (
@@ -221,10 +238,6 @@ export function PengirimanForm({ pesanan }: { pesanan: PengirimanPesanan }) {
                   ))}
                 </ul>
               )}
-              <Button type="button" variant="outline" size="sm" className="mt-2" disabled={uploading} onClick={() => inputRef.current?.click()}>
-                {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
-                {uploading ? "Mengupload..." : "+ Tambah Lampiran"}
-              </Button>
             </div>
           </div>
           <p className="rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
@@ -239,7 +252,7 @@ export function PengirimanForm({ pesanan }: { pesanan: PengirimanPesanan }) {
           Batal
         </Button>
         <Button type="submit" disabled={saving}>
-          {saving ? "Menyimpan..." : "Simpan Pengiriman"}
+          {saving ? "Menyimpan..." : "Buat"}
         </Button>
       </div>
     </form>

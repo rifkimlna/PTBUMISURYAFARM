@@ -62,10 +62,12 @@ export type DokumenRow = {
 export type PengirimanRow = {
   id: string;
   noPengiriman: string;
+  pesananId: string;
   pesananNo: string;
   pelanggan: string;
   tanggal: string;
   jumlahItem: number;
+  status: string;
 };
 
 const SLUG_BY_TIPE: Record<string, string> = {
@@ -83,6 +85,15 @@ const DOC_STATUS_LABEL: Record<string, string> = {
   SELESAI: "Selesai",
   PESANAN: "Pesanan",
   PESANAN_PROFORMA: "Pesanan Proforma",
+};
+
+const DOC_STATUS_VARIANT: Record<string, StatusBadge["variant"]> = {
+  TERBUKA: "warning",
+  DITUTUP: "secondary",
+  BELUM_DITAGIH: "gray",
+  SELESAI: "sehat",
+  PESANAN: "info",
+  PESANAN_PROFORMA: "perhatian",
 };
 
 export type PenjualanSummary = {
@@ -106,7 +117,6 @@ const TABS: Array<{ key: TabKey; label: string }> = [
 // Menu "Buat Penjualan Baru" — navigasi ke halaman masing-masing (form dibuat terpisah).
 const BUAT_ITEMS = [
   { href: "/keuangan/penjualan/penagihan/baru", label: "Penagihan Penjualan", desc: "Invoice tagihan ke pelanggan", Icon: ScrollText },
-  { href: "/keuangan/penjualan/proforma/baru", label: "Faktur Proforma", desc: "Faktur awal, bukan tagihan resmi", Icon: FileText },
   { href: "/keuangan/penjualan/tukar-faktur/baru", label: "Tukar Faktur", desc: "Penagihan atas faktur berjalan", Icon: ArrowLeftRight },
   { href: "/keuangan/penjualan/pesanan/baru", label: "Pesanan Penjualan", desc: "Sales order dari pelanggan", Icon: ShoppingCart },
   { href: "/keuangan/penjualan/penawaran/baru", label: "Penawaran Penjualan", desc: "Quotation harga ke pelanggan", Icon: Tags },
@@ -128,9 +138,7 @@ function displayStatus(r: PenagihanRow): StatusBadge {
   if (r.kind === "dokumen") {
     const ds = r.docStatus ?? "";
     const label = DOC_STATUS_LABEL[ds] ?? ds ?? "—";
-    if (ds === "BELUM_DITAGIH") return { label, variant: "gray" };
-    if (ds === "SELESAI") return { label, variant: "sehat" };
-    return { label, variant: "secondary" };
+    return { label, variant: DOC_STATUS_VARIANT[ds] ?? "secondary" };
   }
   if (r.status === "LUNAS") return { label: "Dibayar", variant: "sehat" };
   if (isTelat(r)) return { label: "Telat Bayar", variant: "destructive" };
@@ -248,6 +256,7 @@ function SummaryCard({
 }
 
 // Tabel dokumen per tab (Pesanan / Penawaran): filter search + status di atas kolom.
+// Klik No. membuka popup detail seperti Penagihan (bukan pindah halaman).
 function DokumenTable({
   rows,
   tempoLabel,
@@ -256,6 +265,7 @@ function DokumenTable({
   deletingId,
   onDelete,
   allowedStatuses,
+  onOpenDetail,
 }: {
   rows: DokumenRow[];
   tempoLabel: string;
@@ -264,6 +274,7 @@ function DokumenTable({
   deletingId: string | null;
   onDelete: (id: string, label: string) => void;
   allowedStatuses?: string[];
+  onOpenDetail?: (row: DokumenRow) => void;
 }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -341,17 +352,19 @@ function DokumenTable({
                   <TableRow key={r.id}>
                     <TableCell className="text-xs text-slate-500">{formatDate(r.tanggal)}</TableCell>
                     <TableCell className="text-xs font-medium" title={r.id}>
-                      <Link
-                        href={`/keuangan/penjualan/${SLUG_BY_TIPE[r.tipe] ?? r.tipe.toLowerCase()}/${r.id}`}
-                        className="text-slate-700 underline decoration-dotted hover:text-slate-900"
+                      <button
+                        type="button"
+                        onClick={() => onOpenDetail?.(r)}
+                        className="text-left text-slate-700 underline decoration-dotted hover:text-slate-900"
+                        title={r.noDokumen}
                       >
                         {r.noDokumen}
-                      </Link>
+                      </button>
                     </TableCell>
                     <TableCell className="text-sm text-slate-700">{r.pelanggan}</TableCell>
                     <TableCell className="text-xs text-slate-500">{formatDate(r.jatuhTempo)}</TableCell>
                     <TableCell>
-                      <Badge variant="secondary" className="text-[11px]">
+                      <Badge variant={DOC_STATUS_VARIANT[r.status] ?? "secondary"} className="text-[11px]">
                         {DOC_STATUS_LABEL[r.status] ?? r.status}
                       </Badge>
                     </TableCell>
@@ -451,6 +464,8 @@ export function PenjualanContent({
   const [dokumen, setDokumen] = useState("");
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
+  const [kirimStatus, setKirimStatus] = useState("");
+  const [kirimSearch, setKirimSearch] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
   const [editRow, setEditRow] = useState<PenagihanRow | null>(null);
@@ -461,6 +476,16 @@ export function PenjualanContent({
   const [detailRow, setDetailRow] = useState<PenagihanRow | null>(null);
   const [detailData, setDetailData] = useState<any>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [dokDetailRow, setDokDetailRow] = useState<DokumenRow | null>(null);
+  const [dokDetailData, setDokDetailData] = useState<any>(null);
+  const [dokDetailLoading, setDokDetailLoading] = useState(false);
+  const [dokTagihanData, setDokTagihanData] = useState<any>(null);
+  const [dokTagihanLoading, setDokTagihanLoading] = useState(false);
+  const [kirimDetailRow, setKirimDetailRow] = useState<PengirimanRow | null>(null);
+  const [kirimDetailData, setKirimDetailData] = useState<any>(null);
+  const [kirimDetailLoading, setKirimDetailLoading] = useState(false);
+  const [paymentTargetId, setPaymentTargetId] = useState<string | null>(null);
+  const [paymentTargetLabel, setPaymentTargetLabel] = useState("");
   const [paymentOpen, setPaymentOpen] = useState(false);
   const todayInputLocal = () => new Date(new Date().toDateString()).toISOString().slice(0, 10);
   const [paymentForm, setPaymentForm] = useState({ jumlahBayar: "", sumberDana: "KAS" as "KAS"|"BANK"|"TABUNGAN", tanggal: todayInputLocal(), keterangan: "" });
@@ -503,6 +528,8 @@ export function PenjualanContent({
     setDetailRow(row);
     setDetailLoading(true);
     setDetailData(null);
+    setPaymentTargetId(row.id);
+    setPaymentTargetLabel(`${displayInvoice(row)} — ${row.pihak}`);
     try {
       const res = await fetch(`/api/tagihan/${encodeURIComponent(row.id)}`, { credentials: "include" });
       const result = await res.json().catch(() => null);
@@ -513,6 +540,56 @@ export function PenjualanContent({
       // ignore
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const openDokDetail = async (row: DokumenRow) => {
+    setDokDetailRow(row);
+    setDokDetailLoading(true);
+    setDokDetailData(null);
+    setDokTagihanData(null);
+    try {
+      const res = await fetch(`/api/penjualan/dokumen/${encodeURIComponent(row.id)}`, { credentials: "include" });
+      const result = await res.json().catch(() => null);
+      if (res.ok && result?.success) {
+        setDokDetailData(result.data);
+        const tagihanId = result.data?.tagihan?.id ?? result.data?.tagihanId ?? null;
+        if (tagihanId) {
+          setDokTagihanLoading(true);
+          try {
+            const tres = await fetch(`/api/tagihan/${encodeURIComponent(tagihanId)}`, { credentials: "include" });
+            const tresult = await tres.json().catch(() => null);
+            if (tres.ok && tresult?.success) {
+              setDokTagihanData(tresult.data);
+            }
+          } catch {
+            // ignore tagihan tambahan
+          } finally {
+            setDokTagihanLoading(false);
+          }
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      setDokDetailLoading(false);
+    }
+  };
+
+  const openKirimDetail = async (row: PengirimanRow) => {
+    setKirimDetailRow(row);
+    setKirimDetailLoading(true);
+    setKirimDetailData(null);
+    try {
+      const res = await fetch(`/api/penjualan/pengiriman/${encodeURIComponent(row.id)}`, { credentials: "include" });
+      const result = await res.json().catch(() => null);
+      if (res.ok && result?.success) {
+        setKirimDetailData(result.data);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setKirimDetailLoading(false);
     }
   };
 
@@ -553,11 +630,11 @@ export function PenjualanContent({
 
   const submitPayment = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!detailRow) return;
+    if (!paymentTargetId) return;
     setPaymentSaving(true);
     setPaymentError("");
     try {
-      const res = await fetch(`/api/tagihan/${encodeURIComponent(detailRow.id)}`, {
+      const res = await fetch(`/api/tagihan/${encodeURIComponent(paymentTargetId)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -577,6 +654,10 @@ export function PenjualanContent({
       setPaymentOpen(false);
       setDetailRow(null);
       setDetailData(null);
+      setDokDetailRow(null);
+      setDokDetailData(null);
+      setDokTagihanData(null);
+      setPaymentTargetId(null);
       router.refresh();
     } catch (err) {
       setPaymentError(err instanceof Error ? err.message : "Gagal mencatat pembayaran");
@@ -647,6 +728,15 @@ export function PenjualanContent({
       return true;
     });
   }, [semuaBaris, dokumen, status, search]);
+
+  const filteredKirim = useMemo(() => {
+    const q = kirimSearch.trim().toLowerCase();
+    return kirim.filter((p) => {
+      if (kirimStatus && p.status !== kirimStatus) return false;
+      if (q && !`${p.noPengiriman} ${p.pesananNo} ${p.pelanggan}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [kirim, kirimStatus, kirimSearch]);
 
   const hapusPenagihan = async (row: PenagihanRow) => {
     if (
@@ -1105,7 +1195,7 @@ export function PenjualanContent({
           <DialogHeader>
             <DialogTitle>Terima Pembayaran</DialogTitle>
             <DialogDescription>
-              {detailRow ? `${displayInvoice(detailRow)} — ${detailRow.pihak}` : ""}
+              {paymentTargetLabel || (detailRow ? `${displayInvoice(detailRow)} — ${detailRow.pihak}` : "")}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submitPayment} className="grid gap-4">
@@ -1148,9 +1238,282 @@ export function PenjualanContent({
         </DialogContent>
       </Dialog>
 
+      {/* Detail Pesanan / Penawaran — popup seperti Detail Penagihan */}
+      <Dialog open={Boolean(dokDetailRow)} onOpenChange={(v) => { if (!v) { setDokDetailRow(null); setDokDetailData(null); setDokTagihanData(null); } }}>
+        <DialogContent onClose={() => { setDokDetailRow(null); setDokDetailData(null); setDokTagihanData(null); }} className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {dokDetailRow?.tipe === "PENAWARAN" ? "Detail Penawaran" : "Detail Pesanan"}
+            </DialogTitle>
+            <DialogDescription>
+              {dokDetailRow ? `${dokDetailRow.noDokumen} — ${dokDetailRow.pelanggan}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {dokDetailLoading ? (
+            <p className="py-6 text-center text-sm text-slate-500">Memuat detail...</p>
+          ) : dokDetailData ? (
+            <div className="grid gap-4">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide text-slate-400">Tanggal</div>
+                  <div>{formatDate(dokDetailData.tanggal)}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide text-slate-400">Jatuh Tempo</div>
+                  <div>{formatDate(dokDetailData.jatuhTempo)}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide text-slate-400">Status</div>
+                  <div>
+                    {(() => {
+                      const raw = dokDetailData.status as string;
+                      const tipe = (dokDetailData.tipe ?? dokDetailRow?.tipe ?? "") as string;
+                      const norm =
+                        tipe === "PESANAN" || tipe === "PENAWARAN"
+                          ? raw === "TERBUKA" || raw === "PESANAN" || raw === "PESANAN_PROFORMA"
+                            ? "BELUM_DITAGIH"
+                            : raw === "DITUTUP"
+                              ? "SELESAI"
+                              : raw
+                          : raw;
+                      return (
+                        <Badge variant={DOC_STATUS_VARIANT[norm] ?? "secondary"} className="text-[11px]">
+                          {DOC_STATUS_LABEL[norm] ?? norm}
+                        </Badge>
+                      );
+                    })()}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide text-slate-400">Total</div>
+                  <div className="font-medium">Rp {formatRupiah(dokDetailData.total)}</div>
+                </div>
+              </div>
+              <div>
+                <div className="mb-2 text-xs font-medium text-slate-600">Detail Produk</div>
+                <div className="max-h-48 overflow-auto rounded-lg border border-slate-100">
+                  {dokDetailData.items?.length ? (
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-50 text-[11px] uppercase text-slate-500">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Produk</th>
+                          <th className="px-3 py-2 text-right">Qty</th>
+                          <th className="px-3 py-2 text-left">Satuan</th>
+                          <th className="px-3 py-2 text-right">Harga Satuan</th>
+                          <th className="px-3 py-2 text-right">Subtotal</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dokDetailData.items.map((it: any) => (
+                          <tr key={it.id} className="border-t border-slate-100">
+                            <td className="px-3 py-2">{it.deskripsi}</td>
+                            <td className="px-3 py-2 text-right">{Number(it.kuantitas).toLocaleString("id-ID")}</td>
+                            <td className="px-3 py-2">{it.unit}</td>
+                            <td className="px-3 py-2 text-right">Rp {formatRupiah(it.harga)}</td>
+                            <td className="px-3 py-2 text-right font-medium">Rp {formatRupiah(it.jumlah)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <p className="px-3 py-6 text-center text-slate-400">Tidak ada rincian produk</p>
+                  )}
+                </div>
+              </div>
+              {dokDetailData.tagihan || dokTagihanData ? (
+                <div>
+                  <div className="mb-2 text-xs font-medium text-slate-600">Piutang Terkait</div>
+                  {dokTagihanLoading ? (
+                    <p className="text-xs text-slate-500">Memuat piutang...</p>
+                  ) : dokTagihanData ? (
+                    <div className="grid gap-2">
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <Badge variant={dokTagihanData.status === "LUNAS" ? "sehat" : dokTagihanData.status === "LUNAS_SEBAGIAN" ? "info" : "warning"} className="text-[11px]">
+                          {dokTagihanData.status === "LUNAS" ? "Dibayar" : dokTagihanData.status === "LUNAS_SEBAGIAN" ? "Dibayar Sebagian" : "Menunggu Pembayaran"}
+                        </Badge>
+                        <span className="text-slate-500">Sisa Rp {formatRupiah(dokTagihanData.sisa)} dari Rp {formatRupiah(dokTagihanData.jumlah)}</span>
+                      </div>
+                      <div className="max-h-40 overflow-auto rounded-lg border border-slate-100">
+                        {dokTagihanData.pembayaran?.length ? (
+                          <table className="w-full text-xs">
+                            <thead className="bg-slate-50 text-[11px] uppercase text-slate-500">
+                              <tr>
+                                <th className="px-3 py-2 text-left">Tanggal</th>
+                                <th className="px-3 py-2 text-left">Kas/Bank</th>
+                                <th className="px-3 py-2 text-right">Jumlah</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {dokTagihanData.pembayaran.map((p: any) => (
+                                <tr key={p.id} className="border-t border-slate-100">
+                                  <td className="px-3 py-2">{formatDate(p.tanggal)}</td>
+                                  <td className="px-3 py-2">{p.sumberDana}</td>
+                                  <td className="px-3 py-2 text-right">Rp {formatRupiah(p.jumlah)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : (
+                          <p className="px-3 py-4 text-center text-slate-400">Belum ada pembayaran</p>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500">
+                      {dokDetailData.tagihan?.noInvoice ?? "Sudah menjadi penagihan"} · Sisa Rp {formatRupiah(dokDetailData.tagihan?.sisa ?? 0)}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+                  Belum menjadi penagihan — belum ada piutang & pembayaran. Buat penagihan dulu untuk membayar.
+                </p>
+              )}
+              <div className="flex flex-wrap justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => { setDokDetailRow(null); setDokDetailData(null); setDokTagihanData(null); }}>Tutup</Button>
+                {dokDetailRow && (
+                  <Link
+                    href={`/keuangan/penjualan/${SLUG_BY_TIPE[dokDetailRow.tipe] ?? dokDetailRow.tipe.toLowerCase()}/${dokDetailRow.id}`}
+                    className={cn(buttonVariants({ variant: "outline" }))}
+                  >
+                    Lihat halaman
+                  </Link>
+                )}
+                {dokTagihanData && dokTagihanData.status !== "LUNAS" && Number(dokTagihanData.sisa) > 0 && (
+                  <Button onClick={() => { setPaymentTargetId(dokTagihanData.id); setPaymentTargetLabel(`${dokTagihanData.noInvoice ?? dokDetailRow?.noDokumen} — ${dokDetailRow?.pelanggan}`); setPaymentForm({ jumlahBayar: "", sumberDana: "KAS", tanggal: todayInputLocal(), keterangan: "" }); setPaymentError(""); setPaymentOpen(true); }}>Terima Pembayaran</Button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="py-6 text-center text-sm text-slate-500">Gagal memuat detail</p>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Detail Pengiriman — popup seperti Detail Penagihan (tanpa pembayaran) */}
+      <Dialog open={Boolean(kirimDetailRow)} onOpenChange={(v) => { if (!v) { setKirimDetailRow(null); setKirimDetailData(null); } }}>
+        <DialogContent onClose={() => { setKirimDetailRow(null); setKirimDetailData(null); }} className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Detail Pengiriman</DialogTitle>
+            <DialogDescription>
+              {kirimDetailRow ? `${kirimDetailRow.noPengiriman} — ${kirimDetailRow.pelanggan}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {kirimDetailLoading ? (
+            <p className="py-6 text-center text-sm text-slate-500">Memuat detail...</p>
+          ) : kirimDetailData ? (
+            <div className="grid gap-4">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide text-slate-400">Tgl. Pengiriman</div>
+                  <div>{formatDate(kirimDetailData.tanggalPengiriman ?? kirimDetailData.createdAt)}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide text-slate-400">Nomor Pesanan</div>
+                  <div>{kirimDetailData.pesanan?.noDokumen ?? kirimDetailRow?.pesananNo}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide text-slate-400">No. Transaksi</div>
+                  <div>{kirimDetailData.noTransaksi || "—"}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide text-slate-400">Kirim Melalui</div>
+                  <div>{kirimDetailData.kirimMelalui || "—"}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide text-slate-400">No. Pelacakan</div>
+                  <div>{kirimDetailData.noPelacakan || "—"}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide text-slate-400">Gudang</div>
+                  <div>{kirimDetailData.gudang || "—"}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide text-slate-400">No. Referensi Pelanggan</div>
+                  <div>{kirimDetailData.noRefPelanggan || "—"}</div>
+                </div>
+              </div>
+              <div>
+                <div className="mb-2 text-xs font-medium text-slate-600">Detail Produk</div>
+                <div className="max-h-48 overflow-auto rounded-lg border border-slate-100">
+                  {kirimDetailData.items?.length ? (
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-50 text-[11px] uppercase text-slate-500">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Produk</th>
+                          <th className="px-3 py-2 text-right">Qty</th>
+                          <th className="px-3 py-2 text-left">Satuan</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {kirimDetailData.items.map((it: any) => (
+                          <tr key={it.id} className="border-t border-slate-100">
+                            <td className="px-3 py-2">{it.deskripsi}</td>
+                            <td className="px-3 py-2 text-right">{Number(it.kuantitas).toLocaleString("id-ID")}</td>
+                            <td className="px-3 py-2">{it.unit}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <p className="px-3 py-6 text-center text-slate-400">Tidak ada rincian produk</p>
+                  )}
+                </div>
+                <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+                  Pengiriman tidak mencatat pemasukan — piutang baru terbentuk saat dibuat Penagihan.
+                </p>
+              </div>
+              <div className="flex flex-wrap justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => { setKirimDetailRow(null); setKirimDetailData(null); }}>Tutup</Button>
+                {kirimDetailRow && (
+                  <Link href={`/keuangan/penjualan/pengiriman/${kirimDetailRow.id}`} className={cn(buttonVariants({ variant: "outline" }))}>
+                    Lihat halaman
+                  </Link>
+                )}
+                {kirimDetailRow && (
+                  <Link href={`/keuangan/penjualan/penagihan/baru?dariPengiriman=${kirimDetailRow.id}`} className={cn(buttonVariants({}))}>
+                    Buat Penagihan
+                  </Link>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="py-6 text-center text-sm text-slate-500">Gagal memuat detail</p>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {tab === "pengiriman" && (
         <Card className="border-slate-200">
           <CardContent className="p-0">
+            <div className="flex flex-col gap-2 border-b border-slate-100 p-4 sm:flex-row">
+              <Select value={kirimStatus} onChange={(e) => setKirimStatus(e.target.value)} className="sm:max-w-56">
+                <option value="">Semua Status</option>
+                <option value="BELUM_DITAGIH">Belum Ditagih</option>
+                <option value="SELESAI">Selesai</option>
+              </Select>
+              <div className="relative sm:max-w-xs sm:flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  value={kirimSearch}
+                  onChange={(e) => setKirimSearch(e.target.value)}
+                  placeholder="Cari no. pengiriman atau nama pelanggan..."
+                  className="pl-9 pr-9"
+                  aria-label="Cari no. pengiriman atau nama pelanggan"
+                />
+                {kirimSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setKirimSearch("")}
+                    title="Bersihkan pencarian"
+                    aria-label="Bersihkan pencarian"
+                    className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -1159,42 +1522,52 @@ export function PenjualanContent({
                     <TableHead>No. Pengiriman</TableHead>
                     <TableHead>No. Pesanan Asal</TableHead>
                     <TableHead>Pelanggan</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead className="text-right">Item</TableHead>
                     <TableHead className="text-right">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {kirim.length === 0 ? (
+                  {filteredKirim.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="py-8 text-center text-slate-500">
-                        Belum ada pengiriman barang
+                      <TableCell colSpan={7} className="py-8 text-center text-slate-500">
+                        {kirim.length === 0 ? "Belum ada pengiriman barang" : "Tidak ada pengiriman yang cocok dengan filter"}
                       </TableCell>
                     </TableRow>
                   ) : (
-                    kirim.map((p) => (
+                    filteredKirim.map((p) => (
                       <TableRow key={p.id}>
                         <TableCell className="text-xs text-slate-500">{formatDate(p.tanggal)}</TableCell>
                         <TableCell>
-                          <Link
-                            href={`/keuangan/penjualan/pengiriman/${p.id}`}
-                            className="text-xs font-medium text-slate-700 underline decoration-dotted hover:text-slate-900"
+                          <button
+                            type="button"
+                            onClick={() => openKirimDetail(p)}
+                            className="text-left text-xs font-medium text-slate-700 underline decoration-dotted hover:text-slate-900"
+                            title={p.noPengiriman}
                           >
                             {p.noPengiriman}
-                          </Link>
+                          </button>
                         </TableCell>
                         <TableCell className="text-xs text-slate-500">{p.pesananNo}</TableCell>
                         <TableCell className="text-sm text-slate-700">{p.pelanggan}</TableCell>
+                        <TableCell>
+                          <Badge variant={DOC_STATUS_VARIANT[p.status] ?? "secondary"} className="text-[11px]">
+                            {DOC_STATUS_LABEL[p.status] ?? p.status ?? "—"}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="text-right text-sm">{p.jumlahItem} baris</TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-1">
-                            <Link
-                              href={`/keuangan/penjualan/pengiriman/${p.id}`}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 rounded-full"
                               title="Lihat detail pengiriman"
                               aria-label={`Detail ${p.noPengiriman}`}
-                              className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-7 w-7 rounded-full")}
+                              onClick={() => openKirimDetail(p)}
                             >
                               <Search className="h-3.5 w-3.5" />
-                            </Link>
+                            </Button>
                             <Button
                               variant="destructive"
                               size="sm"
@@ -1229,7 +1602,7 @@ export function PenjualanContent({
               </Table>
             </div>
             <div className="border-t border-slate-100 px-4 py-3 text-xs text-slate-400">
-              {kirim.length} pengiriman · Pengiriman tidak memengaruhi Kas/Piutang
+              {filteredKirim.length} dari {kirim.length} pengiriman · Pengiriman tidak memengaruhi Kas/Piutang
             </div>
           </CardContent>
         </Card>
@@ -1242,7 +1615,8 @@ export function PenjualanContent({
           emptyText="Belum ada pesanan penjualan"
           deletingId={deletingId}
           onDelete={hapusDokumen}
-          allowedStatuses={["TERBUKA", "DITUTUP", "SELESAI", "PESANAN", "PESANAN_PROFORMA"]}
+          allowedStatuses={["BELUM_DITAGIH", "SELESAI"]}
+          onOpenDetail={openDokDetail}
         />
       )}
       {tab === "penawaran" && (
@@ -1253,7 +1627,8 @@ export function PenjualanContent({
           emptyText="Belum ada penawaran penjualan"
           deletingId={deletingId}
           onDelete={hapusDokumen}
-          allowedStatuses={["TERBUKA", "DITUTUP", "SELESAI", "BELUM_DITAGIH"]}
+          allowedStatuses={["BELUM_DITAGIH", "SELESAI"]}
+          onOpenDetail={openDokDetail}
         />
       )}
 

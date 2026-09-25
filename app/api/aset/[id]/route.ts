@@ -31,7 +31,23 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
     const updated = await prisma.aset.update({
       where: { id },
-      data: { ...parsed } as unknown as Prisma.AsetUpdateInput,
+      data: {
+        ...(parsed.namaAset !== undefined ? { namaAset: parsed.namaAset } : {}),
+        ...(parsed.jumlah !== undefined ? { jumlah: parsed.jumlah } : {}),
+        ...(parsed.kategori !== undefined ? { kategori: parsed.kategori } : {}),
+        ...(parsed.kondisi !== undefined ? { kondisi: parsed.kondisi } : {}),
+        ...(parsed.status !== undefined ? { status: parsed.status } : {}),
+        ...(parsed.nilaiAset !== undefined ? { nilaiAset: parsed.nilaiAset as unknown as Prisma.AsetUpdateInput["nilaiAset"] } : {}),
+        ...(parsed.tanggalPerolehan !== undefined ? { tanggalPerolehan: parsed.tanggalPerolehan } : {}),
+        ...(parsed.deskripsi !== undefined ? { deskripsi: parsed.deskripsi } : {}),
+        ...(parsed.tags !== undefined ? { tags: parsed.tags } : {}),
+        ...(parsed.metodeSusut !== undefined ? { metodeSusut: parsed.metodeSusut } : {}),
+        ...(parsed.masaManfaatBulan !== undefined ? { masaManfaatBulan: parsed.masaManfaatBulan } : {}),
+        ...(parsed.nilaiResidu !== undefined ? { nilaiResidu: parsed.nilaiResidu as unknown as Prisma.AsetUpdateInput["nilaiResidu"] } : {}),
+        ...(parsed.akunBebanSusut !== undefined ? { akunBebanSusut: parsed.akunBebanSusut } : {}),
+        ...(parsed.akunAkumulasi !== undefined ? { akunAkumulasi: parsed.akunAkumulasi } : {}),
+        ...(parsed.tanggalMulaiSusut !== undefined ? { tanggalMulaiSusut: parsed.tanggalMulaiSusut } : {}),
+      },
     });
     return successResponse(updated, "Aset diupdate");
   } catch (e) {
@@ -46,6 +62,16 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   const { id } = await params;
   const exists = await prisma.aset.findUnique({ where: { id } });
   if (!exists) return errorResponse("Aset tidak ditemukan", 404);
-  await prisma.aset.delete({ where: { id } });
+  // Hapus balik jurnal yang dibuat form Tambah Aset (milik kejadian ini saja)
+  // agar tidak yatim; jurnal dari modul lain tidak pernah tertaut ke aset.
+  await prisma.$transaction(async (tx) => {
+    if (exists.tagihanId) {
+      await tx.tagihan.deleteMany({ where: { id: exists.tagihanId } });
+    }
+    if (exists.transaksiKasId) {
+      await tx.transaksiKas.deleteMany({ where: { id: exists.transaksiKasId } });
+    }
+    await tx.aset.delete({ where: { id } });
+  });
   return successResponse(null, "Aset dihapus");
 }

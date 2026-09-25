@@ -102,15 +102,27 @@ function LampiranUploader({
 
   return (
     <div>
-      <span className="text-xs font-medium text-slate-600">Lampiran</span>
-      <input
-        ref={inputRef}
-        type="file"
-        multiple
-        accept=".pdf,.jpg,.jpeg,.png,.webp"
-        className="hidden"
-        onChange={(e) => handleFiles(e.target.files)}
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-slate-600">Lampiran</span>
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          accept=".pdf,.jpg,.jpeg,.png,.webp"
+          className="hidden"
+          onChange={(e) => handleFiles(e.target.files)}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={uploading}
+          onClick={() => inputRef.current?.click()}
+        >
+          {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
+          {uploading ? "Mengupload..." : "+ Tambah Lampiran"}
+        </Button>
+      </div>
       {value.length > 0 && (
         <ul className="mt-2 space-y-1.5">
           {value.map((item, index) => (
@@ -145,17 +157,6 @@ function LampiranUploader({
           </ul>
         </div>
       )}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="mt-2"
-        disabled={uploading}
-        onClick={() => inputRef.current?.click()}
-      >
-        {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
-        {uploading ? "Mengupload..." : "+ Tambah Lampiran"}
-      </Button>
     </div>
   );
 }

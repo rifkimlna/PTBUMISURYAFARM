@@ -104,6 +104,15 @@ export default async function DetailDokumenPage({
   const meta = JUDUL[doc.tipe];
   const tab = TAB_BY_TIPE[doc.tipe];
   const tindakanKind = doc.tipe === "PESANAN" ? "PESANAN" : doc.tipe === "PENAWARAN" ? "PENAWARAN" : "PENAGIHAN";
+  // Normalisasi status lama ke kosakata Mekari untuk Pesanan/Penawaran.
+  const statusTampil =
+    doc.tipe === "PESANAN" || doc.tipe === "PENAWARAN"
+      ? doc.status === "TERBUKA" || doc.status === "PESANAN" || doc.status === "PESANAN_PROFORMA"
+        ? "BELUM_DITAGIH"
+        : doc.status === "DITUTUP"
+          ? "SELESAI"
+          : doc.status
+      : doc.status;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -125,7 +134,7 @@ export default async function DetailDokumenPage({
         <div className="flex items-center gap-2">
           <UbahButton href={`/keuangan/penjualan/${SLUG_BY_TIPE[doc.tipe]}/${doc.id}/ubah`} />
           {(doc.tipe === "PESANAN" || doc.tipe === "PENAWARAN" || doc.tipe === "PENAGIHAN") && (
-            <TindakanDropdown kind={tindakanKind} docId={doc.id} status={doc.status} />
+            <TindakanDropdown kind={tindakanKind} docId={doc.id} status={statusTampil} />
           )}
         </div>
       </div>
@@ -147,7 +156,7 @@ export default async function DetailDokumenPage({
           <div>
             <div className="text-[11px] uppercase tracking-wide text-slate-400">Status</div>
             <div className="mt-0.5">
-              <Badge variant="secondary" className="text-[11px]">{doc.status}</Badge>
+              <Badge variant="secondary" className="text-[11px]">{statusTampil}</Badge>
               {doc.tagihan && (
                 <Badge
                   variant={doc.tagihan.status === "LUNAS" ? "sehat" : doc.tagihan.status === "LUNAS_SEBAGIAN" ? "info" : "warning"}

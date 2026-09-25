@@ -8,7 +8,8 @@ import { prisma } from "@/lib/prisma";
 export default async function LandingPage() {
   const stats = { pohon: 0, karyawan: 0, luas: "120 Ha", varietas: 4 };
   try {
-    const [pohonCount, karyawanCount] = await Promise.all([prisma.pohon.count(), prisma.karyawan.count()]);
+    // Karyawan kini dari master Kontak (tabel Karyawan hanya arsip baca).
+    const [pohonCount, karyawanCount] = await Promise.all([prisma.pohon.count(), prisma.kontak.count({ where: { tipe: "KARYAWAN" } })]);
     stats.pohon = pohonCount;
     stats.karyawan = karyawanCount;
   } catch {}

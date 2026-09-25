@@ -99,6 +99,15 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const parsed = createFakturSchema.parse(body);
+    // Rantai dokumen: id DokumenPembelian asal (pesanan/pengiriman->pesanan).
+    // Disimpan di faktur agar relasi dapat ditelusuri; asal menjadi SELESAI.
+    const referensiIds: string[] = Array.isArray(body?.referensiIds)
+      ? [...new Set(
+          (body.referensiIds as unknown[])
+            .filter((v): v is string => typeof v === "string" && v.trim() !== "")
+            .map((v) => v.trim())
+        )].slice(0, 50)
+      : [];
     const tanggal = parsed.tanggal ?? new Date();
 
     const result = await prisma.$transaction(async (tx) => {
@@ -161,6 +170,13 @@ export async function POST(req: NextRequest) {
       const subtotal = Math.round(items.reduce((s, it) => s + it.jumlah, 0) * 100) / 100;
       const noFaktur = await generateNoFaktur(tanggal);
 
+      if (referensiIds.length > 0) {
+        await tx.dokumenPembelian.updateMany({
+          where: { id: { in: referensiIds }, status: { not: "SELESAI" } },
+          data: { status: "SELESAI" },
+        });
+      }
+
       // Satu faktur = satu utang (KREDIT 2101). Tanpa transaksi Kas & Bank.
       const tagihan = await tx.tagihan.create({
         data: {
@@ -194,6 +210,7 @@ export async function POST(req: NextRequest) {
           memo: parsed.memo?.trim() || null,
           subtotal,
           total: subtotal,
+          referensiIds,
           tagihanId: tagihan.id,
           adminId: adminId!,
           items: {
