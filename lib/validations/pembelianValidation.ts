@@ -57,3 +57,58 @@ export const createFakturSchema = baseFakturSchema.superRefine((data, ctx) => {
 
 export type CreateFakturInput = z.infer<typeof createFakturSchema>;
 export type CreateSupplierInput = z.infer<typeof createSupplierSchema>;
+
+// Rantai dokumen pembelian: PERMINTAAN -> PENAWARAN -> PESANAN (PO).
+// Tanpa jurnal keuangan (utang baru terbentuk saat Faktur dibuat).
+export const TipeDokumenBeliEnum = z.enum(["PERMINTAAN", "PENAWARAN", "PESANAN"]);
+export type TipeDokumenBeli = z.infer<typeof TipeDokumenBeliEnum>;
+
+export const itemDokumenBeliSchema = z.object({
+  produkId: z.string().max(50).optional().nullable(),
+  deskripsi: z.string().trim().min(2, "Deskripsi produk minimal 2 karakter").max(500),
+  kuantitas: z.number({ message: "Kuantitas harus angka" }).positive("Kuantitas harus positif").max(1_000_000_000),
+  unit: z.string().trim().min(1, "Unit wajib diisi").max(20),
+  harga: z.number({ message: "Harga harus angka" }).min(0, "Harga minimal 0").max(10_000_000_000),
+  diskonPersen: z.number({ message: "Diskon harus angka" }).min(0).max(100).default(0),
+  kodeAkun: z.string().trim().max(10).optional().nullable(),
+});
+
+export const baseDokumenBeliSchema = z.object({
+  tipe: TipeDokumenBeliEnum,
+  supplierId: z.string().max(50).optional().nullable(),
+  departemen: z.string().trim().max(100).optional().nullable(),
+  email: z.string().trim().max(100).optional().nullable(),
+  alamat: z.string().trim().max(1000).optional().nullable(),
+  tanggal: z.string().optional().transform((s) => {
+    if (!s) return undefined;
+    const [y, m, d] = s.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }),
+  jatuhTempo: z.string().optional().nullable().transform((s) => {
+    if (!s) return null;
+    const [y, m, d] = s.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }),
+  noRefSupplier: z.string().trim().max(50).optional().nullable(),
+  syaratPembayaran: z.string().trim().max(50).optional().nullable(),
+  gudang: z.string().trim().max(100).optional().nullable(),
+  pesan: z.string().trim().max(1000).optional().nullable(),
+  memo: z.string().trim().max(1000).optional().nullable(),
+  items: z.array(itemDokumenBeliSchema).max(50, "Maksimal 50 baris produk").default([]),
+  referensiIds: z.array(z.string().max(50)).max(50).default([]),
+  lampiran: z.array(lampiranFakturSchema).max(20, "Maksimal 20 lampiran").optional(),
+});
+
+export const createDokumenBeliSchema = baseDokumenBeliSchema.superRefine((data, ctx) => {
+  if (data.tipe !== "PERMINTAAN" && !data.supplierId) {
+    ctx.addIssue({ code: "custom", message: "Supplier wajib dipilih", path: ["supplierId"] });
+  }
+  if (data.items.length === 0) {
+    ctx.addIssue({ code: "custom", message: "Tambahkan minimal 1 baris produk", path: ["items"] });
+  }
+  if (data.email && !/.+@.+\..+/.test(data.email)) {
+    ctx.addIssue({ code: "custom", message: "Format email tidak valid", path: ["email"] });
+  }
+});
+
+export type CreateDokumenBeliInput = z.infer<typeof createDokumenBeliSchema>;

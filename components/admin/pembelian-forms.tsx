@@ -12,9 +12,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Loader2, Paperclip, Plus, Trash2, X } from "lucide-react";
 import { formatRupiah } from "@/lib/utils";
+import { jatuhTempoDari } from "@/lib/tempo";
 
 type Produk = { id: string; namaBarang: string; kategori: string; satuan: string; hargaSatuan: number };
-type Lampiran = { fileName: string; fileUrl: string; fileType: string; fileSize: number };
+export type Lampiran = { fileName: string; fileUrl: string; fileType: string; fileSize: number };
 type Supplier = { id: string; nama: string; email?: string | null; telepon?: string | null; alamat?: string | null };
 
 export const SYARAT_OPTIONS = ["Tunai", "Tempo 7 hari", "Tempo 14 hari", "Tempo 30 hari"];
@@ -191,7 +192,7 @@ function TambahSupplierDialog({
   );
 }
 
-function SupplierField({
+export function SupplierField({
   value,
   onSelect,
   disabled,
@@ -269,7 +270,7 @@ export function hitungBaris(it: ItemBaris) {
 }
 
 // ---------- Baris produk (akun COA ditentukan otomatis, bukan input user) ----------
-function ItemsTable({
+export function ItemsTable({
   items,
   setItems,
   locked,
@@ -390,7 +391,7 @@ function ItemsTable({
 // ---------- Lampiran ----------
 export type LampiranItem = Lampiran & { key: string; id?: string };
 
-function LampiranUploader({
+export function LampiranUploader({
   value,
   onAdd,
   onRemove,
@@ -430,11 +431,26 @@ function LampiranUploader({
   };
 
   return (
-    <div>
-      <span className="text-xs font-medium text-slate-600">Lampiran</span>
-      <input ref={inputRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" className="hidden" onChange={(e) => handleFiles(e.target.files)} />
-      {value.length > 0 && (
-        <ul className="mt-2 space-y-1.5">
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-slate-600">Lampiran</span>
+        <input ref={inputRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" className="hidden" onChange={(e) => handleFiles(e.target.files)} />
+        <Button type="button" variant="outline" size="sm" disabled={uploading} onClick={() => inputRef.current?.click()}>
+          {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
+          {uploading ? "Mengunggah..." : "Tambah lampiran"}
+        </Button>
+      </div>
+      {errors.length > 0 && (
+        <div className="rounded-md bg-red-50 p-2 text-xs text-red-600">
+          <ul className="list-disc space-y-0.5 pl-4">
+            {errors.map((error) => (
+              <li key={error}>{error}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {value.length > 0 ? (
+        <ul className="space-y-1.5">
           {value.map((item) => (
             <li key={item.key} className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50/50 px-3 py-2">
               <div className="flex min-w-0 items-center gap-2 text-xs text-slate-600">
@@ -447,20 +463,9 @@ function LampiranUploader({
             </li>
           ))}
         </ul>
+      ) : (
+        <p className="text-xs text-slate-400">Belum ada lampiran</p>
       )}
-      {errors.length > 0 && (
-        <div className="mt-2 rounded-md bg-red-50 p-2 text-xs text-red-600">
-          <ul className="list-disc space-y-0.5 pl-4">
-            {errors.map((error) => (
-              <li key={error}>{error}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <Button type="button" variant="outline" size="sm" className="mt-2" disabled={uploading} onClick={() => inputRef.current?.click()}>
-        {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
-        {uploading ? "Mengupload..." : "+ Tambah Lampiran"}
-      </Button>
     </div>
   );
 }
@@ -508,7 +513,7 @@ export type FakturInitial = {
   supplierNama?: string;
 };
 
-export function FakturForm({ initial }: { initial?: FakturInitial | null }) {
+export function FakturForm({ initial, title, subtitle, referensiIds, asalLabel }: { initial?: FakturInitial | null; title?: string; subtitle?: string; referensiIds?: string[]; asalLabel?: string }) {
   const router = useRouter();
   const isEdit = Boolean(initial?.id);
   const [header, setHeader] = useState<HeaderState>(initial?.header ?? emptyHeader());
@@ -544,6 +549,7 @@ export function FakturForm({ initial }: { initial?: FakturInitial | null }) {
       if (!header.supplierId) throw new Error("Supplier wajib dipilih");
       const payload = {
         ...(isEdit ? {} : { supplierId: header.supplierId }),
+        ...(!isEdit && referensiIds && referensiIds.length > 0 ? { referensiIds } : {}),
         email: header.email.trim() || undefined,
         alamat: header.alamat.trim() || undefined,
         tanggal: header.tanggal || undefined,
@@ -592,9 +598,9 @@ export function FakturForm({ initial }: { initial?: FakturInitial | null }) {
         <CardHeader className="border-b border-slate-100">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <CardTitle className="text-base">{isEdit ? "Ubah Faktur Pembelian" : "Faktur Pembelian"}</CardTitle>
+              <CardTitle className="text-base">{isEdit ? (title ? `Ubah ${title}` : "Ubah Faktur Pembelian") : (title || "Faktur Pembelian")}</CardTitle>
               <p className="mt-1 text-xs text-slate-500">
-                Tagihan dari supplier. Tersimpan sebagai utang (2101 - Utang Usaha) — Kas & Bank tercatat saat supplier dibayar.
+                {asalLabel || subtitle || "Tagihan dari supplier. Tersimpan sebagai utang (2101 - Utang Usaha) — Kas & Bank tercatat saat supplier dibayar."}
               </p>
             </div>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-medium text-slate-500">
@@ -622,7 +628,14 @@ export function FakturForm({ initial }: { initial?: FakturInitial | null }) {
               <Input value={header.alamat} onChange={(e) => set("alamat", e.target.value)} placeholder="Alamat supplier" maxLength={1000} />
             </Field>
             <Field label="Tanggal transaksi *">
-              <Input type="date" value={header.tanggal} onChange={(e) => set("tanggal", e.target.value)} required />
+              <Input type="date" value={header.tanggal} onChange={(e) => {
+                const tgl = e.target.value;
+                set("tanggal", tgl);
+                if (header.syarat) {
+                  const jt = jatuhTempoDari(tgl, header.syarat);
+                  if (jt) set("jatuhTempo", jt);
+                }
+              }} required />
             </Field>
             <Field label="Tanggal jatuh tempo *">
               <Input type="date" value={header.jatuhTempo} onChange={(e) => set("jatuhTempo", e.target.value)} required />
@@ -634,7 +647,12 @@ export function FakturForm({ initial }: { initial?: FakturInitial | null }) {
               <Input value={header.noRef} onChange={(e) => set("noRef", e.target.value)} placeholder="No. invoice supplier" maxLength={50} />
             </Field>
             <Field label="Syarat pembayaran">
-              <Select value={header.syarat} onChange={(e) => set("syarat", e.target.value)}>
+              <Select value={header.syarat} onChange={(e) => {
+                const s = e.target.value;
+                set("syarat", s);
+                const jt = jatuhTempoDari(header.tanggal, s);
+                if (jt) set("jatuhTempo", jt);
+              }}>
                 <option value="">Pilih syarat</option>
                 {SYARAT_OPTIONS.map((s) => (
                   <option key={s} value={s}>
