@@ -306,13 +306,12 @@ export function CoaDetail({ akun, initialData, initialTotal, initialSummary }: C
                   <TableHead className="w-[140px]" style={{ textAlign: "right" }}>Jumlah</TableHead>
                   <TableHead className="w-[100px]">Sumber Dana</TableHead>
                   <TableHead className="w-[120px]">Admin</TableHead>
-                  <TableHead className="w-[70px] text-center">Bukti</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data.length === 0 && !loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-8 text-center text-slate-500">
+                    <TableCell colSpan={6} className="py-8 text-center text-slate-500">
                       {isFiltered
                         ? "Tidak ada transaksi pada periode ini"
                         : `Belum ada transaksi untuk akun ${akun.kode}`}
@@ -334,16 +333,6 @@ export function CoaDetail({ akun, initialData, initialTotal, initialSummary }: C
                       </TableCell>
                       <TableCell className="text-xs text-slate-500">{labelSumberDana(row.sumberDana)}</TableCell>
                       <TableCell className="text-xs text-slate-500">{row.admin.nama}</TableCell>
-                      <TableCell className="text-center">
-                        {row.buktiCount && row.buktiCount > 0 ? (
-                          <span className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-slate-500 bg-slate-50">
-                            <FileText className="h-3 w-3 text-slate-400" />
-                            <span className="font-medium">{row.buktiCount}</span>
-                          </span>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
-                      </TableCell>
                     </TableRow>
                   ))
                 )}

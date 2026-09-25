@@ -32,23 +32,31 @@ export default async function DetailPengirimanPage({
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <Link
+            href="/keuangan/penjualan?tab=pengiriman"
+            className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" /> Kembali ke Pengiriman
+          </Link>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+            Detail Pengiriman {data.noPengiriman}
+          </h1>
+          <p className="mt-1 text-sm text-slate-400">
+            Dari Pesanan{" "}
+            <Link href={`/keuangan/penjualan/pesanan/${data.pesanan.id}`} className="text-green-700 hover:underline">
+              {data.pesanan.noDokumen}
+            </Link>{" "}
+            · {data.pelanggan.nama}
+          </p>
+        </div>
         <Link
-          href="/keuangan/penjualan?tab=pengiriman"
-          className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"
+          href={`/keuangan/penjualan/penagihan/baru?dariPengiriman=${data.id}`}
+          className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
         >
-          <ChevronLeft className="h-3.5 w-3.5" /> Kembali ke Pengiriman
+          Buat Penagihan
         </Link>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
-          Detail Pengiriman {data.noPengiriman}
-        </h1>
-        <p className="mt-1 text-sm text-slate-400">
-          Dari Pesanan{" "}
-          <Link href={`/keuangan/penjualan/pesanan/${data.pesanan.id}`} className="text-green-700 hover:underline">
-            {data.pesanan.noDokumen}
-          </Link>{" "}
-          · {data.pelanggan.nama}
-        </p>
       </div>
 
       <Card className="border-slate-200">
@@ -63,6 +71,7 @@ export default async function DetailPengirimanPage({
           <div>
             <div className="text-[11px] uppercase tracking-wide text-slate-400">Pelanggan</div>
             <div className="mt-0.5 text-sm font-medium">{data.pelanggan.nama}</div>
+            {data.pelanggan.email && <div className="text-xs text-slate-500">{data.pelanggan.email}</div>}
           </div>
           <div>
             <div className="text-[11px] uppercase tracking-wide text-slate-400">Tgl. Pengiriman</div>
@@ -71,6 +80,10 @@ export default async function DetailPengirimanPage({
           <div>
             <div className="text-[11px] uppercase tracking-wide text-slate-400">Nomor Pesanan</div>
             <div className="mt-0.5 text-sm">{data.pesanan.noDokumen}</div>
+          </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-wide text-slate-400">No. Transaksi</div>
+            <div className="mt-0.5 text-sm">{data.noTransaksi || "—"}</div>
           </div>
           <div>
             <div className="text-[11px] uppercase tracking-wide text-slate-400">Kirim Melalui</div>

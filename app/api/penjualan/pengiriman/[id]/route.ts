@@ -43,7 +43,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 
   const data = await prisma.pengirimanPenjualan.findUnique({
     where: { id },
-    select: { id: true },
+    select: { id: true, pesananId: true },
   });
   if (!data) return errorResponse("Pengiriman tidak ditemukan", 404);
 
@@ -55,6 +55,18 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   await prisma.pengirimanPenjualan.delete({ where: { id } });
   for (const l of lampiran) {
     await deleteBuktiFile(l.fileUrl);
+  }
+  // Kembalikan pesanan ke Belum Ditagih bila sudah tidak ada pengiriman lain
+  // dan belum ada penagihan yang merujuknya.
+  const [sisaKirim, penagihanTerkait] = await Promise.all([
+    prisma.pengirimanPenjualan.count({ where: { pesananId: data.pesananId } }),
+    prisma.dokumenPenjualan.count({ where: { tipe: "PENAGIHAN", referensiIds: { has: data.pesananId } } }),
+  ]);
+  if (sisaKirim === 0 && penagihanTerkait === 0) {
+    await prisma.dokumenPenjualan.updateMany({
+      where: { id: data.pesananId, tipe: "PESANAN" },
+      data: { status: "BELUM_DITAGIH" },
+    });
   }
   return successResponse(null, "Pengiriman dihapus");
 }

@@ -41,8 +41,16 @@ export const baseDokumenSchema = z.object({
   jenis: JenisPenjualanEnum.optional().nullable(),
   email: z.string().trim().max(100).optional().nullable(),
   alamat: z.string().trim().max(1000).optional().nullable(),
-  tanggal: z.coerce.date().optional(),
-  jatuhTempo: z.coerce.date().optional().nullable(),
+  tanggal: z.string().optional().transform((s) => {
+    if (!s) return undefined;
+    const [y, m, d] = s.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }),
+  jatuhTempo: z.string().optional().nullable().transform((s) => {
+    if (!s) return null;
+    const [y, m, d] = s.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }),
   noRefPelanggan: z.string().trim().max(50).optional().nullable(),
   syaratPembayaran: z.string().trim().max(50).optional().nullable(),
   pesan: z.string().trim().max(1000).optional().nullable(),
@@ -79,7 +87,11 @@ export const updatePenagihanSchema = z
   .object({
     pihak: z.string().trim().min(2, "Nama pelanggan minimal 2 karakter").max(100).optional(),
     keterangan: z.string().trim().max(1000).optional().nullable(),
-    jatuhTempo: z.coerce.date({ message: "Tanggal tidak valid" }).optional().nullable(),
+    jatuhTempo: z.string().optional().nullable().transform((s) => {
+      if (!s) return null;
+      const [y, m, d] = s.split("-").map(Number);
+      return new Date(y, m - 1, d);
+    }),
     noInvoice: z.string().trim().max(50, "No invoice maksimal 50 karakter").optional().nullable(),
     jenis: z.enum(["HASIL_KEBUN", "TERNAK", "IKAN", "LAINNYA"]).optional().nullable(),
     dokumen: z.enum(["PENAGIHAN", "PROFORMA", "TUKAR_FAKTUR"]).optional().nullable(),

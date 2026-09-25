@@ -192,8 +192,8 @@ export default async function DetailFakturPage({
               {faktur.tagihan.status !== "LUNAS" && (
                 <p className="text-xs text-slate-500">
                   Pembayaran supplier dicatat di{" "}
-                  <Link href="/keuangan/tagihan" className="font-medium text-green-700 hover:underline">
-                    Hutang & Piutang
+                  <Link href="/keuangan/pembelian?tab=faktur" className="font-medium text-green-700 hover:underline">
+                    Pembelian — Faktur
                   </Link>{" "}
                   (mengurangi 2101 - Utang Usaha dan Kas/Bank, tanpa mencatat pembelian lagi).
                 </p>

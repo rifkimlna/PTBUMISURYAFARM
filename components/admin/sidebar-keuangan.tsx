@@ -2,21 +2,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Wallet, ArrowLeftRight, Users, Package, Boxes, LogOut, Leaf, BookOpen, Settings, Receipt, FileText, ShoppingBag } from "lucide-react";
+import { LayoutDashboard, Wallet, Package, Boxes, LogOut, Leaf, BookOpen, Settings, Receipt, FileText, ShoppingBag, Banknote, Contact } from "lucide-react";
 
 const keuanganMenu = [
   { label: "Dashboard", href: "/keuangan", icon: LayoutDashboard },
   { label: "Kas & Bank", href: "/keuangan/kas", icon: Wallet },
   { label: "Penjualan", href: "/keuangan/penjualan", icon: Receipt },
   { label: "Pembelian", href: "/keuangan/pembelian", icon: ShoppingBag },
-  { label: "Hutang & Piutang", href: "/keuangan/tagihan", icon: ArrowLeftRight },
+  { label: "Biaya", href: "/keuangan/biaya", icon: Banknote },
   { label: "Laporan", href: "/keuangan/laporan", icon: FileText },
 ];
 
 const masterDataMenu = [
-  { label: "Data Karyawan", href: "/keuangan/karyawan", icon: Users },
-  { label: "Inventaris Aset", href: "/keuangan/aset", icon: Package },
-  { label: "Persediaan Barang", href: "/keuangan/persediaan", icon: Boxes },
+  { label: "Kontak", href: "/keuangan/kontak", icon: Contact },
+  { label: "Produk", href: "/keuangan/produk", icon: Boxes },
+  { label: "Aset", href: "/keuangan/aset", icon: Package },
 ];
 
 const pengaturanMenu = [

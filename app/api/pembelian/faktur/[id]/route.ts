@@ -250,7 +250,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 
   const faktur = await prisma.fakturPembelian.findUnique({
     where: { id },
-    select: { id: true, tagihanId: true },
+    select: { id: true, tagihanId: true, referensiIds: true },
   });
   if (!faktur) return errorResponse("Faktur tidak ditemukan", 404);
 
@@ -271,6 +271,27 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 
   for (const l of lampiran) {
     await deleteBuktiFile(l.fileUrl);
+  }
+
+  // Kembalikan dokumen asal ke Belum Ditagih bila sudah yatim.
+  if (faktur.referensiIds.length > 0) {
+    const asal = await prisma.dokumenPembelian.findMany({
+      where: { id: { in: faktur.referensiIds } },
+      select: { id: true, tipe: true },
+    });
+    for (const a of asal) {
+      const [masihDirujuk, fakturMerujuk, sisaKirim] = await Promise.all([
+        prisma.dokumenPembelian.count({ where: { referensiIds: { has: a.id } } }),
+        prisma.fakturPembelian.count({ where: { referensiIds: { has: a.id } } }),
+        a.tipe === "PESANAN" ? prisma.pengirimanPembelian.count({ where: { pesananId: a.id } }) : Promise.resolve(1),
+      ]);
+      if (masihDirujuk === 0 && fakturMerujuk === 0 && sisaKirim === 0) {
+        await prisma.dokumenPembelian.updateMany({
+          where: { id: a.id },
+          data: { status: "BELUM_DITAGIH" },
+        });
+      }
+    }
   }
 
   return successResponse(null, "Faktur berhasil dihapus");

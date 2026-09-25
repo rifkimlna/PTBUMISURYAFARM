@@ -308,6 +308,32 @@ async function main() {
     },
   });
 
+  // Kontak KARYAWAN untuk seed karyawan (sumber tulis tunggal = Kontak;
+  // tabel Karyawan di atas dipertahankan sebagai arsip baca).
+  await prisma.kontak.upsert({
+    where: { kodeKaryawan: "EMP-001" },
+    update: {
+      nama: "Joko Tani",
+      tipe: "KARYAWAN",
+    },
+    create: {
+      nama: "Joko Tani",
+      tipe: "KARYAWAN",
+      email: "joko.tani@ptbst.id",
+      noHp: "081234567890",
+      alamat: "Perumahan Bumi Surya, Blok A",
+      catatan: "Migrasi dari Data Karyawan",
+      kodeKaryawan: "EMP-001",
+      jabatan: "Mandor",
+      statusKerja: "TETAP",
+      lokasiKerja: "Blok A",
+      tanggalMasuk: new Date("2023-01-10"),
+      gajiPokok: 3500000,
+      tanggalLahir: new Date("1985-06-15"),
+      jenisKelamin: "LAKI_LAKI",
+    },
+  });
+
   await prisma.transaksiKas.deleteMany({ where: { id: { startsWith: "SEED-" } } });
   await prisma.transaksiKas.createMany({
     data: [
