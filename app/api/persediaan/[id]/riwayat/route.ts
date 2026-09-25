@@ -46,6 +46,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         jenis: parsed.jenis,
         jumlah: parsed.jumlah,
         keterangan: parsed.keterangan ?? null,
+        sumber: parsed.sumber ?? null,
         tanggal: parsed.tanggal ?? new Date(),
       },
     });

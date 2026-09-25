@@ -7,7 +7,8 @@ export async function GET() {
     const counts = {
       users: await prisma.user.count(),
       pohon: await prisma.pohon.count(),
-      karyawan: await prisma.karyawan.count(),
+      // Karyawan kini dari master Kontak (tabel Karyawan hanya arsip baca).
+      karyawan: await prisma.kontak.count({ where: { tipe: "KARYAWAN" } }),
       transaksi: await prisma.transaksiKas.count(),
     };
     return successResponse({ db: "pt_bst", status: "connected", counts }, "Health OK");

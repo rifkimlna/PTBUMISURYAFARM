@@ -10,12 +10,11 @@ const PUBLIC_PATHS = [
 ];
 
 // Prefix yang wajib auth (sesuai spec: /api/admin/*)
-const PROTECTED_PREFIXES = ["/api/admin", "/api/pohon", "/api/karyawan", "/api/keuangan", "/api/aset", "/api/persediaan"];
+const PROTECTED_PREFIXES = ["/api/admin", "/api/pohon", "/api/keuangan", "/api/aset", "/api/persediaan"];
 
 // Tambah data tanpa login (demo) - POST di beberapa endpoint jadi public
 const PUBLIC_POST_PATHS = [
   "/api/pohon",
-  "/api/karyawan",
   "/api/keuangan",
   "/api/aset",
   "/api/upload",

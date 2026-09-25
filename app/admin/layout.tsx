@@ -8,41 +8,42 @@ import Link from "next/link";
 export default function AdminHubLayout({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
-  const [user, setUser] = useState<{ nama: string; role: string } | null>(null);
+  const [user, setUser] = useState<{ nama: string; role: string } | null>(() => {
+    try {
+      if (typeof window === "undefined") return null;
+      const raw = localStorage.getItem("user");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("user");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setUser(parsed);
-        if (parsed.role !== "SUPER_ADMIN") {
-          // redirect non-super ke modulnya
-          if (parsed.role === "ADMIN_PERTANIAN") router.push("/perkebunan");
-          else if (parsed.role === "ADMIN_KEUANGAN") router.push("/keuangan");
-          else if (parsed.role === "PETUGAS_LAPANGAN") router.push("/petugas/scan");
-        }
-      } else {
-        fetch("/api/auth/me")
-          .then((r) => r.json())
-          .then((j) => {
-            if (j.success) {
-              setUser(j.data.user);
-              localStorage.setItem("user", JSON.stringify(j.data.user));
-              const role = j.data.user.role;
-              if (role !== "SUPER_ADMIN") {
-                if (role === "ADMIN_PERTANIAN") router.push("/perkebunan");
-                else if (role === "ADMIN_KEUANGAN") router.push("/keuangan");
-                else if (role === "PETUGAS_LAPANGAN") router.push("/petugas/scan");
-              }
-            } else router.push("/login");
-          })
-          .catch(() => router.push("/login"));
+    if (user) {
+      if (user.role !== "SUPER_ADMIN") {
+        // redirect non-super ke modulnya
+        if (user.role === "ADMIN_PERTANIAN") router.push("/perkebunan");
+        else if (user.role === "ADMIN_KEUANGAN") router.push("/keuangan");
+        else if (user.role === "PETUGAS_LAPANGAN") router.push("/petugas/scan");
       }
-    } catch {
-      router.push("/login");
+      return;
     }
-  }, [router]);
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.success) {
+          setUser(j.data.user);
+          localStorage.setItem("user", JSON.stringify(j.data.user));
+          const role = j.data.user.role;
+          if (role !== "SUPER_ADMIN") {
+            if (role === "ADMIN_PERTANIAN") router.push("/perkebunan");
+            else if (role === "ADMIN_KEUANGAN") router.push("/keuangan");
+            else if (role === "PETUGAS_LAPANGAN") router.push("/petugas/scan");
+          }
+        } else router.push("/login");
+      })
+      .catch(() => router.push("/login"));
+  }, [router, user]);
 
   useEffect(() => {
     if (open) document.body.style.overflow = "hidden";

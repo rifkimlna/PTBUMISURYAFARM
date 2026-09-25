@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -11,12 +12,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, Paperclip, X, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, ChevronDown, Paperclip, X, Loader2, ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { formatRupiah } from "@/lib/utils";
 import { kategoriByTipe, labelSumberDana, SUMBER_DANA_KEYS } from "@/lib/coa";
-import { BuktiTransaksiDialog } from "@/components/admin/bukti-transaksi-dialog";
 
-type Tipe = "PEMASUKAN" | "PENGELUARAN";
+type Tipe = "PEMASUKAN" | "PENGELUARAN" | "TRANSFER";
 
 export type TransaksiRow = {
   id: string;
@@ -25,6 +25,8 @@ export type TransaksiRow = {
   kategori: string;
   kodeAkun?: string | null;
   sumberDana?: string | null;
+  sumberDanaTujuan?: string | null;
+  noTransaksi?: string | null;
   jumlah: number;
   keterangan: string | null;
   admin: { nama: string };
@@ -38,12 +40,11 @@ type PendingBukti = {
   fileSize: number;
 };
 
-type BuktiDialogTransaksi = { id: string; kategori: string; jumlah: number };
-
 type FormValues = {
   tipe: Tipe;
   kategori: string;
   sumberDana: string;
+  sumberDanaTujuan: string;
   jumlah: string;
   keterangan: string;
   tanggal: string;
@@ -53,10 +54,33 @@ const emptyForm: FormValues = {
   tipe: "PEMASUKAN",
   kategori: "Pendapatan Penjualan Hasil Kebun",
   sumberDana: "KAS",
+  sumberDanaTujuan: "BANK",
   jumlah: "",
   keterangan: "",
   tanggal: "",
 };
+
+// Menu tombol "+ Tambah Transaksi": form Mekari + dialog manual lama.
+const TAMBAH_ITEMS = [
+  {
+    href: "/keuangan/kas/transfer",
+    label: "Transfer Uang",
+    desc: "Pindah dana antar Kas / Bank / Tabungan",
+    Icon: ArrowLeftRight,
+  },
+  {
+    href: "/keuangan/kas/terima",
+    label: "Terima Uang",
+    desc: "Catat uang masuk",
+    Icon: ArrowDownToLine,
+  },
+  {
+    href: "/keuangan/kas/kirim",
+    label: "Kirim Uang",
+    desc: "Catat uang keluar",
+    Icon: ArrowUpFromLine,
+  },
+];
 
 function kategoriOptionsFor(tipe: Tipe) {
   return kategoriByTipe(tipe);
@@ -83,12 +107,14 @@ function Field({ label, children, className }: { label: string; children: ReactN
   );
 }
 
-type Summary = {
+export type RingkasanTransaksi = {
   pemasukan: number;
   pengeluaran: number;
   saldo: number;
   perSumber?: { KAS: number; BANK: number; TABUNGAN: number };
 };
+
+type Summary = RingkasanTransaksi;
 
 export function TransaksiTable({
   initialData,
@@ -126,13 +152,25 @@ export function TransaksiTable({
   const [pendingBukti, setPendingBukti] = useState<PendingBukti[]>([]);
   const [pendingBuktiErrors, setPendingBuktiErrors] = useState<string[]>([]);
   const [uploadingBukti, setUploadingBukti] = useState(false);
-  const [buktiDialogTransaksi, setBuktiDialogTransaksi] = useState<BuktiDialogTransaksi | null>(null);
   const buktiInputRef = useRef<HTMLInputElement>(null);
+  const [aksiOpen, setAksiOpen] = useState(false);
+  const aksiRef = useRef<HTMLDivElement>(null);
 
-  const bumpRows = useCallback(() => {
-    setLoading(true);
-    setRowsVersion((v) => v + 1);
-  }, []);
+  useEffect(() => {
+    if (!aksiOpen) return;
+    const onDown = (e: PointerEvent) => {
+      if (aksiRef.current && !aksiRef.current.contains(e.target as Node)) setAksiOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAksiOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [aksiOpen]);
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
@@ -221,6 +259,9 @@ export function TransaksiTable({
       sumberDana: (SUMBER_DANA_KEYS as string[]).includes(row.sumberDana ?? "")
         ? (row.sumberDana as (typeof SUMBER_DANA_KEYS)[number])
         : "KAS",
+      sumberDanaTujuan: (SUMBER_DANA_KEYS as string[]).includes(row.sumberDanaTujuan ?? "")
+        ? (row.sumberDanaTujuan as (typeof SUMBER_DANA_KEYS)[number])
+        : "BANK",
       jumlah: String(row.jumlah),
       keterangan: row.keterangan ?? "",
       tanggal: formatDateInput(row.tanggal),
@@ -278,6 +319,9 @@ export function TransaksiTable({
       tipe: form.tipe,
       kategori: form.kategori.trim(),
       sumberDana: form.sumberDana,
+      ...(form.tipe === "TRANSFER" && form.sumberDanaTujuan
+        ? { sumberDanaTujuan: form.sumberDanaTujuan }
+        : {}),
       jumlah: Number(form.jumlah),
       keterangan: form.keterangan.trim() || undefined,
       tanggal: form.tanggal || undefined,
@@ -357,9 +401,54 @@ export function TransaksiTable({
                 </option>
               ))}
             </select>
-            <Button size="sm" onClick={openCreate}>
-              <Plus className="h-3 w-3" /> Tambah Transaksi
-            </Button>
+            <div ref={aksiRef} className="relative">
+              <Button size="sm" onClick={() => setAksiOpen((v) => !v)} aria-haspopup="menu" aria-expanded={aksiOpen}>
+                <Plus className="h-3 w-3" /> Tambah Transaksi
+                <ChevronDown className={`h-3 w-3 transition-transform ${aksiOpen ? "rotate-180" : ""}`} />
+              </Button>
+              {aksiOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 z-30 mt-2 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg"
+                >
+                  {TAMBAH_ITEMS.map(({ href, label, desc, Icon }) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      role="menuitem"
+                      onClick={() => setAksiOpen(false)}
+                      className="flex items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+                    >
+                      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-green-50 text-green-700">
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span>
+                        <span className="block text-sm font-medium text-slate-900">{label}</span>
+                        <span className="block text-xs text-slate-500">{desc}</span>
+                      </span>
+                    </Link>
+                  ))}
+                  <div className="border-t border-slate-100" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAksiOpen(false);
+                      openCreate();
+                    }}
+                    className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+                  >
+                    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                      <Pencil className="h-4 w-4" />
+                    </span>
+                    <span>
+                      <span className="block text-sm font-medium text-slate-900">Transaksi Manual</span>
+                      <span className="block text-xs text-slate-500">Catat cepat via dialog</span>
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -368,12 +457,12 @@ export function TransaksiTable({
               <TableHeader>
                 <TableRow>
                   <TableHead>Tanggal</TableHead>
+                  <TableHead>No Transaksi</TableHead>
                   <TableHead>Tipe</TableHead>
                   <TableHead>Kategori</TableHead>
                   <TableHead>Jumlah</TableHead>
                   <TableHead>Sumber Dana</TableHead>
                   <TableHead>Admin</TableHead>
-                  <TableHead className="text-center">Bukti</TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
@@ -388,40 +477,22 @@ export function TransaksiTable({
                   rows.map((row) => (
                     <TableRow key={row.id}>
                       <TableCell className="text-xs text-slate-500">{formatDate(row.tanggal)}</TableCell>
+                      <TableCell className="text-xs text-slate-500">{row.noTransaksi || "—"}</TableCell>
                       <TableCell>
                         <Badge variant={row.tipe === "PEMASUKAN" ? "sehat" : "outline"} className="text-[11px]">
                           {row.tipe}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm text-slate-700">{row.kategori}</TableCell>
+                      <TableCell className="text-sm text-slate-700">{row.kodeAkun ? `${row.kodeAkun} - ` : ""}{row.kategori}</TableCell>
                       <TableCell className="text-sm font-medium tracking-tight">
                         Rp {formatRupiah(row.jumlah)}
                       </TableCell>
-                      <TableCell className="text-xs text-slate-500">{labelSumberDana(row.sumberDana)}</TableCell>
-                      <TableCell className="text-xs text-slate-500">{row.admin.nama}</TableCell>
-                      <TableCell className="text-center">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setBuktiDialogTransaksi({
-                              id: row.id,
-                              kategori: row.kategori,
-                              jumlah: row.jumlah,
-                            })
-                          }
-                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900"
-                          title="Lihat bukti transaksi"
-                        >
-                          {(row.buktiCount ?? 0) > 0 ? (
-                            <>
-                              <Paperclip className="h-3.5 w-3.5 text-slate-400" />
-                              <span className="font-medium">{row.buktiCount}</span>
-                            </>
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
-                        </button>
+                      <TableCell className="text-xs text-slate-500">
+                        {row.tipe === "TRANSFER" && row.sumberDanaTujuan
+                          ? `${labelSumberDana(row.sumberDana)} → ${labelSumberDana(row.sumberDanaTujuan)}`
+                          : labelSumberDana(row.sumberDana)}
                       </TableCell>
+                      <TableCell className="text-xs text-slate-500">{row.admin.nama}</TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">
                           <Button variant="ghost" size="sm" className="h-7 w-7 rounded-full" onClick={() => openEdit(row)}>
@@ -487,6 +558,8 @@ export function TransaksiTable({
                         "kategori",
                         nextTipe === "PEMASUKAN"
                           ? "Pendapatan Penjualan Hasil Kebun"
+                          : nextTipe === "TRANSFER"
+                          ? "Transfer Antar Kas/Bank"
                           : "Beban Upah dan Gaji Pekerja"
                       );
                     }
@@ -494,6 +567,7 @@ export function TransaksiTable({
                 >
                   <option value="PEMASUKAN">PEMASUKAN</option>
                   <option value="PENGELUARAN">PENGELUARAN</option>
+                  <option value="TRANSFER">TRANSFER</option>
                 </Select>
               </Field>
               <Field label="Kategori">
@@ -502,11 +576,11 @@ export function TransaksiTable({
                     value={form.kategori}
                     onChange={(event) => updateForm("kategori", event.target.value)}
                   >
-                    {kategoriOptionsFor(form.tipe).map((item) => (
-                      <option key={item.kode} value={item.nama}>
-                        {item.nama}
-                      </option>
-                    ))}
+                      {kategoriOptionsFor(form.tipe).map((item) => (
+                        <option key={item.kode} value={item.nama}>
+                          {item.kode} - {item.nama}
+                        </option>
+                      ))}
                     {form.kategori &&
                       !kategoriOptionsFor(form.tipe).some((item) => item.nama === form.kategori) && (
                         <option value={form.kategori}>Kategori lama: {form.kategori}</option>
@@ -532,6 +606,20 @@ export function TransaksiTable({
                   ))}
                 </Select>
               </Field>
+              {form.tipe === "TRANSFER" && (
+                <Field label="Setor Ke (Tujuan)">
+                  <Select
+                    value={form.sumberDanaTujuan}
+                    onChange={(event) => updateForm("sumberDanaTujuan", event.target.value)}
+                  >
+                    {SUMBER_DANA_KEYS.filter((key) => key !== form.sumberDana).map((key) => (
+                      <option key={key} value={key}>
+                        {labelSumberDana(key)}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              )}
               <Field label="Jumlah (Rp)">
                 <Input
                   type="number"
@@ -622,18 +710,6 @@ export function TransaksiTable({
           </form>
         </DialogContent>
       </Dialog>
-
-      <BuktiTransaksiDialog
-        open={Boolean(buktiDialogTransaksi)}
-        transaksi={buktiDialogTransaksi}
-        onOpenChange={(openNext) => {
-          if (!openNext) setBuktiDialogTransaksi(null);
-        }}
-        onDataChange={() => {
-          onDataChange?.();
-          bumpRows();
-        }}
-      />
     </>
   );
 }

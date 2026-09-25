@@ -37,6 +37,7 @@ export default async function PublicPohonPage({ params }: { params: Promise<{ id
     geotagSource: string | null; geotagTimestamp: Date | null; geotagAccuracy: number | null;
   };
 
+  // eslint-disable-next-line react-hooks/purity -- usia pohon memang dihitung saat request (server component)
   const usiaHari = Math.floor((Date.now() - new Date(p.tanggalTanam).getTime()) / (1000 * 60 * 60 * 24));
   const usiaTahun = (usiaHari / 365).toFixed(1);
   const hasFoto = isRealFotoUrl(p.fotoGeotagUrl);

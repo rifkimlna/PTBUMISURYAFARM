@@ -3,12 +3,13 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/prisma";
-import { ArrowUpRight, QrCode, ShieldCheck, ArrowRight, Sprout, Fish, Bird, Building2, MapPinned } from "lucide-react";
+
 
 export default async function LandingPage() {
-  let stats = { pohon: 0, karyawan: 0, luas: "120 Ha", varietas: 4 };
+  const stats = { pohon: 0, karyawan: 0, luas: "120 Ha", varietas: 4 };
   try {
-    const [pohonCount, karyawanCount] = await Promise.all([prisma.pohon.count(), prisma.karyawan.count()]);
+    // Karyawan kini dari master Kontak (tabel Karyawan hanya arsip baca).
+    const [pohonCount, karyawanCount] = await Promise.all([prisma.pohon.count(), prisma.kontak.count({ where: { tipe: "KARYAWAN" } })]);
     stats.pohon = pohonCount;
     stats.karyawan = karyawanCount;
   } catch {}

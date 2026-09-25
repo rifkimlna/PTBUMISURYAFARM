@@ -35,6 +35,28 @@ export async function GET(req: NextRequest, { params }: Params) {
           orderBy: { createdAt: "desc" },
           include: { admin: { select: { id: true, nama: true } } },
         },
+        // Dokumen Penagihan asal (sumber item produk nyata untuk Detail Produk).
+        dokumenPenjualan: {
+          select: {
+            id: true,
+            tipe: true,
+            noDokumen: true,
+            referensiIds: true,
+            items: {
+              orderBy: { id: "asc" },
+              select: {
+                id: true,
+                produkId: true,
+                deskripsi: true,
+                kuantitas: true,
+                unit: true,
+                harga: true,
+                diskonPersen: true,
+                jumlah: true,
+              },
+            },
+          },
+        },
       },
     });
     if (!tagihan) return errorResponse("Tagihan tidak ditemukan", 404);
@@ -50,10 +72,26 @@ export async function GET(req: NextRequest, { params }: Params) {
       jatuhTempo: tagihan.jatuhTempo?.toISOString() ?? null,
       status: tagihan.status,
       adminNama: tagihan.admin.nama,
+      noInvoice: tagihan.noInvoice,
+      dokumenId: tagihan.dokumenPenjualan?.id ?? null,
+      dokumenNo: tagihan.dokumenPenjualan?.noDokumen ?? null,
+      referensiIds: tagihan.dokumenPenjualan?.referensiIds ?? [],
+      // Detail Produk nyata dari DokumenPenjualan tertaut (bukan dummy).
+      items: (tagihan.dokumenPenjualan?.items ?? []).map((it) => ({
+        id: it.id,
+        produkId: it.produkId,
+        deskripsi: it.deskripsi,
+        kuantitas: Number(it.kuantitas),
+        unit: it.unit,
+        harga: Number(it.harga),
+        diskonPersen: Number(it.diskonPersen),
+        jumlah: Number(it.jumlah),
+      })),
       pembayaran: tagihan.pembayaran.map((p) => ({
         id: p.id,
         tipe: p.tipe,
         kategori: p.kategori,
+        kodeAkun: p.kodeAkun,
         sumberDana: p.sumberDana,
         jumlah: Number(p.jumlah),
         keterangan: p.keterangan,

@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuthAndRole } from "@/lib/auth";
 import { updateTransaksiKasSchema, type TipeTransaksi } from "@/lib/validations/keuanganValidation";
-import { kodeAkunByNama } from "@/lib/coa";
+import { kodeAkunByNama, SUMBER_DANA_KODE_MAP } from "@/lib/coa";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 import { deleteBuktiFile } from "@/lib/storage";
 import { ZodError } from "zod";
@@ -39,6 +39,20 @@ export async function PUT(req: NextRequest, { params }: Params) {
     const updated = await prisma.$transaction(async (tx) => {
       const { bukti, tipe, kategori, ...rest } = parsed;
       const resolvedTipe = tipe ?? (exists.tipe as TipeTransaksi);
+      const resolvedKategori = kategori ?? exists.kategori;
+      
+      let resolvedKodeAkun: string | null = null;
+      if (resolvedTipe === "TRANSFER") {
+        // Untuk transfer, gunakan kode sumber dana dari enum
+        resolvedKodeAkun = null;
+        // Jika sumberDanaTujuan diupdate, validasi beda dari sumberDana
+        if (rest.sumberDanaTujuan !== undefined && exists.sumberDanaTujuan !== rest.sumberDanaTujuan) {
+          // validasi sudah dilakukan di schema refine
+        }
+      } else {
+        resolvedKodeAkun = kodeAkunByNama(resolvedTipe as any, resolvedKategori ?? exists.kategori);
+      }
+      
       const result = await tx.transaksiKas.update({
         where: { id },
         data: {
@@ -46,11 +60,18 @@ export async function PUT(req: NextRequest, { params }: Params) {
           ...(rest.keterangan !== undefined ? { keterangan: rest.keterangan } : {}),
           ...(rest.jumlah !== undefined ? { jumlah: rest.jumlah } : {}),
           ...(rest.sumberDana !== undefined ? { sumberDana: rest.sumberDana } : {}),
-          ...(tipe !== undefined || kategori !== undefined
+          ...(rest.sumberDanaTujuan !== undefined ? { sumberDanaTujuan: rest.sumberDanaTujuan } : {}),
+          ...(rest.noTransaksi !== undefined
+            ? { noTransaksi: rest.noTransaksi?.trim() || null }
+            : {}),
+          ...(rest.pihak !== undefined ? { pihak: rest.pihak?.trim() || null } : {}),
+          ...(rest.tag !== undefined ? { tag: rest.tag?.trim() || null } : {}),
+          ...(rest.deskripsi !== undefined ? { deskripsi: rest.deskripsi?.trim() || null } : {}),
+          ...(resolvedTipe !== undefined || resolvedKategori !== undefined
             ? {
                 tipe: resolvedTipe,
-                kategori: kategori ?? exists.kategori,
-                kodeAkun: kodeAkunByNama(resolvedTipe, kategori ?? exists.kategori),
+                kategori: resolvedKategori,
+                kodeAkun: resolvedKodeAkun,
               }
             : {}),
         },
