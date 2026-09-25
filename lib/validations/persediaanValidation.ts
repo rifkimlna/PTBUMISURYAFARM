@@ -125,26 +125,6 @@ export const createPembelianSchema = z.object({
   })).max(20, "Maksimal 20 bukti per transaksi").optional(),
 });
 
-// Schema untuk Pembelian/Barang Masuk Terintegrasi (Stok + Kas + COA)
-export const createPembelianSchema = z.object({
-  barangId: z.string().min(1, "Barang wajib dipilih"),
-  jumlah: z.coerce.number().int("Jumlah harus bilangan bulat").min(1, "Jumlah minimal 1").max(1_000_000, "Jumlah terlalu besar"),
-  hargaSatuan: z.coerce
-    .number()
-    .positive("Harga satuan harus positif")
-    .min(1000, "Harga satuan minimal Rp 1.000")
-    .max(10_000_000_000, "Harga terlalu besar"),
-  sumberDana: SumberDanaEnum,
-  tanggal: z.coerce.date().optional(), // default now()
-  keterangan: z.string().max(1000, "Keterangan maksimal 1000 karakter").optional().nullable(),
-  bukti: z.array(z.object({
-    fileName: z.string().min(1, "Nama file wajib").max(200),
-    fileUrl: z.string().min(1, "Path file wajib").max(500),
-    fileType: z.string().max(100).optional(),
-    fileSize: z.number().int().nonnegative().optional(),
-  })).max(20, "Maksimal 20 bukti per transaksi").optional(),
-});
-
 export type CreatePersediaanBarangInput = z.infer<typeof createPersediaanBarangSchema>;
 export type UpdatePersediaanBarangInput = z.infer<typeof updatePersediaanBarangSchema>;
 export type CreateRiwayatStokInput = z.infer<typeof createRiwayatStokSchema>;
