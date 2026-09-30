@@ -8,15 +8,10 @@ import Link from "next/link";
 export default function AdminHubLayout({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
-  const [user, setUser] = useState<{ nama: string; role: string } | null>(() => {
-    try {
-      if (typeof window === "undefined") return null;
-      const raw = localStorage.getItem("user");
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  });
+  // user SELALU null pada render pertama (termasuk SSR) agar HTML server
+  // identik dengan hidrasi client. Cache localStorage hanya dibaca di dalam
+  // useEffect (setelah mount).
+  const [user, setUser] = useState<{ nama: string; role: string } | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -27,6 +22,16 @@ export default function AdminHubLayout({ children }: { children: React.ReactNode
         else if (user.role === "PETUGAS_LAPANGAN") router.push("/petugas/scan");
       }
       return;
+    }
+    // Cache lokal dulu agar tidak selalu fetch; tidak mengubah alur auth.
+    try {
+      const raw = localStorage.getItem("user");
+      if (raw) {
+        setUser(JSON.parse(raw));
+        return;
+      }
+    } catch {
+      /* abaikan cache rusak, lanjut fetch /api/auth/me */
     }
     fetch("/api/auth/me")
       .then((r) => r.json())
