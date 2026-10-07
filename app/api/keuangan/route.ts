@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuthAndRole, getSessionFromRequest } from "@/lib/auth";
 import { createTransaksiKasSchema, queryKeuanganSchema, updateTransaksiKasSchema } from "@/lib/validations/keuanganValidation";
 import { kodeAkunByNama, SUMBER_DANA_KODE_MAP } from "@/lib/coa";
+import { getKodeAkunByNamaFromDB } from "@/lib/coa-server";
 import { getSaldoPerSumber, generateNoTransaksi } from "@/lib/keuangan-server";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 import { ZodError } from "zod";
@@ -47,6 +48,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Ringkasan pemasukan/pengeluaran: TRANSFER dikecualikan (perpindahan
+    // internal) dan setoran modal 31xx dikecualikan (bukan pendapatan/beban).
+    // Saldo kas per sumber (getSaldoPerSumber) tetap mencakup 31xx karena
+    // uangnya memang masuk Kas/Bank/Tabungan.
+    const summaryWhere: any = {
+      ...where,
+      NOT: [...(where.NOT ?? []), { kodeAkun: { startsWith: "31" } }],
+    };
+
     const [data, total, summary, perSumber] = await Promise.all([
       prisma.transaksiKas.findMany({
         where,
@@ -56,7 +66,7 @@ export async function GET(req: NextRequest) {
         include: { admin: { select: { id: true, nama: true, email: true } }, _count: { select: { bukti: true } } },
       }),
       prisma.transaksiKas.count({ where }),
-      prisma.transaksiKas.groupBy({ by: ["tipe"], where, _sum: { jumlah: true } }),
+      prisma.transaksiKas.groupBy({ by: ["tipe"], where: summaryWhere, _sum: { jumlah: true } }),
       // Posisi dana per sumber: hanya ikut filter tanggal (abaikan filter tipe/kategori/sumber
       // tabel) agar ketiga sumber selalu tampil utuh dalam periode yang sama.
       // Transfer dihitung dari sumberDana (keluar) DAN sumberDanaTujuan (masuk).
@@ -120,8 +130,12 @@ export async function POST(req: NextRequest) {
         resolvedKodeAkun = null;
         resolvedSumberDanaTujuan = parsed.sumberDanaTujuan ?? null;
       } else {
-        // Untuk PEMASUKAN/PENGELUARAN: tentukan kode akun dari kategori
-        resolvedKodeAkun = kodeAkunByNama(parsed.tipe as any, parsed.kategori);
+        // Untuk PEMASUKAN/PENGELUARAN: tentukan kode akun dari kategori.
+        // Coba data statis dulu (cepat), lalu database agar akun baru
+        // dari Daftar Akun langsung tersimpan kodenya (tidak null).
+        resolvedKodeAkun =
+          kodeAkunByNama(parsed.tipe as any, parsed.kategori) ??
+          (await getKodeAkunByNamaFromDB(parsed.kategori, parsed.tipe as any));
       }
 
       const created = await tx.transaksiKas.create({

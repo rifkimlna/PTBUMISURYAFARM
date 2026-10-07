@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FileText, Building, CreditCard, Wallet, DollarSign, MinusCircle, Plus, Search, X, Edit, Trash2, AlertCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GOLOGAN_BY_KELOMPOK } from "@/lib/coa";
@@ -63,6 +64,7 @@ function sortGolonganByKode(golonganMap: Record<string, AkunCOA[]>, kelompok: st
 }
 
 export function CoaList({ grouped, kelompokUrutan, userRole }: CoaListProps) {
+  const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingAkun, setEditingAkun] = useState<AkunCOA | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -108,6 +110,8 @@ export function CoaList({ grouped, kelompokUrutan, userRole }: CoaListProps) {
       const result = await res.json();
       if (!res.ok) throw new Error(result.message || "Gagal menghapus akun");
       handleCloseDelete();
+      // Muat ulang data server agar daftar + halaman lain langsung sinkron.
+      router.refresh();
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : "Gagal menghapus akun");
     } finally {
@@ -137,6 +141,9 @@ export function CoaList({ grouped, kelompokUrutan, userRole }: CoaListProps) {
       if (!res.ok) throw new Error(result.message || "Gagal menyimpan akun");
 
       handleCloseModal();
+      // Muat ulang data server agar akun baru langsung muncul di daftar ini
+      // dan langsung bisa dipakai di form Kas / Anggaran / Laporan.
+      router.refresh();
     } catch (err) {
       throw err;
     } finally {

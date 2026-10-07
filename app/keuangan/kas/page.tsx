@@ -17,6 +17,10 @@ export default async function KeuanganPage() {
   akhirPeriode.setDate(akhirPeriode.getDate() + 30);
   akhirPeriode.setHours(23, 59, 59, 999);
 
+  // Setoran modal 31xx dikecualikan dari pemasukan/pengeluaran (bukan
+  // pendapatan/beban); saldo kas per sumber tetap mencakupnya.
+  const bukanModal: any = { NOT: [{ kodeAkun: { startsWith: "31" } }] };
+
   const [transaksi, agg, totalTransaksi, perSumber, trxMasaDepan, piutang, hutang, cookieStore] =
     await Promise.all([
       prisma.transaksiKas.findMany({
@@ -25,6 +29,7 @@ export default async function KeuanganPage() {
         include: { admin: { select: { nama: true } }, _count: { select: { bukti: true } } },
       }),
       prisma.transaksiKas.groupBy({
+        where: bukanModal,
         by: ["tipe"],
         _sum: { jumlah: true },
         _count: { id: true },
@@ -35,8 +40,8 @@ export default async function KeuanganPage() {
       // Arus kas masa depan: HANYA transaksi bertanggal SETELAH saat ini.
       // Transaksi yang sudah terjadi (termasuk yang bertanggal hari ini sebelumnya) dikecualikan.
       prisma.transaksiKas.groupBy({
+        where: { tanggal: { gt: now, lte: akhirPeriode }, ...bukanModal },
         by: ["tipe"],
-        where: { tanggal: { gt: now, lte: akhirPeriode } },
         _sum: { jumlah: true },
         _count: { id: true },
       }),
