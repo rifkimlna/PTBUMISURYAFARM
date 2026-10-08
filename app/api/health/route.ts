@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { prisma, isDbConnectionError, dbUnreachableMessage } from "@/lib/prisma";
 import { successResponse, errorResponse } from "@/lib/api-response";
 
 export async function GET() {
@@ -13,6 +13,9 @@ export async function GET() {
     };
     return successResponse({ db: "pt_bst", status: "connected", counts }, "Health OK");
   } catch (e) {
+    if (isDbConnectionError(e)) {
+      return errorResponse(dbUnreachableMessage(), 503);
+    }
     return errorResponse(e instanceof Error ? e.message : "DB error", 500);
   }
 }

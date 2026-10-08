@@ -118,8 +118,8 @@ function AdminScanInner() {
   return (
     <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-slate-900 flex items-center gap-2"><ScanLine className="h-5 w-5 text-green-700" /> Scan Pohon</h1>
-        <p className="text-xs sm:text-sm text-slate-500">Scan QR di batang → buka halaman edit.</p>
+        <h1 className="text-base sm:text-xl font-semibold tracking-tight text-slate-900 flex items-center gap-2"><ScanLine className="h-4 w-4 sm:h-5 sm:w-5 text-green-700" /> Scan Pohon</h1>
+        <p className="text-[11px] sm:text-sm text-slate-500">Scan QR di batang → buka halaman edit.</p>
       </div>
 
       <Card className="border-slate-200 overflow-hidden">

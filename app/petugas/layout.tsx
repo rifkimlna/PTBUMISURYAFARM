@@ -16,21 +16,41 @@ export default function PetugasLayout({ children }: { children: React.ReactNode 
     try {
       const raw = localStorage.getItem("user");
       if (raw) {
-        const parsed = JSON.parse(raw);
-        setUser(parsed);
-        if (parsed.role !== "PETUGAS_LAPANGAN" && parsed.role !== "ADMIN_PERTANIAN" && parsed.role !== "SUPER_ADMIN") {
+        try {
+          const parsed = JSON.parse(raw);
+          setUser(parsed);
+          if (parsed.role !== "PETUGAS_LAPANGAN" && parsed.role !== "ADMIN_PERTANIAN" && parsed.role !== "SUPER_ADMIN") {
+            router.push("/login");
+          }
+        } catch {
+          localStorage.removeItem("user");
           router.push("/login");
         }
+        // Revalidasi background, abaikan DB-down
+        fetch("/api/auth/me")
+          .then(async (r) => {
+            const j = await r.json().catch(() => null);
+            if (j?.success) {
+              setUser(j.data.user);
+              localStorage.setItem("user", JSON.stringify(j.data.user));
+            } else if (r.status === 401 || r.status === 404) {
+              router.push("/login");
+            }
+          })
+          .catch(() => {});
       } else {
         fetch("/api/auth/me")
-          .then((r) => r.json())
-          .then((j) => {
-            if (j.success) {
+          .then(async (r) => {
+            const j = await r.json().catch(() => null);
+            if (j?.success) {
               setUser(j.data.user);
               localStorage.setItem("user", JSON.stringify(j.data.user));
               if (j.data.user.role !== "PETUGAS_LAPANGAN" && j.data.user.role !== "ADMIN_PERTANIAN" && j.data.user.role !== "SUPER_ADMIN") {
                 router.push("/login");
               }
+            } else if (r.status === 503 || j?.data?.dbDown) {
+              // DB down: jangan redirect loop, biarkan halaman tampil
+              // (server page sudah punya DbErrorBanner)
             } else router.push("/login");
           })
           .catch(() => router.push("/login"));

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PrintButton } from "@/components/admin/print-button";
+import { DbErrorBanner } from "@/components/admin/db-error-banner";
 import { headers } from "next/headers";
 
 export default async function QrPage({ searchParams }: { searchParams: Promise<{ blok?: string }> }) {
@@ -14,24 +15,35 @@ export default async function QrPage({ searchParams }: { searchParams: Promise<{
   const proto = h.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
   const base = process.env.NEXT_PUBLIC_APP_URL || `${proto}://${host}`;
 
-  const [total, blokRows] = await Promise.all([
-    prisma.pohon.count({ where: blok ? { lokasiBlok: blok } : {} }),
-    prisma.pohon.findMany({ select: { lokasiBlok: true }, distinct: ["lokasiBlok"], orderBy: { lokasiBlok: "asc" } }),
-  ]);
-  const pohon = await prisma.pohon.findMany({
-    where: blok ? { lokasiBlok: blok } : {},
-    orderBy: { id: "asc" },
-    take: blok ? undefined : 50,
-  });
+  let total = 0;
+  let blokRows: { lokasiBlok: string }[] = [];
+  let pohon: any[] = [];
+  let dbError = false;
+  try {
+    [total, blokRows] = await Promise.all([
+      prisma.pohon.count({ where: blok ? { lokasiBlok: blok } : {} }),
+      prisma.pohon.findMany({ select: { lokasiBlok: true }, distinct: ["lokasiBlok"], orderBy: { lokasiBlok: "asc" } }),
+    ]);
+    pohon = await prisma.pohon.findMany({
+      where: blok ? { lokasiBlok: blok } : {},
+      orderBy: { id: "asc" },
+      take: blok ? undefined : 50,
+    });
+  } catch (e) {
+    console.error("[perkebunan/qr] database tidak terjangkau:", e instanceof Error ? e.message : e);
+    dbError = true;
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6 min-w-0">
       <div className="min-w-0">
-        <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-slate-900">Cetak QR</h1>
-        <p className="text-xs sm:text-sm text-slate-500">
+        <h1 className="text-base sm:text-xl font-semibold tracking-tight text-slate-900 truncate">Cetak QR</h1>
+        <p className="text-[11px] sm:text-sm text-slate-500">
           Tempel di batang pohon • Scan membuka halaman pohon
         </p>
       </div>
+
+      {dbError && <DbErrorBanner />}
 
       <form method="get" action="/perkebunan/qr" className="flex gap-2">
         <select name="blok" defaultValue={blok} className="h-11 rounded-full border border-slate-200 bg-white px-3 text-sm flex-1 sm:flex-none sm:min-w-[200px]">

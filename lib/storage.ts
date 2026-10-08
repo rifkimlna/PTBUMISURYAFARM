@@ -4,8 +4,9 @@
  * Alur: Foto dari HP petugas -> upload ke Cloud Storage (UploadThing / Supabase / S3) -> dapat URL publik -> simpan fotoUrl ke DB
  *
  * File ini menyediakan abstraction agar mudah ganti provider tanpa ubah logic API.
- * Default: validasi file + simpan ke local disk public/uploads (tanpa butuh env),
- * atau integrasi Supabase/UploadThing jika env tersedia.
+ * Dev: boleh fallback ke local disk public/uploads (tanpa butuh env).
+ * Production (Vercel): WAJIB Supabase, fallback local dimatikan karena filesystem
+ * ephemeral -> file /uploads/... pasti 404 setelah request/redeploy.
  */
 
 import { promises as fs } from "fs";
@@ -40,36 +41,56 @@ export function validateFile(file: File, opts: UploadOptions = {}) {
 }
 
 // ========== Provider: Supabase Storage ==========
-// Aktif jika env SUPABASE_URL & SUPABASE_ANON_KEY & SUPABASE_BUCKET tersedia
-async function uploadToSupabase(file: File, folder: string): Promise<UploadResult> {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_ANON_KEY;
-  const bucket = process.env.SUPABASE_BUCKET || "pt-bst";
+// Aktif jika env SUPABASE_URL & (SUPABASE_SERVICE_ROLE_KEY | SUPABASE_ANON_KEY) tersedia.
+// Di server (route handler) prioritaskan SERVICE_ROLE agar tidak bergantung RLS policy insert.
+function isProductionStorage(): boolean {
+  return process.env.NODE_ENV === "production" || !!process.env.VERCEL;
+}
 
-  if (!url || !key) throw new Error("Supabase env tidak lengkap");
+function normalizeSupabaseUrl(url: string): string {
+  // Terima URL yang ke-copy dari dashboard apa adanya:
+  // buang trailing slash dan suffix service (/rest/v1, /auth/v1, /storage/v1)
+  // karena supabase-js menambahkan path service-nya sendiri.
+  let u = url.trim().replace(/\/+$/, "");
+  u = u.replace(/\/(rest|auth|storage|realtime)\/v1$/, "");
+  return u;
+}
+
+function getSupabaseConfig(): { url: string; key: string; bucket: string } | null {
+  const rawUrl = process.env.SUPABASE_URL;
+  // Prioritas: SERVICE_ROLE (server-only) -> ANON_KEY
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+  const bucket = process.env.SUPABASE_BUCKET || "pt-bst";
+  if (!rawUrl || !key) return null;
+  return { url: normalizeSupabaseUrl(rawUrl), key, bucket };
+}
+
+async function uploadToSupabase(file: File, folder: string): Promise<UploadResult> {
+  const cfg = getSupabaseConfig();
+
+  if (!cfg) throw new Error("Storage cloud belum dikonfigurasi - set SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY (atau SUPABASE_ANON_KEY) di Vercel");
 
   // Dynamic import agar tidak wajib install jika tidak pakai Supabase
-  // npm install @supabase/supabase-js
-  // @ts-ignore - optional dependency
+  // @supabase/supabase-js sudah ada di dependencies
   const { createClient } = await import("@supabase/supabase-js");
-  const supabase = createClient(url, key);
+  const supabase = createClient(cfg.url, cfg.key);
 
   const ext = file.name.split(".").pop() || "jpg";
   const filename = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
-  const { error } = await supabase.storage.from(bucket).upload(filename, file, {
+  const { error } = await supabase.storage.from(cfg.bucket).upload(filename, file, {
     contentType: file.type,
     upsert: false,
   });
   if (error) throw error;
 
-  const { data } = supabase.storage.from(bucket).getPublicUrl(filename);
+  const { data } = supabase.storage.from(cfg.bucket).getPublicUrl(filename);
   return { url: data.publicUrl, key: filename, provider: "supabase" };
 }
 
 // ========== Provider: UploadThing ==========
 // Aktif jika UPLOADTHING_TOKEN tersedia
-async function uploadToUploadThing(file: File): Promise<UploadResult> {
+async function uploadToUploadThing(): Promise<UploadResult> {
   // Untuk integrasi real, gunakan uploadthing/server + UTApi
   // Contoh: const utapi = new UTApi(); const res = await utapi.uploadFiles(file);
   // Di sini kita provide stub yang bisa diaktifkan setelah install: npm install uploadthing
@@ -103,18 +124,26 @@ export async function uploadFotoLapangan(file: File, opts: UploadOptions = {}): 
   validateFile(file, opts);
   const folder = opts.folder || "riwayat-kesehatan";
 
-  // Prioritas: Supabase -> UploadThing -> Local disk
-  if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
+  // Prioritas: Supabase -> UploadThing -> Local disk (dev saja)
+  // Di production (Vercel) JANGAN fallback ke local: filesystem ephemeral,
+  // file /uploads/... pasti 404 setelah request/redeploy.
+  const supabaseCfg = getSupabaseConfig();
+  if (supabaseCfg) {
     try {
       return await uploadToSupabase(file, folder);
     } catch (e) {
+      if (isProductionStorage()) throw e;
       console.error("[Storage] Supabase upload gagal, fallback ke local disk:", e);
       return uploadToLocal(file, folder);
     }
   }
 
   if (process.env.UPLOADTHING_TOKEN) {
-    return uploadToUploadThing(file);
+    return uploadToUploadThing();
+  }
+
+  if (isProductionStorage()) {
+    throw new Error("Storage cloud belum dikonfigurasi - set SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY (atau SUPABASE_ANON_KEY) di Vercel");
   }
 
   return uploadToLocal(file, folder);
@@ -134,14 +163,13 @@ export async function deleteFotoLapangan(keyOrUrl: string): Promise<void> {
     }
     return;
   }
-  if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
-    // @ts-ignore - optional dependency
+  const cfg = getSupabaseConfig();
+  if (cfg) {
     const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
-    const bucket = process.env.SUPABASE_BUCKET || "pt-bst";
+    const supabase = createClient(cfg.url, cfg.key);
     // Ekstrak key dari URL jika perlu
-    const key = keyOrUrl.includes(bucket + "/") ? keyOrUrl.split(bucket + "/")[1] : keyOrUrl;
-    await supabase.storage.from(bucket).remove([key]);
+    const key = keyOrUrl.includes(cfg.bucket + "/") ? keyOrUrl.split(cfg.bucket + "/")[1] : keyOrUrl;
+    await supabase.storage.from(cfg.bucket).remove([key]);
     return;
   }
   console.warn("[Storage] deleteFotoLapangan - no provider, skipped");

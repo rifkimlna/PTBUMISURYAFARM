@@ -12,6 +12,7 @@
     "lint": "eslint",
     "seed": "tsx prisma/seed.ts",
     "db:seed": "tsx prisma/seed.ts",
+    "storage:verify": "node scripts/verify-storage.mjs",
     "db:migrate": "prisma migrate deploy"
   },
   "dependencies": {

@@ -15,7 +15,6 @@ export const createPohonSchema = z.object({
     .regex(customPohonIdRegex, "ID harus format PHN-* (contoh: PHN-BLK-A01)"),
   namaPohon: z.string().min(2, "Nama pohon minimal 2 karakter").max(100).optional().nullable().or(z.literal("")),
   varietas: z.string().min(2, "Varietas minimal 2 karakter").max(100),
-  jenis: z.string().min(2, "Jenis minimal 2 karakter").max(50).optional().nullable().or(z.literal("")),
   lokasiBlok: z.string().min(2, "Lokasi blok wajib diisi").max(50),
   tanggalTanam: z.coerce.date({ message: "Tanggal tanam tidak valid" }),
    koordinat: z
@@ -28,19 +27,24 @@ export const createPohonSchema = z.object({
    hasilPanen: z.coerce.number().min(0, "Hasil panen minimal 0").max(999999).optional().nullable(),
   pemupukan: z.string().max(2000, "Pemupukan maksimal 2000 karakter").optional().nullable().or(z.literal("")),
   pengobatan: z.string().max(2000, "Pengobatan maksimal 2000 karakter").optional().nullable().or(z.literal("")),
+  tinggiCm: z.coerce.number().int().min(0, "Tinggi minimal 0").max(3000).optional().nullable(),
+  lingkarBatangCm: z.coerce.number().min(0, "Lingkar minimal 0").max(500).optional().nullable(),
+  phTanah: z.coerce.number().min(0, "pH minimal 0").max(14, "pH maksimal 14").optional().nullable(),
   status: StatusKesehatanEnum.default("SEHAT").optional(),
 });
 
 export const updatePohonSchema = z.object({
   namaPohon: z.string().min(2).max(100).optional().nullable().or(z.literal("")),
   varietas: z.string().min(2).max(100).optional(),
-  jenis: z.string().min(2).max(50).optional().nullable().or(z.literal("")),
   lokasiBlok: z.string().min(2).max(50).optional(),
   tanggalTanam: z.coerce.date().optional(),
   koordinat: z.string().max(50).optional().nullable().or(z.literal("")),
   hasilPanen: z.coerce.number().min(0).max(999999).optional().nullable(),
   pemupukan: z.string().max(2000).optional().nullable().or(z.literal("")),
   pengobatan: z.string().max(2000).optional().nullable().or(z.literal("")),
+  tinggiCm: z.coerce.number().int().min(0).max(3000).optional().nullable(),
+  lingkarBatangCm: z.coerce.number().min(0).max(500).optional().nullable(),
+  phTanah: z.coerce.number().min(0).max(14).optional().nullable(),
   status: StatusKesehatanEnum.optional(),
 }).refine((data) => Object.keys(data).length > 0, {
   message: "Minimal satu field harus diisi untuk update",
@@ -51,7 +55,6 @@ export const updatePohonMasterSchema = z
   .object({
     namaPohon: z.string().min(2).max(100).optional().nullable().or(z.literal("")),
     varietas: z.string().min(2).max(100).optional(),
-    jenis: z.string().min(2).max(50).optional().nullable().or(z.literal("")),
     lokasiBlok: z.string().min(2).max(50).optional(),
     tanggalTanam: z.coerce.date().optional(),
     koordinat: z
@@ -73,6 +76,9 @@ export const updatePohonLapanganSchema = z
     hasilPanen: z.coerce.number().min(0).max(999999).optional().nullable(),
     pemupukan: z.string().max(2000).optional().nullable().or(z.literal("")),
     pengobatan: z.string().max(2000).optional().nullable().or(z.literal("")),
+    tinggiCm: z.coerce.number().int().min(0).max(3000).optional().nullable(),
+    lingkarBatangCm: z.coerce.number().min(0).max(500).optional().nullable(),
+    phTanah: z.coerce.number().min(0).max(14).optional().nullable(),
     status: StatusKesehatanEnum.optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
@@ -128,15 +134,19 @@ export const updatePohonGeotagSchema = z
     path: ["latitude"],
   });
 
-// Query filter untuk list pohon - 11 field + geotag
+// Query filter untuk list pohon - 11 field + geotag + dimensi/pH
 export const queryPohonSchema = z.object({
   lokasiBlok: z.string().optional(),
   status: StatusKesehatanEnum.optional(),
   varietas: z.string().optional(),
   namaPohon: z.string().optional(),
-  jenis: z.string().optional(),
   koordinat: z.string().optional(),
   hasGeotag: z.enum(["true", "false"]).optional(),
+  kategoriUkuran: z.enum(["KECIL", "SEDANG", "BESAR", "BELUM_UKUR"]).optional(),
+  minTinggi: z.coerce.number().int().min(0).optional(),
+  maxTinggi: z.coerce.number().int().min(0).optional(),
+  phMin: z.coerce.number().min(0).max(14).optional(),
+  phMax: z.coerce.number().min(0).max(14).optional(),
   page: z.coerce.number().int().min(1).default(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20).optional(),
 });

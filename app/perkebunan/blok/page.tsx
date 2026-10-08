@@ -3,20 +3,37 @@ export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TambahBlokForm, BlokRowActions } from "./actions";
+import { DbErrorBanner } from "@/components/admin/db-error-banner";
 
 export default async function BlokPage() {
-  const bloks = await prisma.blok.findMany({ orderBy: { kode: "asc" } });
-  const counts = await prisma.pohon.groupBy({ by: ["lokasiBlok"], _count: { _all: true } });
-  const map = new Map(counts.map((c) => [c.lokasiBlok, c._count._all]));
+  let bloks: { id: string; kode: string; nama: string; luasHa: number | null }[] = [];
+  let map = new Map<string, number>();
+  let dbError = false;
+  try {
+    const [b, counts] = await Promise.all([
+      prisma.blok.findMany({ orderBy: { kode: "asc" } }),
+      prisma.pohon.groupBy({ by: ["lokasiBlok"], _count: { _all: true } }),
+    ]);
+    bloks = b;
+    map = new Map(counts.map((c) => [c.lokasiBlok, c._count._all]));
+  } catch (e) {
+    console.error("[perkebunan/blok] database tidak terjangkau:", e instanceof Error ? e.message : e);
+    dbError = true;
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6 min-w-0">
-      <div className="min-w-0">
-        <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-slate-900">Blok</h1>
-        <p className="text-xs sm:text-sm text-slate-500">{bloks.length} blok • 120 Ha</p>
+      <div className="flex flex-row items-center justify-between gap-2 sm:gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-base sm:text-xl font-semibold tracking-tight text-slate-900 truncate">Blok</h1>
+          <p className="text-[11px] sm:text-sm text-slate-500">{bloks.length} blok • 120 Ha</p>
+        </div>
+        <div className="shrink-0 ml-auto">
+          <TambahBlokForm />
+        </div>
       </div>
 
-      <TambahBlokForm />
+      {dbError && <DbErrorBanner />}
 
       <Card className="border-slate-200">
         <CardHeader>
