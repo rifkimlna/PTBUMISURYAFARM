@@ -8,6 +8,7 @@ type Props = {
   q: string;
   blok: string;
   status: string;
+  ukuran?: string;
   blokRows: string[];
   statusList: string[];
 };
@@ -17,9 +18,9 @@ type Props = {
  * - search bar selalu terlihat (dengan tombol Filter + badge di dalamnya)
  * - opsi blok/status kolapsibel di HP, selalu terbuka di desktop
  */
-export function PohonFilter({ q, blok, status, blokRows, statusList }: Props) {
+export function PohonFilter({ q, blok, status, ukuran, blokRows, statusList }: Props) {
   const [open, setOpen] = useState(false);
-  const active = (q ? 1 : 0) + (blok ? 1 : 0) + (status ? 1 : 0);
+  const active = (q ? 1 : 0) + (blok ? 1 : 0) + (status ? 1 : 0) + (ukuran ? 1 : 0);
 
   return (
     <form method="get" action="/perkebunan/pohon" className="space-y-2">
@@ -54,7 +55,7 @@ export function PohonFilter({ q, blok, status, blokRows, statusList }: Props) {
         </div>
       </div>
 
-      <div className={`${open ? "grid" : "hidden"} md:grid grid-cols-2 gap-2`}>
+      <div className={`${open ? "grid" : "hidden"} md:grid grid-cols-2 sm:grid-cols-3 gap-2`}>
         <select
           name="blok"
           defaultValue={blok}
@@ -76,6 +77,18 @@ export function PohonFilter({ q, blok, status, blokRows, statusList }: Props) {
           {statusList.map((s) => (
             <option key={s} value={s}>{s.replace("_", " ")}</option>
           ))}
+        </select>
+        <select
+          name="ukuran"
+          defaultValue={ukuran || ""}
+          aria-label="Filter ukuran"
+          className="h-11 rounded-full border border-slate-200 bg-white px-4 text-sm cursor-pointer col-span-2 sm:col-span-1"
+        >
+          <option value="">Semua ukuran</option>
+          <option value="KECIL">Kecil (&lt;150cm)</option>
+          <option value="SEDANG">Sedang (150-400cm)</option>
+          <option value="BESAR">Besar (&gt;400cm)</option>
+          <option value="BELUM_UKUR">Belum ukur</option>
         </select>
       </div>
     </form>

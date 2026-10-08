@@ -4,7 +4,7 @@ import { successResponse, errorResponse } from "@/lib/api-response";
 import { z } from "zod";
 
 const querySchema = z.object({
-  type: z.enum(["status", "blok", "jenis", "trend"]).default("status"),
+  type: z.enum(["status", "blok", "varietas", "trend"]).default("status"),
   periode: z.enum(["7-hari", "bulan-ini", "6-bulan", "1-tahun"]).default("6-bulan"),
 });
 
@@ -21,7 +21,7 @@ function formatMonthKey(d: Date) {
   return `${d.getFullYear()}-${m}`;
 }
 
-// GET /api/perkebunan/chart?type=status|blok|jenis|trend&periode=6-bulan
+// GET /api/perkebunan/chart?type=status|blok|varietas|trend&periode=6-bulan
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -73,10 +73,10 @@ export async function GET(req: NextRequest) {
       return successResponse({ type, items });
     }
 
-    // Jenis bar - sum Panen.jumlahKg per jenis (sumber tunggal: tabel Panen)
-    if (type === "jenis") {
-      const rows = await prisma.$queryRaw<{ jenis: string | null; kg: number; pohon: number; n: number }[]>`
-        SELECT COALESCE(p.jenis, 'Tidak Diketahui') AS jenis,
+    // Varietas bar - sum Panen.jumlahKg per varietas (sumber tunggal: tabel Panen)
+    if (type === "varietas") {
+      const rows = await prisma.$queryRaw<{ varietas: string | null; kg: number; pohon: number; n: number }[]>`
+        SELECT COALESCE(p.varietas, 'Tidak Diketahui') AS varietas,
                COALESCE(SUM(pn."jumlahKg"), 0)::float AS kg,
                COUNT(DISTINCT pn."pohonId")::int AS pohon,
                COUNT(pn.id)::int AS n
@@ -84,13 +84,13 @@ export async function GET(req: NextRequest) {
         GROUP BY 1 ORDER BY kg DESC`;
       const items = rows
         .map((r) => ({
-          key: r.jenis ?? "Tidak Diketahui",
-          label: r.jenis ?? "Tidak Diketahui",
+          key: r.varietas ?? "Tidak Diketahui",
+          label: r.varietas ?? "Tidak Diketahui",
           value: Number(r.kg ?? 0),
           count: Number(r.pohon ?? 0),
         }))
         .sort((a, b) => b.value - a.value);
-      return successResponse({ type, items });
+      return successResponse({ type: "varietas", items });
     }
 
     // Trend - sum Panen.jumlahKg per periode (sumber tunggal: tabel Panen, tanpa fallback Pohon)

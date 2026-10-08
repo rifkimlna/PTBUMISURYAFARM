@@ -3,11 +3,23 @@ export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TambahBlokForm, BlokRowActions } from "./actions";
+import { DbErrorBanner } from "@/components/admin/db-error-banner";
 
 export default async function BlokPage() {
-  const bloks = await prisma.blok.findMany({ orderBy: { kode: "asc" } });
-  const counts = await prisma.pohon.groupBy({ by: ["lokasiBlok"], _count: { _all: true } });
-  const map = new Map(counts.map((c) => [c.lokasiBlok, c._count._all]));
+  let bloks: { id: string; kode: string; nama: string; luasHa: number | null }[] = [];
+  let map = new Map<string, number>();
+  let dbError = false;
+  try {
+    const [b, counts] = await Promise.all([
+      prisma.blok.findMany({ orderBy: { kode: "asc" } }),
+      prisma.pohon.groupBy({ by: ["lokasiBlok"], _count: { _all: true } }),
+    ]);
+    bloks = b;
+    map = new Map(counts.map((c) => [c.lokasiBlok, c._count._all]));
+  } catch (e) {
+    console.error("[perkebunan/blok] database tidak terjangkau:", e instanceof Error ? e.message : e);
+    dbError = true;
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6 min-w-0">
@@ -20,6 +32,8 @@ export default async function BlokPage() {
           <TambahBlokForm />
         </div>
       </div>
+
+      {dbError && <DbErrorBanner />}
 
       <Card className="border-slate-200">
         <CardHeader>

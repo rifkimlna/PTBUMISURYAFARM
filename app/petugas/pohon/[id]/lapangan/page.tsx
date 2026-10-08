@@ -26,11 +26,19 @@ export default async function PetugasLapanganPage({ params }: { params: Promise<
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      <Link href="/petugas/scan" className="inline-flex">
-        <Button variant="ghost" size="sm" className="rounded-full -ml-2 -mb-1">
-          <ArrowLeft className="h-4 w-4" /> Scan Lagi
-        </Button>
-      </Link>
+      <div className="flex items-center justify-between gap-2">
+        <Link href="/petugas/scan" className="inline-flex">
+          <Button variant="ghost" size="sm" className="rounded-full -ml-2 -mb-1">
+            <ArrowLeft className="h-4 w-4" /> Scan Lagi
+          </Button>
+        </Link>
+        <Link
+          href={`/petugas/blok/${encodeURIComponent(pohon.lokasiBlok)}`}
+          className="text-xs font-medium text-emerald-700 hover:underline shrink-0"
+        >
+          Semua pohon {pohon.lokasiBlok} →
+        </Link>
+      </div>
 
       {/* Header ringkas — tanpa gambar, fokus update */}
       <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
@@ -41,7 +49,7 @@ export default async function PetugasLapanganPage({ params }: { params: Promise<
               <Badge variant={pohon.status === "SEHAT" ? "sehat" : pohon.status === "PERLU_PERHATIAN" ? "perhatian" : pohon.status === "SAKIT" ? "sakit" : "secondary"} className="shrink-0">{pohon.status}</Badge>
             </div>
             <h1 className="mt-2 text-[18px] font-semibold tracking-tight text-slate-900 leading-tight truncate">{(pohon as any).namaPohon || pohon.varietas}</h1>
-            <p className="text-sm text-slate-600">{pohon.jenis || pohon.varietas} • {pohon.lokasiBlok}</p>
+            <p className="text-sm text-slate-600">{pohon.varietas} • {pohon.lokasiBlok}</p>
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-1.5">
@@ -53,7 +61,14 @@ export default async function PetugasLapanganPage({ params }: { params: Promise<
             </a>
           )}
         </div>
-        <p className="mt-3 text-[11px] leading-relaxed text-slate-500">Fokus update data di bawah — hasil panen, pupuk & obat. Tersimpan otomatis ke data global perkebunan.</p>
+        {(pohon as any).tinggiCm != null || (pohon as any).phTanah != null ? (
+          <div className="mt-3 flex flex-wrap gap-1.5 text-xs">
+            {(pohon as any).tinggiCm != null && <span className="rounded-full bg-blue-50 border border-blue-100 px-2.5 py-1 font-medium text-blue-800">📏 {(pohon as any).tinggiCm}cm</span>}
+            {(pohon as any).lingkarBatangCm != null && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">Ø {Number((pohon as any).lingkarBatangCm).toFixed(0)}cm</span>}
+            {(pohon as any).phTanah != null && <span className="rounded-full bg-amber-50 border border-amber-100 px-2.5 py-1 font-medium text-amber-800">🧪 pH {Number((pohon as any).phTanah).toFixed(1)}</span>}
+          </div>
+        ) : null}
+        <p className="mt-3 text-[11px] leading-relaxed text-slate-500">Fokus update di bawah — panen, ukur, pupuk & obat. Tersimpan otomatis ke data global perkebunan.</p>
       </div>
 
       <PetugasLapanganMinimal
@@ -62,6 +77,9 @@ export default async function PetugasLapanganPage({ params }: { params: Promise<
           pemupukan: (pohon as any).pemupukan || "",
           pengobatan: (pohon as any).pengobatan || "",
           status: pohon.status as string,
+          tinggiCm: (pohon as any).tinggiCm != null ? String((pohon as any).tinggiCm) : "",
+          lingkarBatangCm: (pohon as any).lingkarBatangCm != null ? String((pohon as any).lingkarBatangCm) : "",
+          phTanah: (pohon as any).phTanah != null ? String((pohon as any).phTanah) : "",
         }}
         panenTerakhir={
           panenHist[0]

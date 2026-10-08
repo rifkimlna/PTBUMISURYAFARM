@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import { TambahJadwalForm, JadwalRowActions } from "./actions";
+import { DbErrorBanner } from "@/components/admin/db-error-banner";
 
 const PAGE_SIZE = 20;
 const STATUS_LIST = ["RENCANA", "SELESAI", "BATAL"];
@@ -35,20 +36,29 @@ export default async function JadwalPage({ searchParams }: { searchParams: Promi
   if (status && status !== "semua") where.status = status;
   if (blok) where.blok = blok;
 
-  const [total, rows, blokRows] = await Promise.all([
-    prisma.jadwalPerawatan.count({ where }),
-    prisma.jadwalPerawatan.findMany({
-      where,
-      orderBy: [{ tanggalRencana: "asc" }],
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
-      include: {
-        pohon: { select: { id: true, namaPohon: true } },
-        createdBy: { select: { nama: true } },
-      },
-    }),
-    prisma.blok.findMany({ orderBy: { kode: "asc" } }),
-  ]);
+  let total = 0;
+  let rows: any[] = [];
+  let blokRows: { id: string; nama: string }[] = [];
+  let dbError = false;
+  try {
+    [total, rows, blokRows] = await Promise.all([
+      prisma.jadwalPerawatan.count({ where }),
+      prisma.jadwalPerawatan.findMany({
+        where,
+        orderBy: [{ tanggalRencana: "asc" }],
+        skip: (page - 1) * PAGE_SIZE,
+        take: PAGE_SIZE,
+        include: {
+          pohon: { select: { id: true, namaPohon: true } },
+          createdBy: { select: { nama: true } },
+        },
+      }),
+      prisma.blok.findMany({ orderBy: { kode: "asc" } }),
+    ]);
+  } catch (e) {
+    console.error("[perkebunan/jadwal] database tidak terjangkau:", e instanceof Error ? e.message : e);
+    dbError = true;
+  }
 
   const totalPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const cur = Math.min(page, totalPage);
@@ -66,6 +76,8 @@ export default async function JadwalPage({ searchParams }: { searchParams: Promi
           <TambahJadwalForm bloks={blokRows.map((b) => b.nama)} />
         </div>
       </div>
+
+      {dbError && <DbErrorBanner />}
 
       <form method="get" action="/perkebunan/jadwal" className="flex gap-2">
         <select name="status" defaultValue={status} className="h-11 rounded-full border border-slate-200 bg-white px-3 text-sm flex-1 sm:flex-none">

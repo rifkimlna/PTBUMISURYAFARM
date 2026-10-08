@@ -170,15 +170,19 @@ model AkunCOA {
 
 model Pohon {
   id           String            @id // Custom ID ex: PHN-BLK-A01
-  namaPohon    String? // NAMA POHON ex: Pohon Sawit 001
-  varietas     String
-  jenis        String? // JENIS ex: Sawit, Durian, Karet
+  namaPohon    String? // NAMA POHON ex: Pohon Durian 001
+  varietas     String // VARIETAS ex: Durian Montong/Bawor, Alpukat Mentega/Kendil, Jambu Kristal (satu-satunya identitas komoditas)
   lokasiBlok   String // BLOK
   tanggalTanam DateTime // TANGGAL TANAM
   koordinat    String? // KOORDINAT ex: -2.983, 104.752
   hasilPanen   Decimal? @db.Decimal(10, 2) // HASIL PANEN KG
   pemupukan    String?  @db.Text // PEMUPUKAN - riwayat pupuk terakhir
   pengobatan   String?  @db.Text // PENGOBATAN - riwayat obat terakhir
+  // Dimensi pohon - untuk bedakan besar/kecil (diukur petugas lapangan)
+  tinggiCm         Int?     // cm, tanah ke pucuk ex: 180
+  lingkarBatangCm  Decimal? @db.Decimal(6, 2) // cm, ukur 130cm dari tanah
+  phTanah          Decimal? @db.Decimal(3, 1) // 0.0-14.0, pH meter tusuk per pohon
+  diukurPada       DateTime? // kapan terakhir ukur dimensi/pH
   // Geotagging wajib - foto terbaru per pohon
   fotoGeotagUrl   String?  // URL foto geotag terbaru
   latitude        Float?   @db.DoublePrecision // -90..90
@@ -199,10 +203,12 @@ model Pohon {
 
   @@index([lokasiBlok])
   @@index([status])
-  @@index([jenis])
+  @@index([varietas])
   @@index([tanggalTanam])
   @@index([geotagAdminId])
   @@index([geotagTimestamp])
+  @@index([tinggiCm])
+  @@index([phTanah])
   @@map("pohon")
 }
 

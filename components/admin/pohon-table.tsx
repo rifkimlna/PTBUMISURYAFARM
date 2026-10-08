@@ -7,19 +7,23 @@ import { Button } from "@/components/ui/button";
 import { QrCode, Eye, Pencil, Trash2, MapPin } from "lucide-react";
 import { QrModal } from "./qr-modal";
 import { isRealFotoUrl } from "@/lib/utils";
+import { klasifikasiUkuran, labelKategori, phLabel } from "@/lib/klasifikasi-pohon";
 import Link from "next/link";
 
 type Pohon = {
   id: string;
   namaPohon?: string | null;
   varietas: string;
-  jenis?: string | null;
   lokasiBlok: string;
   tanggalTanam: string;
   koordinat?: string | null;
   hasilPanen?: string | number | null;
   pemupukan?: string | null;
   pengobatan?: string | null;
+  tinggiCm?: number | null;
+  lingkarBatangCm?: string | number | null;
+  phTanah?: string | number | null;
+  diukurPada?: string | null;
   status: string;
   fotoGeotagUrl?: string | null;
   latitude?: number | null;
@@ -29,6 +33,18 @@ type Pohon = {
   _count?: { riwayat: number };
   riwayatCount?: number;
 };
+
+function UkuranBadge({ tinggi }: { tinggi?: number | string | null }) {
+  const t = tinggi != null && tinggi !== "" ? Number(tinggi) : null;
+  const k = klasifikasiUkuran(t);
+  const styles: Record<string, string> = {
+    KECIL: "bg-amber-100 text-amber-800",
+    SEDANG: "bg-blue-100 text-blue-800",
+    BESAR: "bg-emerald-100 text-emerald-800",
+    BELUM_UKUR: "bg-slate-100 text-slate-500",
+  };
+  return <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${styles[k]}`}>{labelKategori(k)}</span>;
+}
 
 function StatusBadge({ s }: { s: string }) {
   const map: Record<string, any> = { SEHAT: "sehat", PERLU_PERHATIAN: "perhatian", SAKIT: "sakit", MATI: "mati" };
@@ -82,12 +98,14 @@ function HapusButton({ id, className }: { id: string; className?: string }) {
   );
 }
 
-// Kartu mobile — ringkas horizontal, foto hanya thumbnail kecil
+// Kartu mobile — minimalis: foto + ID + ukuran + aksi besar
 function PohonCard({ p, onQr }: { p: Pohon; onQr: (id: string) => void }) {
   const usia = hitungUsia(p.tanggalTanam);
   const hasil = p.hasilPanen != null && p.hasilPanen !== "" && Number(p.hasilPanen) > 0 ? `${Number(p.hasilPanen).toFixed(1)} KG` : "Belum panen";
   const riwayatCount = p._count?.riwayat ?? p.riwayatCount ?? 0;
   const hasGeotag = isRealFotoUrl(p.fotoGeotagUrl);
+  const tinggiTxt = p.tinggiCm != null ? `${p.tinggiCm}cm` : "Belum ukur";
+  const ph = p.phTanah != null && p.phTanah !== "" ? `${Number(p.phTanah).toFixed(1)} (${phLabel(Number(p.phTanah))})` : "-";
   const aksi = "flex flex-col items-center justify-center gap-0.5 h-11 rounded-xl text-[10px] font-medium cursor-pointer border-slate-200";
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
@@ -106,11 +124,13 @@ function PohonCard({ p, onQr }: { p: Pohon; onQr: (id: string) => void }) {
             <div className="font-mono text-[11px] font-bold tracking-tight text-slate-500 truncate">{p.id}</div>
             <span className="ml-auto shrink-0"><StatusBadge s={p.status} /></span>
           </div>
-          <div className="text-sm font-semibold tracking-tight text-slate-900 truncate leading-snug">{p.namaPohon || p.jenis || p.varietas}</div>
+          <div className="text-sm font-semibold tracking-tight text-slate-900 truncate leading-snug">{p.namaPohon || p.varietas}</div>
           <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-500 truncate">
             <span className="shrink-0 rounded-full bg-slate-100 px-2 py-px font-medium">{p.lokasiBlok}</span>
-            <span className="truncate">{p.jenis || p.varietas} • {usia}</span>
+            <span className="truncate">{p.varietas} • {usia}</span>
+            <UkuranBadge tinggi={p.tinggiCm} />
           </div>
+          <div className="mt-1 text-[11px] text-slate-500 truncate">📏 {tinggiTxt}{p.lingkarBatangCm ? ` • Ø ${Number(p.lingkarBatangCm).toFixed(0)}cm` : ""} • 🧪 pH {ph}</div>
           <div className="mt-1 flex items-center gap-2 text-[11px] truncate">
             <span className="font-semibold text-emerald-700 truncate">{hasil}</span>
             <span className="text-slate-300 shrink-0">|</span>
@@ -162,18 +182,19 @@ export function PohonTable({ data }: { data: Pohon[] }) {
 
       {/* Desktop: scrollable table */}
       <div className="hidden lg:block overflow-x-auto rounded-lg border border-slate-100 -mx-0">
-        <div className="min-w-[1100px]">
+        <div className="min-w-[1250px]">
           <Table>
             <TableHeader>
               <TableRow className="border-slate-100 bg-slate-50/50 hover:bg-slate-50/50">
                 <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">NO</TableHead>
                 <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">ID</TableHead>
                 <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">NAMA POHON</TableHead>
-                <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">JENIS</TableHead>
+                <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">VARIETAS</TableHead>
+                <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">UKURAN</TableHead>
+                <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">TINGGI</TableHead>
+                <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">pH</TableHead>
                 <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">RIWAYAT</TableHead>
-                <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">TGL TANAM</TableHead>
                 <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">BLOK</TableHead>
-                <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">KOORDINAT</TableHead>
                 <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">GEOTAG</TableHead>
                 <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">HASIL</TableHead>
                 <TableHead className="text-xs font-medium text-slate-500 whitespace-nowrap">USIA</TableHead>
@@ -184,7 +205,7 @@ export function PohonTable({ data }: { data: Pohon[] }) {
             <TableBody>
               {data.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={13} className="text-center text-slate-500 py-8">
+                  <TableCell colSpan={14} className="text-center text-slate-500 py-8">
                     Belum ada data pohon
                   </TableCell>
                 </TableRow>
@@ -192,10 +213,8 @@ export function PohonTable({ data }: { data: Pohon[] }) {
                 data.map((p, idx) => {
                   const no = idx + 1;
                   const usia = hitungUsia(p.tanggalTanam);
-                  const tgl = new Date(p.tanggalTanam).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
                   const hasil = p.hasilPanen != null && p.hasilPanen !== "" && Number(p.hasilPanen) > 0 ? `${Number(p.hasilPanen).toFixed(1)} KG` : "-";
                   const riwayatCount = p._count?.riwayat ?? p.riwayatCount ?? 0;
-                  const koordinat = p.koordinat || "-";
                   return (
                     <TableRow key={p.id} className="border-slate-50 hover:bg-slate-50/50">
                       <TableCell className="text-xs font-medium text-slate-600">{no}</TableCell>
@@ -203,19 +222,14 @@ export function PohonTable({ data }: { data: Pohon[] }) {
                       <TableCell className="text-sm text-slate-700 whitespace-nowrap max-w-[140px] truncate" title={p.namaPohon || p.varietas}>
                         {p.namaPohon || "-"}
                       </TableCell>
-                      <TableCell className="text-sm text-slate-700 whitespace-nowrap">{p.jenis || p.varietas || "-"}</TableCell>
+                      <TableCell className="text-sm text-slate-700 whitespace-nowrap">{p.varietas || "-"}</TableCell>
+                      <TableCell className="whitespace-nowrap"><UkuranBadge tinggi={p.tinggiCm} /></TableCell>
+                      <TableCell className="text-xs text-slate-600 whitespace-nowrap">{p.tinggiCm != null ? `${p.tinggiCm}cm` : <span className="text-slate-400">-</span>}</TableCell>
+                      <TableCell className="text-xs text-slate-600 whitespace-nowrap">{p.phTanah != null && p.phTanah !== "" ? `${Number(p.phTanah).toFixed(1)}` : <span className="text-slate-400">-</span>}</TableCell>
                       <TableCell className="text-xs text-slate-600 whitespace-nowrap">
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium">{riwayatCount} riwayat</span>
                       </TableCell>
-                      <TableCell className="text-xs text-slate-600 whitespace-nowrap">{tgl}</TableCell>
                       <TableCell className="text-sm text-slate-500 whitespace-nowrap">{p.lokasiBlok}</TableCell>
-                      <TableCell className="text-xs whitespace-nowrap">
-                        {p.koordinat ? (
-                          <a href={`https://maps.google.com/?q=${encodeURIComponent(p.koordinat)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-700 hover:underline cursor-pointer" title={p.koordinat}>
-                            <MapPin className="h-3 w-3" /> {koordinat.length > 18 ? koordinat.slice(0,18)+"…" : koordinat}
-                          </a>
-                        ) : <span className="text-slate-400">-</span>}
-                      </TableCell>
                       <TableCell className="text-xs whitespace-nowrap">
                         {isRealFotoUrl(p.fotoGeotagUrl) ? (
                           <a href={p.fotoGeotagUrl} target="_blank" className="inline-flex items-center gap-1.5 cursor-pointer">

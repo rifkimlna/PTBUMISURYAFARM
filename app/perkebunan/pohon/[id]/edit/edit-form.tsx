@@ -17,7 +17,6 @@ type Props = {
     id: string;
     namaPohon: string;
     varietas: string;
-    jenis: string;
     lokasiBlok: string;
     tanggalTanam: string;
     koordinat: string;
@@ -25,6 +24,9 @@ type Props = {
     hasilPanen: string;
     pemupukan: string;
     pengobatan: string;
+    tinggiCm: string;
+    lingkarBatangCm: string;
+    phTanah: string;
     fotoGeotagUrl: string | null;
     latitude: number | null;
     longitude: number | null;
@@ -78,6 +80,14 @@ export function EditMasterForm({ pohon, riwayat, panenTerakhir }: Props) {
     else setFotoPreview(null);
   };
 
+  function parseKoordinatInput(text: string): { lat: number; lng: number } | null {
+    const parts = (text || "").split(",").map((s) => parseFloat(s.trim()));
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+      if (parts[0] >= -90 && parts[0] <= 90 && parts[1] >= -180 && parts[1] <= 180) return { lat: parts[0], lng: parts[1] };
+    }
+    return null;
+  }
+
   async function submitFoto(e: React.FormEvent) {
     e.preventDefault();
     if (!fotoFile) {
@@ -88,18 +98,22 @@ export function EditMasterForm({ pohon, riwayat, panenTerakhir }: Props) {
     setFotoMsg(null);
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : "";
-      const stamped = pohon.latitude != null && pohon.longitude != null
+      // Pakai koordinat TERBARU dari form (bukan props awal) biar stamp tidak basi
+      const parsedKoord = parseKoordinatInput(form.koordinat || "");
+      const lat = parsedKoord?.lat ?? pohon.latitude;
+      const lng = parsedKoord?.lng ?? pohon.longitude;
+      const stamped = lat != null && lng != null
         ? await stampGeotagPhoto(fotoFile, {
             pohonId: pohon.id,
-            latitude: pohon.latitude,
-            longitude: pohon.longitude,
+            latitude: lat,
+            longitude: lng,
             source: pohon.geotagSource,
           })
         : fotoFile;
       const fd = new FormData();
       fd.set("foto", stamped);
-      if (pohon.latitude != null) fd.set("latitude", String(pohon.latitude));
-      if (pohon.longitude != null) fd.set("longitude", String(pohon.longitude));
+      if (lat != null) fd.set("latitude", String(lat));
+      if (lng != null) fd.set("longitude", String(lng));
       if (pohon.geotagSource) fd.set("source", pohon.geotagSource);
       fd.set("geotagTimestamp", new Date().toISOString());
       const res = await fetch(`/api/pohon/${pohon.id}/geotag`, {
@@ -132,7 +146,6 @@ export function EditMasterForm({ pohon, riwayat, panenTerakhir }: Props) {
   const hasMasterChange =
     form.namaPohon !== pohon.namaPohon ||
     form.varietas !== pohon.varietas ||
-    form.jenis !== pohon.jenis ||
     form.lokasiBlok !== pohon.lokasiBlok ||
     form.tanggalTanam !== pohon.tanggalTanam ||
     form.koordinat !== pohon.koordinat ||
@@ -142,10 +155,14 @@ export function EditMasterForm({ pohon, riwayat, panenTerakhir }: Props) {
     form.pengobatan !== pohon.pengobatan;
   // hasilPanen ikut payload master -> API hanya KOREKSI panen terakhir, tidak tambah baris
   const hasPanenChange = form.hasilPanen !== pohon.hasilPanen;
+  const hasDimensiChange =
+    (form.tinggiCm || "") !== (pohon.tinggiCm || "") ||
+    (form.lingkarBatangCm || "") !== (pohon.lingkarBatangCm || "") ||
+    (form.phTanah || "") !== (pohon.phTanah || "");
 
   async function submitAll(e: React.FormEvent) {
     e.preventDefault();
-    if (!hasMasterChange && !hasSnapshotChange && !hasPanenChange) {
+    if (!hasMasterChange && !hasSnapshotChange && !hasPanenChange && !hasDimensiChange) {
       setErr("Tidak ada perubahan — ubah field dulu");
       return;
     }
@@ -154,18 +171,20 @@ export function EditMasterForm({ pohon, riwayat, panenTerakhir }: Props) {
     setErr(null);
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : "";
-      // 1. Master (varietas/jenis/blok/tanggal/koordinat/nama/status + koreksi hasilPanen)
-      if (hasMasterChange || hasPanenChange) {
+      // 1. Master (varietas/blok/tanggal/koordinat/nama/status + koreksi hasilPanen + dimensi)
+      if (hasMasterChange || hasPanenChange || hasDimensiChange) {
         const payload: any = {};
         if (form.namaPohon !== pohon.namaPohon) payload.namaPohon = form.namaPohon || null;
         if (form.varietas !== pohon.varietas) payload.varietas = form.varietas;
-        if (form.jenis !== pohon.jenis) payload.jenis = form.jenis || null;
         if (form.lokasiBlok !== pohon.lokasiBlok) payload.lokasiBlok = form.lokasiBlok;
         if (form.tanggalTanam !== pohon.tanggalTanam) payload.tanggalTanam = form.tanggalTanam;
         if (form.koordinat !== pohon.koordinat) payload.koordinat = form.koordinat || null;
         if (form.status !== pohon.status) payload.status = form.status;
         // Koreksi panen: API master hanya ubah baris panen TERAKHIR, tidak tambah baru
         if (hasPanenChange) payload.hasilPanen = form.hasilPanen === "" ? null : Number(form.hasilPanen);
+        if ((form.tinggiCm || "") !== (pohon.tinggiCm || "")) payload.tinggiCm = form.tinggiCm === "" ? null : Number(form.tinggiCm);
+        if ((form.lingkarBatangCm || "") !== (pohon.lingkarBatangCm || "")) payload.lingkarBatangCm = form.lingkarBatangCm === "" ? null : Number(form.lingkarBatangCm);
+        if ((form.phTanah || "") !== (pohon.phTanah || "")) payload.phTanah = form.phTanah === "" ? null : Number(form.phTanah);
         const res = await fetch(`/api/pohon/${pohon.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -256,7 +275,7 @@ export function EditMasterForm({ pohon, riwayat, panenTerakhir }: Props) {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Nama Pohon</Label>
-                  <Input value={form.namaPohon} onChange={(e) => onChange("namaPohon", e.target.value)} placeholder="Pohon Sawit 001" />
+                  <Input value={form.namaPohon} onChange={(e) => onChange("namaPohon", e.target.value)} placeholder="Pohon Durian 001" />
                 </div>
                 <div className="space-y-2">
                   <Label>Varietas *</Label>
@@ -264,10 +283,6 @@ export function EditMasterForm({ pohon, riwayat, panenTerakhir }: Props) {
                 </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2 mt-4">
-                <div className="space-y-2">
-                  <Label>Jenis</Label>
-                  <Input value={form.jenis} onChange={(e) => onChange("jenis", e.target.value)} placeholder="Sawit / Durian" />
-                </div>
                 <div className="space-y-2">
                   <Label>Blok *</Label>
                   {blokList.length > 0 ? (
@@ -301,6 +316,25 @@ export function EditMasterForm({ pohon, riwayat, panenTerakhir }: Props) {
                   <option value="MATI">MATI</option>
                 </Select>
               </div>
+            </div>
+
+            <div className="border-t border-slate-100 pt-6">
+              <div className="text-xs font-semibold tracking-widest text-slate-500 mb-3">DIMENSI & TANAH</div>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>Tinggi (cm)</Label>
+                  <Input type="number" step="1" min="0" max="3000" inputMode="numeric" value={(form as any).tinggiCm || ""} onChange={(e) => onChange("tinggiCm", e.target.value)} placeholder="180" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Lingkar (cm)</Label>
+                  <Input type="number" step="0.1" min="0" max="500" inputMode="decimal" value={(form as any).lingkarBatangCm || ""} onChange={(e) => onChange("lingkarBatangCm", e.target.value)} placeholder="45" />
+                </div>
+                <div className="space-y-2">
+                  <Label>pH tanah</Label>
+                  <Input type="number" step="0.1" min="0" max="14" inputMode="decimal" value={(form as any).phTanah || ""} onChange={(e) => onChange("phTanah", e.target.value)} placeholder="6.5" />
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-slate-500">Kecil (&lt;150cm) / Sedang (150-400cm) / Besar (&gt;400cm) otomatis.</p>
             </div>
 
             <div className="border-t border-slate-100 pt-6">
@@ -364,7 +398,8 @@ export function EditMasterForm({ pohon, riwayat, panenTerakhir }: Props) {
             )}
             <div className="space-y-2">
               <Label>Ganti foto</Label>
-              <Input ref={fotoRef} type="file" accept="image/*" capture="environment" onChange={onFoto} className="bg-white" />
+              <Input ref={fotoRef} type="file" accept="image/*" onChange={onFoto} className="bg-white" />
+              <p className="text-xs text-slate-500">Pilih kamera / galeri. Koordinat stamp ikut form koordinat terbaru.</p>
               {fotoPreview && <img src={fotoPreview} alt="preview" className="mt-2 h-48 w-full object-cover rounded-lg border" />}
             </div>
             <Button type="submit" disabled={fotoLoading} className="w-full bg-green-700 hover:bg-green-800 h-11 rounded-full">
@@ -397,7 +432,7 @@ export function EditMasterForm({ pohon, riwayat, panenTerakhir }: Props) {
             </div>
             <div className="space-y-2">
               <Label>Foto (opsional)</Label>
-              <Input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onFile} className="bg-white" />
+              <Input ref={fileRef} type="file" accept="image/*" onChange={onFile} className="bg-white" />
               {preview && <img src={preview} alt="preview" className="mt-2 h-48 w-full object-cover rounded-lg border" />}
             </div>
             <Button type="submit" disabled={rLoading} className="w-full bg-slate-900 hover:bg-slate-800 h-11">

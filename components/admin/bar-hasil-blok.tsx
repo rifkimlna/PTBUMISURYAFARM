@@ -9,7 +9,7 @@ function formatKg(n: number) {
   return `${n.toLocaleString("id-ID", { maximumFractionDigits: 1 })} KG`;
 }
 
-export function BarHasilBlok({ groupBy = "blok" }: { groupBy?: "blok" | "jenis" }) {
+export function BarHasilBlok({ groupBy = "blok" }: { groupBy?: "blok" | "varietas" }) {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -37,9 +37,9 @@ export function BarHasilBlok({ groupBy = "blok" }: { groupBy?: "blok" | "jenis" 
   return (
     <Card className="border-slate-200">
       <CardHeader>
-        <CardTitle className="text-sm">{groupBy === "blok" ? "Hasil per Blok" : "Hasil per Jenis"}</CardTitle>
+        <CardTitle className="text-sm">{groupBy === "blok" ? "Hasil per Blok" : "Hasil per Varietas"}</CardTitle>
         <p className="mt-1 text-xs text-slate-500">
-          {groupBy === "blok" ? "Total KG per blok — urut tertinggi" : "Total KG per jenis pohon"}
+          {groupBy === "blok" ? "Total KG per blok — urut tertinggi" : "Total KG per varietas pohon"}
         </p>
       </CardHeader>
       <CardContent>

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PrintButton } from "@/components/admin/print-button";
 import { ExportCsvButton } from "./actions";
+import { DbErrorBanner } from "@/components/admin/db-error-banner";
 import Link from "next/link";
 
 const BULAN_ID = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
@@ -74,22 +75,33 @@ export default async function LaporanPage({ searchParams }: { searchParams: Prom
     }
   }
 
-  const [total, agg, blokOptions, panenRows, sakitRows] = await Promise.all([
-    prisma.panen.count({ where }),
-    prisma.panen.aggregate({ where, _sum: { jumlahKg: true } }),
-    prisma.pohon.findMany({ select: { lokasiBlok: true }, distinct: ["lokasiBlok"], orderBy: { lokasiBlok: "asc" } }),
-    prisma.panen.findMany({
-      where,
-      select: { jumlahKg: true, tanggalPanen: true, pohonId: true, pohon: { select: { lokasiBlok: true } } },
-      orderBy: { tanggalPanen: "asc" },
-      take: 5000,
-    }),
-    prisma.pohon.groupBy({
-      by: ["lokasiBlok"],
-      _count: { _all: true },
-      where: { status: "SAKIT", ...(blok ? { lokasiBlok: blok } : {}) },
-    }),
-  ]);
+  let total = 0;
+  let agg: { _sum: { jumlahKg: unknown } } = { _sum: { jumlahKg: 0 } };
+  let blokOptions: { lokasiBlok: string }[] = [];
+  let panenRows: any[] = [];
+  let sakitRows: { lokasiBlok: string; _count: { _all: number } }[] = [];
+  let dbError = false;
+  try {
+    [total, agg, blokOptions, panenRows, sakitRows] = await Promise.all([
+      prisma.panen.count({ where }),
+      prisma.panen.aggregate({ where, _sum: { jumlahKg: true } }),
+      prisma.pohon.findMany({ select: { lokasiBlok: true }, distinct: ["lokasiBlok"], orderBy: { lokasiBlok: "asc" } }),
+      prisma.panen.findMany({
+        where,
+        select: { jumlahKg: true, tanggalPanen: true, pohonId: true, pohon: { select: { lokasiBlok: true } } },
+        orderBy: { tanggalPanen: "asc" },
+        take: 5000,
+      }),
+      prisma.pohon.groupBy({
+        by: ["lokasiBlok"],
+        _count: { _all: true },
+        where: { status: "SAKIT", ...(blok ? { lokasiBlok: blok } : {}) },
+      }),
+    ]);
+  } catch (e) {
+    console.error("[perkebunan/laporan] database tidak terjangkau:", e instanceof Error ? e.message : e);
+    dbError = true;
+  }
 
   const totalKg = Number(agg._sum.jumlahKg ?? 0);
 
@@ -161,6 +173,8 @@ export default async function LaporanPage({ searchParams }: { searchParams: Prom
           <PrintButton label="Cetak" />
         </div>
       </div>
+
+      {dbError && <DbErrorBanner />}
 
       <form method="get" action="/perkebunan/laporan" className="flex flex-col sm:flex-row gap-2">
         <Input
