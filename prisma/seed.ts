@@ -405,6 +405,38 @@ const daftarAset = [
     });
   }
 
+  // Seed Bibit untuk katalog home (dikelola admin perkebunan: foto + stok).
+  // fotoUrl null -> katalog pakai foto cadangan per varietas sampai admin upload.
+  const daftarBibit = [
+    { id: "BRG-001", namaBarang: "Bibit Durian Montong", stokAwal: 120, satuan: "polybag", hargaSatuan: 35000, hargaJual: 35000, keterangan: "Okulasi, tinggi ±40cm, siap tanam" },
+    { id: "BRG-002", namaBarang: "Bibit Durian Bawor", stokAwal: 45, satuan: "polybag", hargaSatuan: 40000, hargaJual: 40000, keterangan: "Okulasi, tinggi ±40cm, siap tanam" },
+    { id: "BRG-003", namaBarang: "Bibit Alpukat Mentega", stokAwal: 8, satuan: "polybag", hargaSatuan: 25000, hargaJual: 25000, keterangan: "Sambung pucuk, sehat, siap tanam" },
+    { id: "BRG-004", namaBarang: "Bibit Jambu Kristal", stokAwal: 64, satuan: "polybag", hargaSatuan: 20000, hargaJual: 20000, keterangan: "Cangkok unggul, cepat berbuah" },
+  ];
+  for (const bibit of daftarBibit) {
+    await prisma.persediaanBarang.upsert({
+      where: { id: bibit.id },
+      update: {
+        namaBarang: bibit.namaBarang,
+        hargaSatuan: bibit.hargaSatuan,
+        hargaJual: bibit.hargaJual,
+        keterangan: bibit.keterangan,
+      },
+      create: {
+        id: bibit.id,
+        namaBarang: bibit.namaBarang,
+        kategori: "Bibit/Benih",
+        stokAwal: bibit.stokAwal,
+        satuan: bibit.satuan,
+        hargaSatuan: bibit.hargaSatuan,
+        hargaJual: bibit.hargaJual,
+        keterangan: bibit.keterangan,
+        tipeProduk: "BARANG",
+        batasMinimum: 20,
+      },
+    });
+  }
+
   // Seed Panen histori untuk chart trend (6 bulan terakhir)
   const budiId = budi?.id ?? null;
   const panenData = [

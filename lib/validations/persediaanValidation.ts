@@ -34,6 +34,14 @@ export const createPersediaanBarangSchema = z.object({
     .max(10_000_000_000, "Harga terlalu besar")
     .optional(),
   keterangan: z.string().max(500, "Keterangan maksimal 500 karakter").optional().nullable(),
+  // Foto katalog bibit (URL hasil upload /api/upload) - dikelola admin perkebunan
+  fotoUrl: z
+    .string()
+    .trim()
+    .max(500, "URL foto maksimal 500 karakter")
+    .optional()
+    .nullable()
+    .transform((v) => (v && v.length > 0 ? v : null)),
   // --- Modul Produk (opsional; COA tetap di backend, tidak tampil di form) ---
   barcode: z
     .string()
@@ -71,6 +79,13 @@ export const updatePersediaanBarangSchema = z
       .max(10_000_000_000)
       .optional(),
     keterangan: z.string().max(500).optional().nullable(),
+    fotoUrl: z
+      .string()
+      .trim()
+      .max(500)
+      .optional()
+      .nullable()
+      .transform((v) => (v && v.length > 0 ? v : null)),
     barcode: z
       .string()
       .trim()
