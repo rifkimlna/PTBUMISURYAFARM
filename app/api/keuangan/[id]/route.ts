@@ -3,11 +3,37 @@ import { prisma } from "@/lib/prisma";
 import { requireAuthAndRole } from "@/lib/auth";
 import { updateTransaksiKasSchema, type TipeTransaksi } from "@/lib/validations/keuanganValidation";
 import { kodeAkunByNama, SUMBER_DANA_KODE_MAP } from "@/lib/coa";
+import { getKodeAkunByNamaFromDB } from "@/lib/coa-server";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 import { deleteBuktiFile } from "@/lib/storage";
 import { ZodError } from "zod";
+import type { Prisma } from "@/generated/prisma/client";
 
 type Params = { params: Promise<{ id: string }> };
+
+// Hitung ulang sisa + status tagihan dari pembayaran kas yang masih ada.
+// Dipakai setelah ubah/hapus transaksi kas tertaut agar tagihan tidak basi
+// (cerminan logika catat-pembayaran di PUT /api/tagihan/[id]).
+async function sinkronTagihan(tx: Prisma.TransactionClient, tagihanId: string) {
+  const tagihan = await tx.tagihan.findUnique({ where: { id: tagihanId } });
+  if (!tagihan) return;
+  const pembayaran = await tx.transaksiKas.findMany({
+    where: { tagihanId },
+    select: { jumlah: true },
+  });
+  const terbayar = pembayaran.reduce((s, p) => s + Number(p.jumlah), 0);
+  const jumlah = Number(tagihan.jumlah);
+  const sisaBaru = Math.round((jumlah - terbayar) * 100) / 100;
+  const lunas = sisaBaru <= 0.005;
+  const sebagian = !lunas && terbayar > 0.005;
+  await tx.tagihan.update({
+    where: { id: tagihanId },
+    data: {
+      sisa: lunas ? 0 : Math.max(0, sisaBaru),
+      status: lunas ? "LUNAS" : sebagian ? "LUNAS_SEBAGIAN" : "BELUM_LUNAS",
+    },
+  });
+}
 
 export async function GET(req: NextRequest, { params }: Params) {
   const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_KEUANGAN"]);
@@ -50,7 +76,13 @@ export async function PUT(req: NextRequest, { params }: Params) {
           // validasi sudah dilakukan di schema refine
         }
       } else {
-        resolvedKodeAkun = kodeAkunByNama(resolvedTipe as any, resolvedKategori ?? exists.kategori);
+        // Statis dulu, lalu DB agar akun baru dari Daftar Akun ikut tersimpan.
+        resolvedKodeAkun =
+          kodeAkunByNama(resolvedTipe as any, resolvedKategori ?? exists.kategori) ??
+          (await getKodeAkunByNamaFromDB(
+            resolvedKategori ?? exists.kategori,
+            resolvedTipe as any
+          ));
       }
       
       const result = await tx.transaksiKas.update({
@@ -87,6 +119,10 @@ export async function PUT(req: NextRequest, { params }: Params) {
           })),
         });
       }
+      // Nominal pembayaran bisa berubah -> hitung ulang sisa/status tagihan tertaut.
+      if (exists.tagihanId) {
+        await sinkronTagihan(tx, exists.tagihanId);
+      }
       return result;
     });
 
@@ -110,7 +146,14 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     select: { fileUrl: true },
   });
 
-  await prisma.transaksiKas.delete({ where: { id } });
+  // Hapus dalam transaksi: bila baris ini pembayaran tagihan, sisa/status
+  // tagihan dihitung ulang dari pembayaran yang tersisa (tidak basi).
+  await prisma.$transaction(async (tx) => {
+    await tx.transaksiKas.delete({ where: { id } });
+    if (exists.tagihanId) {
+      await sinkronTagihan(tx, exists.tagihanId);
+    }
+  });
 
   for (const row of buktiRows) {
     await deleteBuktiFile(row.fileUrl);

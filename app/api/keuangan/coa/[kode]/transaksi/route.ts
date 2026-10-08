@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuthAndRole } from "@/lib/auth";
-import { getAkunByKode } from "@/lib/coa";
+import { getAkunByKodeFromDB } from "@/lib/coa-server";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
@@ -29,7 +29,9 @@ export async function GET(
 
   try {
     const { kode } = await params;
-    const akun = getAkunByKode(kode);
+    // Pakai DB agar akun baru dari Daftar Akun langsung bisa dibuka detailnya
+    // (sebelumnya pakai data statis sehingga akun baru selalu 404).
+    const akun = await getAkunByKodeFromDB(kode);
     if (!akun) {
       return errorResponse("Akun COA tidak ditemukan", 404);
     }

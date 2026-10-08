@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 
@@ -16,6 +17,7 @@ type Laporan = {
   judul: string;
   deskripsi: string;
   aksi: Aksi;
+  href?: string;
 };
 
 const TABS: { key: string; label: string }[] = [
@@ -31,27 +33,27 @@ const TABS: { key: string; label: string }[] = [
 
 const LAPORAN: Record<string, Laporan[]> = {
   "sekilas-bisnis": [
-    { judul: "Neraca", deskripsi: "Posisi aset, kewajiban, dan modal pada titik waktu tertentu.", aksi: "lihat" },
-    { judul: "Buku Besar", deskripsi: "Rincian mutasi setiap akun dalam periode berjalan.", aksi: "ekspor" },
-    { judul: "Laba Rugi", deskripsi: "Pendapatan, beban, dan laba bersih pada periode berjalan.", aksi: "lihat" },
-    { judul: "Jurnal", deskripsi: "Seluruh jurnal transaksi tercatat secara kronologis.", aksi: "ekspor" },
-    { judul: "Arus Kas", deskripsi: "Aliran kas masuk dan keluar per aktivitas usaha.", aksi: "lihat" },
-    { judul: "Neraca Saldo", deskripsi: "Saldo tiap akun untuk memastikan total debit sama dengan kredit.", aksi: "lihat" },
-    { judul: "Perubahan Modal", deskripsi: "Pergerakan modal pemilik selama periode berjalan.", aksi: "lihat" },
-    { judul: "Ringkasan Bisnis", deskripsi: "Gambaran kinerja bisnis dalam satu tampilan ringkas.", aksi: "lihat" },
-    { judul: "Anggaran Laba Rugi", deskripsi: "Perbandingan realisasi dengan anggaran laba rugi.", aksi: "lihat" },
-    { judul: "Manajemen Anggaran", deskripsi: "Kelola dan pantau anggaran pada setiap akun.", aksi: "lihat" },
+    { judul: "Neraca", deskripsi: "Posisi aset, kewajiban, dan modal pada titik waktu tertentu.", aksi: "lihat", href: "/keuangan/laporan/neraca" },
+    { judul: "Buku Besar", deskripsi: "Rincian mutasi setiap akun dalam periode berjalan.", aksi: "lihat", href: "/keuangan/laporan/buku-besar" },
+    { judul: "Laba Rugi", deskripsi: "Pendapatan, beban, dan laba bersih pada periode berjalan.", aksi: "lihat", href: "/keuangan/laporan/laba-rugi" },
+    { judul: "Jurnal", deskripsi: "Seluruh jurnal transaksi tercatat secara kronologis.", aksi: "lihat", href: "/keuangan/laporan/jurnal" },
+    { judul: "Arus Kas", deskripsi: "Aliran kas masuk dan keluar per aktivitas usaha.", aksi: "lihat", href: "/keuangan/laporan/arus-kas" },
+    { judul: "Neraca Saldo", deskripsi: "Saldo tiap akun untuk memastikan total debit sama dengan kredit.", aksi: "lihat", href: "/keuangan/laporan/neraca-saldo" },
+    { judul: "Perubahan Modal", deskripsi: "Pergerakan modal pemilik selama periode berjalan.", aksi: "lihat", href: "/keuangan/laporan/perubahan-modal" },
+    { judul: "Ringkasan Bisnis", deskripsi: "Gambaran kinerja bisnis dalam satu tampilan ringkas.", aksi: "lihat", href: "/keuangan/laporan/ringkasan-bisnis" },
+    { judul: "Anggaran Laba Rugi", deskripsi: "Perbandingan realisasi dengan anggaran laba rugi.", aksi: "lihat", href: "/keuangan/laporan/anggaran-laba-rugi" },
+    { judul: "Manajemen Anggaran", deskripsi: "Kelola dan pantau anggaran pada setiap akun.", aksi: "lihat", href: "/keuangan/laporan/manajemen-anggaran" },
   ],
   penjualan: [
-    { judul: "Daftar Penjualan", deskripsi: "Seluruh transaksi penjualan dalam periode.", aksi: "ekspor" },
-    { judul: "Penjualan per Pelanggan", deskripsi: "Total penjualan yang dikelompokkan per pelanggan.", aksi: "lihat" },
-    { judul: "Piutang Pelanggan", deskripsi: "Saldo piutang pada setiap pelanggan.", aksi: "lihat" },
-    { judul: "Usia Piutang", deskripsi: "Pengelompokan piutang berdasarkan umur tagihan.", aksi: "lihat" },
-    { judul: "Pengiriman Penjualan", deskripsi: "Daftar pengiriman barang kepada pelanggan.", aksi: "ekspor" },
-    { judul: "Penjualan per Produk", deskripsi: "Total penjualan yang dikelompokkan per produk.", aksi: "lihat" },
-    { judul: "Penyelesaian Pesanan Penjualan", deskripsi: "Status pemenuhan setiap pesanan penjualan.", aksi: "lihat" },
+    { judul: "Daftar Penjualan", deskripsi: "Seluruh transaksi penjualan dalam periode.", aksi: "lihat", href: "/keuangan/laporan/penjualan" },
+    { judul: "Penjualan per Pelanggan", deskripsi: "Total penjualan yang dikelompokkan per pelanggan.", aksi: "lihat", href: "/keuangan/laporan/penjualan-per-pelanggan" },
+    { judul: "Piutang Pelanggan", deskripsi: "Saldo piutang pada setiap pelanggan.", aksi: "lihat", href: "/keuangan/laporan/piutang-pelanggan" },
+    { judul: "Usia Piutang", deskripsi: "Pengelompokan piutang berdasarkan umur tagihan.", aksi: "lihat", href: "/keuangan/laporan/usia-piutang" },
+    { judul: "Penjualan per Produk", deskripsi: "Ringkasan penjualan berdasarkan produk dalam periode tertentu.", aksi: "lihat", href: "/keuangan/laporan/penjualan-per-produk" },
+    { judul: "Pengiriman Penjualan", deskripsi: "Daftar pengiriman barang kepada pelanggan.", aksi: "lihat", href: "/keuangan/laporan/pengiriman-penjualan" },
+    { judul: "Penyelesaian Pesanan Penjualan", deskripsi: "Status pemenuhan setiap pesanan penjualan.", aksi: "lihat", href: "/keuangan/laporan/penyelesaian-pemesanan-penjualan" },
     { judul: "Profitabilitas Produk", deskripsi: "Margin keuntungan pada setiap produk.", aksi: "lihat" },
-    { judul: "Daftar Faktur Proforma", deskripsi: "Seluruh faktur proforma yang telah diterbitkan.", aksi: "ekspor" },
+    { judul: "Daftar Faktur Proforma", deskripsi: "Seluruh faktur proforma yang telah diterbitkan.", aksi: "lihat", href: "/keuangan/laporan/proforma-invoice" },
     { judul: "Daftar Tukar Faktur", deskripsi: "Seluruh dokumen tukar faktur yang telah dibuat.", aksi: "ekspor" },
   ],
   pembelian: [
@@ -148,19 +150,28 @@ export function LaporanContent() {
                 <h3 className="text-sm font-semibold text-slate-900">{l.judul}</h3>
                 <p className="mt-1.5 text-xs leading-relaxed text-slate-500">{l.deskripsi}</p>
                 <div className="mt-auto pt-4">
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled
-                    title="Segera hadir"
-                    className={
-                      l.aksi === "ekspor"
-                        ? "cursor-not-allowed bg-slate-900 text-white hover:bg-slate-900 disabled:opacity-60"
-                        : "cursor-not-allowed bg-emerald-700 text-white hover:bg-emerald-700 disabled:opacity-60"
-                    }
-                  >
-                    {l.aksi === "ekspor" ? "Ekspor laporan" : "Lihat laporan"}
-                  </Button>
+                  {l.href ? (
+                    <Link
+                      href={l.href}
+                      className={buttonVariants({ size: "sm" }) + " bg-emerald-700 text-white hover:bg-emerald-800"}
+                    >
+                      {l.aksi === "ekspor" ? "Ekspor laporan" : "Lihat laporan"}
+                    </Link>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled
+                      title="Segera hadir"
+                      className={
+                        l.aksi === "ekspor"
+                          ? "cursor-not-allowed bg-slate-900 text-white hover:bg-slate-900 disabled:opacity-60"
+                          : "cursor-not-allowed bg-emerald-700 text-white hover:bg-emerald-700 disabled:opacity-60"
+                      }
+                    >
+                      {l.aksi === "ekspor" ? "Ekspor laporan" : "Lihat laporan"}
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -169,7 +180,7 @@ export function LaporanContent() {
       )}
 
       <p className="text-[11px] leading-relaxed text-slate-400">
-        Halaman laporan tahap awal — tombol belum difungsikan dan belum ada halaman detail laporan.
+        Laporan Neraca, Laba Rugi, Arus Kas, Perubahan Modal, Ringkasan Bisnis, Daftar Penjualan, Piutang Pelanggan, Pengiriman Penjualan, Penyelesaian Pesanan, Faktur Proforma, Penjualan per Pelanggan, Usia Piutang, dan Penjualan per Produk sudah tersedia — laporan lain tahap awal (tombol belum difungsikan dan belum ada halaman detail).
       </p>
     </div>
   );
