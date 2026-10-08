@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
       hargaSatuan,
       totalNilai: stok * hargaSatuan,
       keterangan: b.keterangan,
+      fotoUrl: b.fotoUrl,
       status: tentukanStatusStok(stok),
       createdAt: b.createdAt.toISOString(),
       // Modul Produk (tambahan, opsional; form lama mengabaikan).
@@ -88,6 +89,7 @@ export async function POST(req: NextRequest) {
         satuan: parsed.satuan,
         hargaSatuan,
         keterangan: parsed.keterangan ?? null,
+        fotoUrl: parsed.fotoUrl ?? null,
         barcode: parsed.barcode ?? null,
         tipeProduk: parsed.tipeProduk ?? "BARANG",
         hargaBeli: parsed.hargaBeli ?? null,

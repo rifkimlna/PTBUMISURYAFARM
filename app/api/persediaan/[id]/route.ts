@@ -69,6 +69,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
             ? { hargaSatuan: parsed.hargaSatuan }
             : {}),
         ...(parsed.keterangan !== undefined ? { keterangan: parsed.keterangan } : {}),
+        ...(parsed.fotoUrl !== undefined ? { fotoUrl: parsed.fotoUrl } : {}),
         ...(parsed.barcode !== undefined ? { barcode: parsed.barcode } : {}),
         ...(parsed.tipeProduk !== undefined ? { tipeProduk: parsed.tipeProduk } : {}),
         ...(parsed.hargaBeli !== undefined ? { hargaBeli: parsed.hargaBeli } : {}),

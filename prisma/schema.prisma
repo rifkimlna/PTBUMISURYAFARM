@@ -412,6 +412,8 @@ model PersediaanBarang {
   satuan          String // kg, liter, pcs, karung
   hargaSatuan     Decimal  @db.Decimal(15, 2)
   keterangan      String? @db.Text
+  // Foto katalog bibit - diupload admin perkebunan, tampil di home publik
+  fotoUrl         String?
   // --- Modul Produk (opsional, backward compat; form COA disembunyikan dari user) ---
   barcode         String?  @unique // kode batang / SKU tambahan
   tipeProduk      String?  // BARANG (stok terlacak) | JASA (tanpa stok); null = BARANG
