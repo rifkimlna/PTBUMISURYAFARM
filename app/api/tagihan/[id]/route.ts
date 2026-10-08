@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAuthAndRole, getSessionFromRequest } from "@/lib/auth";
 import { kodeAkunByNama } from "@/lib/coa";
+import { getKodeAkunByNamaFromDB } from "@/lib/coa-server";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 import { ZodError } from "zod";
 
@@ -132,12 +133,16 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
       const isHutang = tagihan.tipe === "HUTANG";
       const kategori = isHutang ? "Pelunasan Hutang Usaha" : "Penerimaan Piutang Usaha";
+      const tipeKas = isHutang ? "PENGELUARAN" : "PEMASUKAN";
 
       await tx.transaksiKas.create({
         data: {
           tipe: isHutang ? "PENGELUARAN" : "PEMASUKAN",
           kategori,
-          kodeAkun: kodeAkunByNama(isHutang ? "PENGELUARAN" : "PEMASUKAN", kategori),
+          // Statis dulu, lalu DB agar tetap nyambung walau nama akun diubah/di-rename.
+          kodeAkun:
+            kodeAkunByNama(tipeKas as any, kategori) ??
+            (await getKodeAkunByNamaFromDB(kategori, tipeKas as any)),
           sumberDana: parsed.sumberDana,
           jumlah: parsed.jumlahBayar,
           keterangan:

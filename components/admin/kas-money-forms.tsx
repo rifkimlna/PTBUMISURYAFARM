@@ -10,7 +10,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Paperclip, X } from "lucide-react";
 import { formatRupiah } from "@/lib/utils";
-import { labelSumberDana, SUMBER_DANA_KEYS, STATIC_COA_PEMASUKAN, STATIC_COA_PENGELUARAN } from "@/lib/coa";
+import { labelSumberDana, SUMBER_DANA_KEYS, STATIC_COA_PEMASUKAN, STATIC_COA_PENGELUARAN, STATIC_COA_MODAL } from "@/lib/coa";
 
 type SumberKey = (typeof SUMBER_DANA_KEYS)[number];
 
@@ -36,10 +36,16 @@ function Field({ label, children, className }: { label: string; children: ReactN
 }
 
 // Ambil COA PT BST dari database (fallback ke data statis bila API tak bisa diakses).
-function useCoaOptions(kelompok: "Pendapatan" | "Beban") {
-  const fallback = (kelompok === "Pendapatan" ? STATIC_COA_PEMASUKAN : STATIC_COA_PENGELUARAN).map(
-    (a) => ({ kode: a.kode, nama: a.nama })
-  );
+// Kelompok "Modal" untuk form Setor Modal (disaring: hanya akun setoran,
+// 3103 Prive & 3104 Laba Ditahan dikecualikan agar tidak bisa dipilih).
+function useCoaOptions(kelompok: "Pendapatan" | "Beban" | "Modal") {
+  const fallback = (
+    kelompok === "Pendapatan"
+      ? STATIC_COA_PEMASUKAN
+      : kelompok === "Beban"
+        ? STATIC_COA_PENGELUARAN
+        : STATIC_COA_MODAL.filter((a) => a.kode !== "3103" && a.kode !== "3104")
+  ).map((a) => ({ kode: a.kode, nama: a.nama }));
   const [options, setOptions] = useState(fallback);
   useEffect(() => {
     let cancelled = false;
@@ -48,7 +54,12 @@ function useCoaOptions(kelompok: "Pendapatan" | "Beban") {
       .then((result) => {
         if (cancelled || !result?.success || !Array.isArray(result.data)) return;
         const list = result.data
-          .filter((a: { isActive?: boolean }) => a.isActive !== false)
+          .filter((a: { isActive?: boolean; kode?: string }) =>
+            a.isActive !== false &&
+            // Untuk Modal: saring Prive (3103) & Laba Ditahan (3104, otomatis dari laba).
+            // Akun Modal baru dari Daftar Akun tetap lolos.
+            (kelompok !== "Modal" || (a.kode !== "3103" && a.kode !== "3104"))
+          )
           .map((a: { kode: string; nama: string }) => ({ kode: a.kode, nama: a.nama }));
         if (list.length > 0) setOptions(list);
       })
@@ -625,6 +636,124 @@ export function KirimForm() {
           <Textarea value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Catatan transaksi (opsional)" />
         </Field>
         <LampiranUploader value={lampiran} onChange={setLampiran} />
+      </div>
+    </FormShell>
+  );
+}
+
+// ================= SETOR MODAL =================
+// Setoran pemilik ke Kas/Bank/Tabungan. Dicatat sebagai PEMASUKAN dengan
+// kategori = nama akun Modal (3101/3102/akun Modal baru) sehingga backend
+// menyimpan kodeAkun 31xx; laporan laba rugi mengecualikannya dari pendapatan
+// dan Neraca/Perubahan Modal membacanya sebagai modal (bukan laba).
+export function SetorModalForm() {
+  const router = useRouter();
+  const akunOptions = useCoaOptions("Modal");
+  const [setorKe, setSetorKe] = useState<SumberKey>("BANK");
+  const [penyetor, setPenyetor] = useState("");
+  const [tanggal, setTanggal] = useState(todayInput());
+  const [noTransaksi, setNoTransaksi] = useState("");
+  const [akun, setAkun] = useState("Modal Disetor / Setoran Pemilik (Bapak)");
+  const [jumlah, setJumlah] = useState("");
+  const [memo, setMemo] = useState("");
+  const [lampiran, setLampiran] = useState<PendingBukti[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const akunEfektif = akunOptions.some((a) => a.nama === akun) ? akun : (akunOptions[0]?.nama ?? "");
+
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      const nilai = Number(jumlah);
+      if (!Number.isFinite(nilai) || nilai < 1000) throw new Error("Jumlah minimal Rp 1.000");
+      if (!akunEfektif) throw new Error("Akun modal wajib dipilih");
+      await postTransaksi({
+        tipe: "PEMASUKAN",
+        kategori: akunEfektif,
+        sumberDana: setorKe,
+        jumlah: nilai,
+        tanggal: tanggal || undefined,
+        noTransaksi: noTransaksi.trim() || undefined,
+        pihak: penyetor.trim() || undefined,
+        keterangan: memo.trim() || undefined,
+        ...(lampiran.length > 0 ? { bukti: lampiran } : {}),
+      });
+      router.push("/keuangan/kas");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal menyimpan setoran modal");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const akunTerpilih = akunOptions.find((a) => a.nama === akunEfektif);
+
+  return (
+    <FormShell
+      title="Setor Modal"
+      subtitle="Catat tambahan modal pemilik ke Kas / Bank / Tabungan. Bukan pendapatan — tidak masuk Laba Rugi."
+      error={error}
+      saving={saving}
+      onSubmit={submit}
+      onCancel={() => router.push("/keuangan/kas")}
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
+        <SumberSelect value={setorKe} onChange={(v) => setSetorKe(v as SumberKey)} label="Setor Ke" />
+        <Field label="Penyetor (opsional)">
+          <Input
+            value={penyetor}
+            onChange={(e) => setPenyetor(e.target.value)}
+            placeholder="Nama penyetor"
+            maxLength={150}
+          />
+        </Field>
+        <Field label="Akun Modal">
+          <Select value={akunEfektif} onChange={(e) => setAkun(e.target.value)} required>
+            {akunOptions.map((a) => (
+              <option key={a.kode} value={a.nama}>
+                {a.kode} - {a.nama}
+              </option>
+            ))}
+          </Select>
+          {akunTerpilih && (
+            <span className="text-[11px] text-slate-400">Kode akun: {akunTerpilih.kode}</span>
+          )}
+        </Field>
+        <Field label="Jumlah">
+          <Input
+            type="number"
+            min="1000"
+            step="1000"
+            value={jumlah}
+            onChange={(e) => setJumlah(e.target.value)}
+            placeholder="10000000"
+            required
+          />
+          {jumlah && Number(jumlah) >= 1000 && (
+            <span className="text-[11px] text-slate-400">Rp {formatRupiah(Number(jumlah))}</span>
+          )}
+        </Field>
+        <Field label="Tanggal Transaksi">
+          <Input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} required />
+        </Field>
+        <Field label="No Transaksi">
+          <Input
+            value={noTransaksi}
+            onChange={(e) => setNoTransaksi(e.target.value)}
+            placeholder="Otomatis bila dikosongkan"
+            maxLength={50}
+          />
+        </Field>
+        <Field label="Memo" className="sm:col-span-2">
+          <Textarea value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Catatan setoran (opsional)" />
+        </Field>
+        <div className="sm:col-span-2">
+          <LampiranUploader value={lampiran} onChange={setLampiran} />
+        </div>
       </div>
     </FormShell>
   );

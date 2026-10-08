@@ -144,6 +144,7 @@ model User {
   dokumenPembelian DokumenPembelian[] @relation("DokumenBeliCreatedBy")
   pengirimanBeli  PengirimanPembelian[] @relation("PengirimanBeliAdmin")
   biayaDibuat     Biaya[] @relation("BiayaCreatedBy")
+  anggaranDibuat  AnggaranLabaRugi[] @relation("AnggaranCreatedBy")
 
   @@map("users")
 }
@@ -952,4 +953,38 @@ model Biaya {
   @@index([tanggal])
   @@index([status])
   @@map("biaya")
+}
+
+// Anggaran Laba Rugi PT BST (periode maksimal 6 bulan).
+// Header menyimpan periode; nominal per akun per bulan di AnggaranItem.
+// Akun mengacu ke kode AkunCOA kelompok Pendapatan/Beban (tanpa duplikasi
+// master akun — validasi kode dilakukan di API terhadap tabel akun_coa).
+model AnggaranLabaRugi {
+  id          String   @id @default(cuid())
+  nama        String
+  tahunMulai  Int
+  bulanMulai  Int
+  durasi      Int // 1..6 (bulan)
+  createdById String?
+  createdBy   User?    @relation("AnggaranCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  items       AnggaranItem[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tahunMulai, bulanMulai])
+  @@map("anggaran_laba_rugi")
+}
+
+model AnggaranItem {
+  id         String           @id @default(cuid())
+  anggaranId String
+  anggaran   AnggaranLabaRugi @relation(fields: [anggaranId], references: [id], onDelete: Cascade)
+  kodeAkun   String // ex: 4101, 5404
+  tahun      Int
+  bulan      Int // 1..12
+  nominal    Decimal          @db.Decimal(15, 2)
+
+  @@unique([anggaranId, kodeAkun, tahun, bulan])
+  @@index([anggaranId])
+  @@map("anggaran_item")
 }
