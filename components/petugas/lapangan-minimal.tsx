@@ -13,7 +13,7 @@ export function PetugasLapanganMinimal({
   panenTerakhir,
   riwayatPanen,
 }: {
-  pohon: { id: string; pemupukan: string; pengobatan: string; status: string };
+  pohon: { id: string; pemupukan: string; pengobatan: string; status: string; tinggiCm?: string; lingkarBatangCm?: string; phTanah?: string };
   panenTerakhir: { kg: string; tanggal: string; petugas: string } | null;
   riwayatPanen: { id: string; kg: string; tanggal: string; petugas: string }[];
 }) {
@@ -23,6 +23,9 @@ export function PetugasLapanganMinimal({
     status: pohon.status,
     pemupukan: pohon.pemupukan,
     pengobatan: pohon.pengobatan,
+    tinggiCm: pohon.tinggiCm || "",
+    lingkarBatangCm: pohon.lingkarBatangCm || "",
+    phTanah: pohon.phTanah || "",
   });
   const [gejala, setGejala] = useState("");
   const [tindakan, setTindakan] = useState("");
@@ -47,6 +50,9 @@ export function PetugasLapanganMinimal({
     form.pemupukan !== pohon.pemupukan ||
     form.pengobatan !== pohon.pengobatan ||
     form.status !== pohon.status ||
+    form.tinggiCm !== (pohon.tinggiCm || "") ||
+    form.lingkarBatangCm !== (pohon.lingkarBatangCm || "") ||
+    form.phTanah !== (pohon.phTanah || "") ||
     gejala.trim().length >= 5 ||
     tindakan.trim().length >= 5 ||
     !!file;
@@ -77,6 +83,21 @@ export function PetugasLapanganMinimal({
       if (form.pemupukan !== pohon.pemupukan) payload.pemupukan = form.pemupukan || null;
       if (form.pengobatan !== pohon.pengobatan) payload.pengobatan = form.pengobatan || null;
       if (form.status !== pohon.status) payload.status = form.status;
+      if (form.tinggiCm !== (pohon.tinggiCm || "")) {
+        const n = Number(form.tinggiCm);
+        if (form.tinggiCm !== "" && (!Number.isFinite(n) || n < 0 || n > 3000)) throw new Error("Tinggi harus 0-3000 cm");
+        payload.tinggiCm = form.tinggiCm === "" ? null : n;
+      }
+      if (form.lingkarBatangCm !== (pohon.lingkarBatangCm || "")) {
+        const n = Number(form.lingkarBatangCm);
+        if (form.lingkarBatangCm !== "" && (!Number.isFinite(n) || n < 0 || n > 500)) throw new Error("Lingkar harus 0-500 cm");
+        payload.lingkarBatangCm = form.lingkarBatangCm === "" ? null : n;
+      }
+      if (form.phTanah !== (pohon.phTanah || "")) {
+        const n = Number(form.phTanah);
+        if (form.phTanah !== "" && (!Number.isFinite(n) || n < 0 || n > 14)) throw new Error("pH harus 0-14");
+        payload.phTanah = form.phTanah === "" ? null : n;
+      }
 
       if (Object.keys(payload).length > 0) {
         const res = await fetch(`/api/pohon/${pohon.id}/lapangan`, {
@@ -128,7 +149,6 @@ export function PetugasLapanganMinimal({
         ref={fileRef}
         type="file"
         accept="image/*"
-        capture="environment"
         onChange={onFile}
         tabIndex={-1}
         className="sr-only"
@@ -203,6 +223,28 @@ export function PetugasLapanganMinimal({
               ))}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Ukur cepat - dimensi + pH */}
+      <Card className="border-blue-100 bg-blue-50/30">
+        <CardContent className="p-4 sm:p-5 space-y-3">
+          <div className="text-sm font-semibold tracking-tight text-slate-900">📏 Ukur Cepat</div>
+          <p className="text-xs text-slate-500">Isi bila ukur hari ini — kosongkan bila tidak ukur.</p>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-slate-600">Tinggi (cm)</Label>
+              <Input type="number" step="1" min="0" max="3000" inputMode="numeric" value={form.tinggiCm} onChange={(e) => setForm({ ...form, tinggiCm: e.target.value })} placeholder="180" className="h-12 bg-white text-center font-semibold" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-slate-600">Lingkar (cm)</Label>
+              <Input type="number" step="0.1" min="0" max="500" inputMode="decimal" value={form.lingkarBatangCm} onChange={(e) => setForm({ ...form, lingkarBatangCm: e.target.value })} placeholder="45" className="h-12 bg-white text-center font-semibold" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-slate-600">pH tanah</Label>
+              <Input type="number" step="0.1" min="0" max="14" inputMode="decimal" value={form.phTanah} onChange={(e) => setForm({ ...form, phTanah: e.target.value })} placeholder="6.5" className="h-12 bg-white text-center font-semibold" />
+            </div>
+          </div>
         </CardContent>
       </Card>
 

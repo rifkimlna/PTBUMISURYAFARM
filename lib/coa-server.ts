@@ -95,6 +95,39 @@ export async function getAkunByKodeFromDB(kode: string): Promise<AkunCOA | null>
   }
 }
 
+// Get single akun by nama from DB (untuk resolve kategori -> kode akun,
+// agar akun baru yang dibuat di Daftar Akun langsung bisa dipakai transaksi).
+export async function getKodeAkunByNamaFromDB(
+  nama: string,
+  tipe?: "PEMASUKAN" | "PENGELUARAN"
+): Promise<string | null> {
+  try {
+    const trimmed = nama?.trim();
+    if (!trimmed) return null;
+    // Cari berdasarkan nama persis (case-insensitive).
+    // PEMASUKAN boleh dari kelompok Pendapatan ATAU Modal (setor modal),
+    // PENGELUARAN boleh dari kelompok Beban ATAU Modal (prive).
+    // Tanpa tipe: cari di semua kelompok aktif.
+    const kelompokIn =
+      tipe === "PEMASUKAN"
+        ? ["Pendapatan", "Modal"]
+        : tipe === "PENGELUARAN"
+          ? ["Beban", "Modal"]
+          : undefined;
+    const data = await prisma.akunCOA.findFirst({
+      where: {
+        nama: { equals: trimmed, mode: "insensitive" },
+        ...(kelompokIn ? { kelompok: { in: kelompokIn as any } } : {}),
+        isActive: true,
+      },
+      select: { kode: true },
+    });
+    return data?.kode ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // Group akun by kelompok then golongan (from DB)
 export async function getAkunGroupedFromDB(): Promise<Record<KelompokCOA, Record<string, AkunCOA[]>>> {
   try {

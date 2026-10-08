@@ -100,6 +100,12 @@ export async function POST(req: NextRequest) {
       .toString(36)
       .slice(2, 6)
       .toUpperCase()}`;
+    const noTransaksi =
+      data.noTransaksi?.trim() ||
+      `TRX-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.random()
+        .toString(36)
+        .slice(2, 6)
+        .toUpperCase()}`;
     const pengiriman = await prisma.$transaction(async (tx) => {
       const created = await tx.pengirimanPenjualan.create({
         data: {
@@ -108,7 +114,7 @@ export async function POST(req: NextRequest) {
           pelangganId: pesanan.pelangganId,
           alamatPengiriman: data.alamatPengiriman ?? pesanan.alamat,
           tanggalPengiriman: data.tanggalPengiriman ?? new Date(),
-          noTransaksi: data.noTransaksi,
+          noTransaksi,
           noRefPelanggan: data.noRefPelanggan ?? pesanan.noRefPelanggan,
           kirimMelalui: data.kirimMelalui,
           noPelacakan: data.noPelacakan,
@@ -128,6 +134,11 @@ export async function POST(req: NextRequest) {
           lampiran: data.lampiran ? { create: data.lampiran } : undefined,
         },
         include: { items: true },
+      });
+      // Pesanan yang sudah dikirim tidak lagi "Belum Ditagih" di tab Pesanan.
+      await tx.dokumenPenjualan.updateMany({
+        where: { id: data.pesananId, tipe: "PESANAN", status: { not: "SELESAI" } },
+        data: { status: "SELESAI" },
       });
       return created;
     });

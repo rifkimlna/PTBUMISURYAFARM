@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PrintButton } from "@/components/admin/print-button";
 import { ExportCsvButton } from "./actions";
+import { DbErrorBanner } from "@/components/admin/db-error-banner";
 import Link from "next/link";
 
 const BULAN_ID = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
@@ -74,22 +75,33 @@ export default async function LaporanPage({ searchParams }: { searchParams: Prom
     }
   }
 
-  const [total, agg, blokOptions, panenRows, sakitRows] = await Promise.all([
-    prisma.panen.count({ where }),
-    prisma.panen.aggregate({ where, _sum: { jumlahKg: true } }),
-    prisma.pohon.findMany({ select: { lokasiBlok: true }, distinct: ["lokasiBlok"], orderBy: { lokasiBlok: "asc" } }),
-    prisma.panen.findMany({
-      where,
-      select: { jumlahKg: true, tanggalPanen: true, pohonId: true, pohon: { select: { lokasiBlok: true } } },
-      orderBy: { tanggalPanen: "asc" },
-      take: 5000,
-    }),
-    prisma.pohon.groupBy({
-      by: ["lokasiBlok"],
-      _count: { _all: true },
-      where: { status: "SAKIT", ...(blok ? { lokasiBlok: blok } : {}) },
-    }),
-  ]);
+  let total = 0;
+  let agg: { _sum: { jumlahKg: unknown } } = { _sum: { jumlahKg: 0 } };
+  let blokOptions: { lokasiBlok: string }[] = [];
+  let panenRows: any[] = [];
+  let sakitRows: { lokasiBlok: string; _count: { _all: number } }[] = [];
+  let dbError = false;
+  try {
+    [total, agg, blokOptions, panenRows, sakitRows] = await Promise.all([
+      prisma.panen.count({ where }),
+      prisma.panen.aggregate({ where, _sum: { jumlahKg: true } }),
+      prisma.pohon.findMany({ select: { lokasiBlok: true }, distinct: ["lokasiBlok"], orderBy: { lokasiBlok: "asc" } }),
+      prisma.panen.findMany({
+        where,
+        select: { jumlahKg: true, tanggalPanen: true, pohonId: true, pohon: { select: { lokasiBlok: true } } },
+        orderBy: { tanggalPanen: "asc" },
+        take: 5000,
+      }),
+      prisma.pohon.groupBy({
+        by: ["lokasiBlok"],
+        _count: { _all: true },
+        where: { status: "SAKIT", ...(blok ? { lokasiBlok: blok } : {}) },
+      }),
+    ]);
+  } catch (e) {
+    console.error("[perkebunan/laporan] database tidak terjangkau:", e instanceof Error ? e.message : e);
+    dbError = true;
+  }
 
   const totalKg = Number(agg._sum.jumlahKg ?? 0);
 
@@ -149,16 +161,20 @@ export default async function LaporanPage({ searchParams }: { searchParams: Prom
 
   return (
     <div className="space-y-4 sm:space-y-6 min-w-0">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-slate-900">Laporan</h1>
-          <p className="text-xs sm:text-sm text-slate-500">
+      <div className="flex flex-row items-center justify-between gap-2 sm:gap-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-base sm:text-xl font-semibold tracking-tight text-slate-900 truncate">Laporan</h1>
+          <p className="text-[11px] sm:text-sm text-slate-500 truncate">
             {total} catatan • {totalKg.toLocaleString("id-ID", { maximumFractionDigits: 1 })} KG • {filterDesc}
           </p>
-          <p className="mt-0.5 text-[11px] text-slate-400">Sama persis dengan filter menu Panen • kolom Sakit = kondisi pohon saat ini</p>
+          <p className="mt-0.5 text-[11px] text-slate-400 hidden sm:block">Sama persis dengan filter menu Panen • kolom Sakit = kondisi pohon saat ini</p>
         </div>
-        <PrintButton label="Cetak" />
+        <div className="shrink-0 ml-auto">
+          <PrintButton label="Cetak" />
+        </div>
       </div>
+
+      {dbError && <DbErrorBanner />}
 
       <form method="get" action="/perkebunan/laporan" className="flex flex-col sm:flex-row gap-2">
         <Input

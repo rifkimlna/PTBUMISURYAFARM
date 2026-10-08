@@ -6,10 +6,11 @@ import { z } from "zod";
 
 type Params = { params: Promise<{ id: string }> };
 
-// Status dokumen non-penagihan (Pesanan/Penawaran): TERBUKA <-> DITUTUP/SELESAI.
+// Status dokumen non-penagihan (Pesanan/Penawaran): BELUM_DITAGIH <-> DITUTUP/SELESAI.
+// TERBUKA tetap diterima untuk kompatibilitas data lama.
 // Penagihan tidak diubah lewat sini (status bayarnya milik Tagihan).
 const schema = z.object({
-  status: z.enum(["TERBUKA", "DITUTUP", "SELESAI"]),
+  status: z.enum(["BELUM_DITAGIH", "TERBUKA", "DITUTUP", "SELESAI"]),
 });
 
 // PATCH /api/penjualan/dokumen/[id]/status - tutup/buka kembali pesanan/penawaran

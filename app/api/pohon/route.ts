@@ -6,9 +6,9 @@ import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-resp
 import { uploadFotoLapangan, parseFotoFromFormData } from "@/lib/storage";
 import { ZodError } from "zod";
 
-// GET /api/pohon - list (SUPER_ADMIN, ADMIN_PERTANIAN)
+// GET /api/pohon - list (SUPER_ADMIN, ADMIN_PERTANIAN, PETUGAS_LAPANGAN read-only utk daftar blok)
 export async function GET(req: NextRequest) {
-  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_PERTANIAN"]);
+  const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_PERTANIAN", "PETUGAS_LAPANGAN"]);
   if (auth instanceof Response) return auth;
 
   try {
@@ -18,9 +18,13 @@ export async function GET(req: NextRequest) {
       status: searchParams.get("status") || undefined,
       varietas: searchParams.get("varietas") || undefined,
       namaPohon: searchParams.get("namaPohon") || undefined,
-      jenis: searchParams.get("jenis") || undefined,
       koordinat: searchParams.get("koordinat") || undefined,
       hasGeotag: (searchParams.get("hasGeotag") as any) || undefined,
+      kategoriUkuran: (searchParams.get("kategoriUkuran") as any) || undefined,
+      minTinggi: searchParams.get("minTinggi") || undefined,
+      maxTinggi: searchParams.get("maxTinggi") || undefined,
+      phMin: searchParams.get("phMin") || undefined,
+      phMax: searchParams.get("phMax") || undefined,
       page: searchParams.get("page") || undefined,
       limit: searchParams.get("limit") || undefined,
     });
@@ -34,10 +38,23 @@ export async function GET(req: NextRequest) {
     if (query.status) where.status = query.status;
     if (query.varietas) where.varietas = { contains: query.varietas, mode: "insensitive" };
     if (query.namaPohon) where.namaPohon = { contains: query.namaPohon, mode: "insensitive" };
-    if (query.jenis) where.jenis = { contains: query.jenis, mode: "insensitive" };
     if (query.koordinat) where.koordinat = { contains: query.koordinat, mode: "insensitive" };
     if ((query as any).hasGeotag === "true") where.fotoGeotagUrl = { not: null };
     if ((query as any).hasGeotag === "false") where.fotoGeotagUrl = null;
+    if (query.minTinggi != null || query.maxTinggi != null) {
+      where.tinggiCm = {};
+      if (query.minTinggi != null) where.tinggiCm.gte = query.minTinggi;
+      if (query.maxTinggi != null) where.tinggiCm.lte = query.maxTinggi;
+    }
+    if (query.phMin != null || query.phMax != null) {
+      where.phTanah = {};
+      if (query.phMin != null) where.phTanah.gte = query.phMin;
+      if (query.phMax != null) where.phTanah.lte = query.phMax;
+    }
+    if (query.kategoriUkuran === "KECIL") where.tinggiCm = { lt: 150 };
+    else if (query.kategoriUkuran === "SEDANG") where.tinggiCm = { gte: 150, lte: 400 };
+    else if (query.kategoriUkuran === "BESAR") where.tinggiCm = { gt: 400 };
+    else if (query.kategoriUkuran === "BELUM_UKUR") where.tinggiCm = null;
 
     const [data, total] = await Promise.all([
       prisma.pohon.findMany({
@@ -84,13 +101,15 @@ export async function POST(req: NextRequest) {
         id: formData.get("id"),
         namaPohon: formData.get("namaPohon"),
         varietas: formData.get("varietas"),
-        jenis: formData.get("jenis"),
         lokasiBlok: formData.get("lokasiBlok"),
         tanggalTanam: formData.get("tanggalTanam"),
         koordinat: formData.get("koordinat"),
         hasilPanen: formData.get("hasilPanen"),
         pemupukan: formData.get("pemupukan"),
         pengobatan: formData.get("pengobatan"),
+        tinggiCm: formData.get("tinggiCm"),
+        lingkarBatangCm: formData.get("lingkarBatangCm"),
+        phTanah: formData.get("phTanah"),
         status: formData.get("status"),
       };
       // clean empty strings
@@ -142,18 +161,22 @@ export async function POST(req: NextRequest) {
 
     const koordinatFinal = latitude != null && longitude != null ? `${latitude}, ${longitude}` : ((parsed.koordinat as string) || null);
 
+    const hasDimensi = parsed.tinggiCm != null || parsed.lingkarBatangCm != null || parsed.phTanah != null;
     const pohon = await prisma.pohon.create({
       data: {
         id: parsed.id,
         namaPohon: (parsed.namaPohon as string) || null,
         varietas: parsed.varietas,
-        jenis: (parsed.jenis as string) || null,
         lokasiBlok: parsed.lokasiBlok,
         tanggalTanam: parsed.tanggalTanam,
         koordinat: koordinatFinal,
         hasilPanen: (parsed.hasilPanen as any) ?? null,
         pemupukan: (parsed.pemupukan as string) || null,
         pengobatan: (parsed.pengobatan as string) || null,
+        tinggiCm: (parsed.tinggiCm as number) ?? null,
+        lingkarBatangCm: (parsed.lingkarBatangCm as number) ?? null,
+        phTanah: (parsed.phTanah as number) ?? null,
+        ...(hasDimensi ? { diukurPada: new Date() } : {}),
         status: parsed.status as any,
         ...(fotoGeotagUrl
           ? {

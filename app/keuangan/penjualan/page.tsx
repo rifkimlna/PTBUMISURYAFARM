@@ -27,7 +27,7 @@ export default async function PenjualanPage({
   awal30Hari.setDate(awal30Hari.getDate() - 30);
   awal30Hari.setHours(0, 0, 0, 0);
 
-  const [belumDibayar, telatDibayar, pelunasan30, rows, docs, docByTagihan, kirim] = await Promise.all([
+  const [belumDibayar, telatDibayar, pelunasan30, rows, docs, docByTagihan, kirim, semuaReferensi] = await Promise.all([
     // Total sisa penagihan yang belum dibayar (termasuk lunas sebagian)
     prisma.tagihan.aggregate({
       where: { tipe: "PIUTANG", status: { not: "LUNAS" } },
@@ -65,7 +65,7 @@ export default async function PenjualanPage({
       where: { tipe: { in: ["PESANAN", "PENAWARAN", "PROFORMA", "TUKAR_FAKTUR"] } },
       orderBy: { tanggal: "desc" },
       take: 100,
-      include: { pelanggan: { select: { nama: true } } },
+      include: { pelanggan: { select: { nama: true } }, _count: { select: { pengiriman: true } } },
     }),
     // Peta tagihan -> dokumen (agar tombol edit membuka form dokumen yang sama)
     prisma.dokumenPenjualan.findMany({
@@ -78,15 +78,32 @@ export default async function PenjualanPage({
       take: 100,
       include: {
         pelanggan: { select: { nama: true } },
-        pesanan: { select: { noDokumen: true } },
+        pesanan: { select: { id: true, noDokumen: true, status: true } },
         _count: { select: { items: true } },
       },
+    }),
+    // Rantai dokumen untuk status tampilan (pesanan terkirim/ditagih -> Selesai).
+    prisma.dokumenPenjualan.findMany({
+      take: 500,
+      orderBy: { tanggal: "desc" },
+      select: { tipe: true, referensiIds: true },
     }),
   ]);
 
   const docMap: Record<string, { docId: string; tipe: string }> = {};
   for (const d of docByTagihan) {
     if (d.tagihanId) docMap[d.tagihanId] = { docId: d.id, tipe: d.tipe };
+  }
+
+  // Himpunan id yang sudah dirujuk dokumen turunan (untuk status tampilan).
+  const dirujukOlehPenagihan = new Set<string>();
+  const dirujukOlehPesanan = new Set<string>();
+  for (const r of semuaReferensi) {
+    if (!r.referensiIds || r.referensiIds.length === 0) continue;
+    for (const refId of r.referensiIds) {
+      if (r.tipe === "PENAGIHAN") dirujukOlehPenagihan.add(refId);
+      else if (r.tipe === "PESANAN") dirujukOlehPesanan.add(refId);
+    }
   }
 
   return (
@@ -117,24 +134,46 @@ export default async function PenjualanPage({
           sisa: Number(t.sisa),
           jumlah: Number(t.jumlah),
         }))}
-        docs={docs.map((d) => ({
-          id: d.id,
-          tipe: d.tipe,
-          noDokumen: d.noDokumen,
-          pelanggan: d.pelanggan.nama,
-          tanggal: d.tanggal.toISOString(),
-          jatuhTempo: d.jatuhTempo?.toISOString() ?? null,
-          status: d.status,
-          total: Number(d.total),
-        }))}
-        kirim={kirim.map((p) => ({
-          id: p.id,
-          noPengiriman: p.noPengiriman,
-          pesananNo: p.pesanan.noDokumen,
-          pelanggan: p.pelanggan.nama,
-          tanggal: (p.tanggalPengiriman ?? p.createdAt).toISOString(),
-          jumlahItem: p._count.items,
-        }))}
+        docs={docs.map((d) => {
+          // Normalisasi status lama ke kosakata Mekari (Pesanan/Penawaran: Belum Ditagih <-> Selesai).
+          let status = d.status;
+          if (d.tipe === "PESANAN" || d.tipe === "PENAWARAN") {
+            if (status === "TERBUKA" || status === "PESANAN" || status === "PESANAN_PROFORMA") status = "BELUM_DITAGIH";
+            else if (status === "DITUTUP") status = "SELESAI";
+            // Pesanan yang sudah masuk pengiriman / sudah ditagih bukan lagi Belum Ditagih.
+            if (d.tipe === "PESANAN" && status === "BELUM_DITAGIH") {
+              if ((d._count?.pengiriman ?? 0) > 0 || dirujukOlehPenagihan.has(d.id)) status = "SELESAI";
+            }
+            // Penawaran yang sudah jadi pesanan / langsung ditagih -> Selesai.
+            if (d.tipe === "PENAWARAN" && status === "BELUM_DITAGIH") {
+              if (dirujukOlehPesanan.has(d.id) || dirujukOlehPenagihan.has(d.id)) status = "SELESAI";
+            }
+          }
+          return {
+            id: d.id,
+            tipe: d.tipe,
+            noDokumen: d.noDokumen,
+            pelanggan: d.pelanggan.nama,
+            tanggal: d.tanggal.toISOString(),
+            jatuhTempo: d.jatuhTempo?.toISOString() ?? null,
+            status,
+            total: Number(d.total),
+          };
+        })}
+        kirim={kirim.map((p) => {
+          // Pengiriman baru = Belum Ditagih; menjadi Selesai setelah pesanan asalnya ditagih.
+          const status = dirujukOlehPenagihan.has(p.pesanan.id) ? "SELESAI" : "BELUM_DITAGIH";
+          return {
+            id: p.id,
+            noPengiriman: p.noPengiriman,
+            pesananId: p.pesanan.id,
+            pesananNo: p.pesanan.noDokumen,
+            pelanggan: p.pelanggan.nama,
+            tanggal: (p.tanggalPengiriman ?? p.createdAt).toISOString(),
+            jumlahItem: p._count.items,
+            status,
+          };
+        })}
       />
     </div>
   );

@@ -89,9 +89,30 @@ export async function POST(req: NextRequest) {
         tagihanId = tagihan.id;
       }
 
+      // Mengikuti Mekari Jurnal: Pesanan & Penawaran baru berstatus BELUM_DITAGIH.
+      const statusAwal = parsed.tipe === "PESANAN" || parsed.tipe === "PENAWARAN" ? "BELUM_DITAGIH" : "TERBUKA";
+
+      // Tandai dokumen asal selesai mengikuti alur Mekari:
+      // - Penagihan dari Pesanan/Penawaran -> asal menjadi SELESAI (sudah ditagih).
+      // - Pesanan dari Penawaran -> penawaran asal menjadi SELESAI.
+      if (
+        (parsed.tipe === "PENAGIHAN" || parsed.tipe === "PESANAN") &&
+        parsed.referensiIds.length > 0
+      ) {
+        await tx.dokumenPenjualan.updateMany({
+          where: {
+            id: { in: parsed.referensiIds },
+            tipe: { in: ["PESANAN", "PENAWARAN"] },
+            status: { not: "SELESAI" },
+          },
+          data: { status: "SELESAI" },
+        });
+      }
+
       const dokumen = await tx.dokumenPenjualan.create({
         data: {
           tipe: parsed.tipe,
+          status: statusAwal,
           noDokumen,
           pelangganId: pelanggan.id,
           email: parsed.email?.trim() || null,

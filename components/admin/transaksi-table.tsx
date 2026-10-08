@@ -12,9 +12,54 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, ChevronDown, Paperclip, X, Loader2, ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, ChevronDown, Paperclip, X, Loader2, ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine, Wallet } from "lucide-react";
 import { formatRupiah } from "@/lib/utils";
 import { kategoriByTipe, labelSumberDana, SUMBER_DANA_KEYS } from "@/lib/coa";
+
+type CoaOption = { kode: string; nama: string };
+
+// Ambil COA dari database agar akun baru di Daftar Akun langsung bisa dipilih
+// di dialog manual ini (fallback ke data statis bila API gagal).
+function useCoaDbOptions() {
+  const [pemasukan, setPemasukan] = useState<CoaOption[] | null>(null);
+  const [pengeluaran, setPengeluaran] = useState<CoaOption[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [p, b] = await Promise.all([
+          fetch("/api/keuangan/coa?kelompok=Pendapatan&isActive=true", { credentials: "include" }).then((r) =>
+            r.ok ? r.json() : null
+          ),
+          fetch("/api/keuangan/coa?kelompok=Beban&isActive=true", { credentials: "include" }).then((r) =>
+            r.ok ? r.json() : null
+          ),
+        ]);
+        if (cancelled) return;
+        if (p?.success && Array.isArray(p.data) && p.data.length > 0) {
+          setPemasukan(
+            p.data
+              .filter((a: { isActive?: boolean }) => a.isActive !== false)
+              .map((a: { kode: string; nama: string }) => ({ kode: a.kode, nama: a.nama }))
+          );
+        }
+        if (b?.success && Array.isArray(b.data) && b.data.length > 0) {
+          setPengeluaran(
+            b.data
+              .filter((a: { isActive?: boolean }) => a.isActive !== false)
+              .map((a: { kode: string; nama: string }) => ({ kode: a.kode, nama: a.nama }))
+          );
+        }
+      } catch {
+        // fallback statis dipakai
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return { pemasukan, pengeluaran };
+}
 
 type Tipe = "PEMASUKAN" | "PENGELUARAN" | "TRANSFER";
 
@@ -80,9 +125,18 @@ const TAMBAH_ITEMS = [
     desc: "Catat uang keluar",
     Icon: ArrowUpFromLine,
   },
+  {
+    href: "/keuangan/kas/setor-modal",
+    label: "Setor Modal",
+    desc: "Tambahan modal pemilik (bukan pendapatan)",
+    Icon: Wallet,
+  },
 ];
 
-function kategoriOptionsFor(tipe: Tipe) {
+function kategoriOptionsFor(tipe: Tipe, db?: { pemasukan: CoaOption[] | null; pengeluaran: CoaOption[] | null }) {
+  if (tipe === "TRANSFER") return [];
+  if (tipe === "PEMASUKAN" && db?.pemasukan && db.pemasukan.length > 0) return db.pemasukan;
+  if (tipe === "PENGELUARAN" && db?.pengeluaran && db.pengeluaran.length > 0) return db.pengeluaran;
   return kategoriByTipe(tipe);
 }
 
@@ -155,6 +209,8 @@ export function TransaksiTable({
   const buktiInputRef = useRef<HTMLInputElement>(null);
   const [aksiOpen, setAksiOpen] = useState(false);
   const aksiRef = useRef<HTMLDivElement>(null);
+  const coaDb = useCoaDbOptions();
+  const kategoriOptions = (t: Tipe) => kategoriOptionsFor(t, coaDb);
 
   useEffect(() => {
     if (!aksiOpen) return;
@@ -551,7 +607,7 @@ export function TransaksiTable({
                   value={form.tipe}
                   onChange={(event) => {
                     const nextTipe = event.target.value as Tipe;
-                    const stillValid = kategoriByTipe(nextTipe).some((a) => a.nama === form.kategori);
+                    const stillValid = kategoriOptions(nextTipe).some((a) => a.nama === form.kategori);
                     updateForm("tipe", nextTipe);
                     if (!stillValid) {
                       updateForm(
@@ -576,18 +632,18 @@ export function TransaksiTable({
                     value={form.kategori}
                     onChange={(event) => updateForm("kategori", event.target.value)}
                   >
-                      {kategoriOptionsFor(form.tipe).map((item) => (
+                      {kategoriOptions(form.tipe).map((item) => (
                         <option key={item.kode} value={item.nama}>
                           {item.kode} - {item.nama}
                         </option>
                       ))}
                     {form.kategori &&
-                      !kategoriOptionsFor(form.tipe).some((item) => item.nama === form.kategori) && (
+                      !kategoriOptions(form.tipe).some((item) => item.nama === form.kategori) && (
                         <option value={form.kategori}>Kategori lama: {form.kategori}</option>
                       )}
                   </Select>
                   {(() => {
-                    const akun = kategoriByTipe(form.tipe).find((a) => a.nama === form.kategori);
+                    const akun = kategoriOptions(form.tipe).find((a) => a.nama === form.kategori);
                     return akun ? (
                       <span className="text-[11px] text-slate-400">Kode akun: {akun.kode}</span>
                     ) : null;

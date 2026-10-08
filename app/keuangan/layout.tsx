@@ -12,6 +12,7 @@ export default function KeuanganLayout({ children }: { children: React.ReactNode
   const router = useRouter();
   const [user, setUser] = useState<{ nama: string; role: string } | null>(null);
   const [checked, setChecked] = useState(false);
+  const [dbDown, setDbDown] = useState(false);
 
   useEffect(() => {
     async function check() {
@@ -19,20 +20,60 @@ export default function KeuanganLayout({ children }: { children: React.ReactNode
         const raw = localStorage.getItem("user");
         let role: string | null = null;
         if (raw) {
-          const parsed = JSON.parse(raw);
-          setUser(parsed);
-          role = parsed.role;
-        } else {
-          const r = await fetch("/api/auth/me");
-          const j = await r.json();
-          if (j.success) {
-            setUser(j.data.user);
-            localStorage.setItem("user", JSON.stringify(j.data.user));
-            role = j.data.user.role;
-          } else {
-            router.push("/login");
+          try {
+            const parsed = JSON.parse(raw);
+            setUser(parsed);
+            role = parsed.role;
+          } catch {
+            localStorage.removeItem("user");
+          }
+          if (role && ALLOWED.includes(role)) {
+            setChecked(true);
+            try {
+              const r = await fetch("/api/auth/me");
+              const j = await r.json().catch(() => null);
+              if (j?.success) {
+                setUser(j.data.user);
+                localStorage.setItem("user", JSON.stringify(j.data.user));
+                if (j.data?.dbDown) setDbDown(true);
+                role = j.data.user.role;
+                if (role && !ALLOWED.includes(role)) {
+                  if (role === "ADMIN_PERTANIAN") router.push("/perkebunan");
+                  else if (role === "PETUGAS_LAPANGAN") router.push("/petugas/scan");
+                  else router.push("/login");
+                  return;
+                }
+              } else if (r.status === 401 || r.status === 404) {
+                router.push("/login");
+                return;
+              } else if (r.status === 503) {
+                setDbDown(true);
+              }
+            } catch {}
             return;
           }
+          if (role && !ALLOWED.includes(role)) {
+            if (role === "ADMIN_PERTANIAN") router.push("/perkebunan");
+            else if (role === "PETUGAS_LAPANGAN") router.push("/petugas/scan");
+            else router.push("/login");
+            return;
+          }
+        }
+        const r = await fetch("/api/auth/me");
+        const j = await r.json().catch(() => null);
+        if (j?.success) {
+          setUser(j.data.user);
+          localStorage.setItem("user", JSON.stringify(j.data.user));
+          if (j.data?.dbDown) setDbDown(true);
+          role = j.data.user.role;
+        } else {
+          if (r.status === 503) {
+            setDbDown(true);
+            setChecked(true);
+            return;
+          }
+          router.push("/login");
+          return;
         }
         if (role && !ALLOWED.includes(role)) {
           if (role === "ADMIN_PERTANIAN") router.push("/perkebunan");
@@ -118,6 +159,12 @@ export default function KeuanganLayout({ children }: { children: React.ReactNode
           </div>
         </header>
         <main className="p-4 sm:p-6 lg:p-8 xl:p-10 max-w-[1280px] 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto w-full min-w-0">
+          {dbDown && (
+            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+              <div className="text-sm font-medium text-red-800">⚠️ Database tidak terhubung — data mungkin kosong.</div>
+              <div className="mt-1 text-xs text-red-600">Cek DATABASE_URL di Vercel lalu redeploy. Sesi login tetap dipertahankan.</div>
+            </div>
+          )}
           {children}
         </main>
       </div>

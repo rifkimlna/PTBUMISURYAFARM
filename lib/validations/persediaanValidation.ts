@@ -18,7 +18,8 @@ export const createPersediaanBarangSchema = z.object({
     .string()
     .trim()
     .toUpperCase()
-    .regex(/^BRG-\d{3,}$/, "Kode harus format BRG-001 (contoh: BRG-005)"),
+    .regex(/^BRG-\d{3,}$/, "Kode harus format BRG-001 (contoh: BRG-005)")
+    .optional(),
   namaBarang: z.string().min(2, "Nama barang minimal 2 karakter").max(100).trim(),
   kategori: z.enum(kategoriPersediaanList, {
     message: "Kategori tidak valid",
@@ -30,11 +31,33 @@ export const createPersediaanBarangSchema = z.object({
     .number()
     .nonnegative("Harga satuan tidak boleh negatif")
     .min(0)
-    .max(10_000_000_000, "Harga terlalu besar"),
+    .max(10_000_000_000, "Harga terlalu besar")
+    .optional(),
   keterangan: z.string().max(500, "Keterangan maksimal 500 karakter").optional().nullable(),
+  // --- Modul Produk (opsional; COA tetap di backend, tidak tampil di form) ---
+  barcode: z
+    .string()
+    .trim()
+    .max(50, "Barcode maksimal 50 karakter")
+    .optional()
+    .nullable()
+    .transform((v) => (v && v.length > 0 ? v : null)),
+  tipeProduk: z.enum(["BARANG", "JASA"]).optional().nullable(),
+  hargaBeli: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.coerce.number().nonnegative("Harga beli tidak boleh negatif").max(10_000_000_000, "Harga terlalu besar").optional().nullable()
+  ),
+  hargaJual: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.coerce.number().nonnegative("Harga jual tidak boleh negatif").max(10_000_000_000, "Harga terlalu besar").optional().nullable()
+  ),
+  batasMinimum: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.coerce.number().int("Batas minimum harus bilangan bulat").min(0, "Batas minimum minimal 0").max(1_000_000).optional().nullable()
+  ),
 });
 
-// Kode & stokAwal tidak bisa diedit - stok hanya diubah lewat Stok Masuk/Keluar
+// Kode & stokAwal tidak bisa diedit - stok hanya diubah lewat Penyesuaian Stok
 export const updatePersediaanBarangSchema = z
   .object({
     namaBarang: z.string().min(2).max(100).trim().optional(),
@@ -48,6 +71,26 @@ export const updatePersediaanBarangSchema = z
       .max(10_000_000_000)
       .optional(),
     keterangan: z.string().max(500).optional().nullable(),
+    barcode: z
+      .string()
+      .trim()
+      .max(50, "Barcode maksimal 50 karakter")
+      .optional()
+      .nullable()
+      .transform((v) => (v && v.length > 0 ? v : null)),
+    tipeProduk: z.enum(["BARANG", "JASA"]).optional().nullable(),
+    hargaBeli: z.preprocess(
+      (v) => (v === "" ? undefined : v),
+      z.coerce.number().nonnegative().max(10_000_000_000).optional().nullable()
+    ),
+    hargaJual: z.preprocess(
+      (v) => (v === "" ? undefined : v),
+      z.coerce.number().nonnegative().max(10_000_000_000).optional().nullable()
+    ),
+    batasMinimum: z.preprocess(
+      (v) => (v === "" ? undefined : v),
+      z.coerce.number().int().min(0).max(1_000_000).optional().nullable()
+    ),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "Minimal satu field harus diisi",
@@ -58,6 +101,8 @@ export const createRiwayatStokSchema = z.object({
   jumlah: z.coerce.number().int("Jumlah harus bilangan bulat").min(1, "Jumlah minimal 1").max(1_000_000, "Jumlah terlalu besar"),
   keterangan: z.string().max(500, "Keterangan maksimal 500 karakter").optional().nullable(),
   tanggal: z.coerce.date().optional(), // default now()
+  // Asal catatan (tanpa efek Kas/Bank): PENYESUAIAN = hasil stock opname.
+  sumber: z.enum(["PENYESUAIAN", "PEMBELIAN", "MANUAL"]).optional().nullable(),
 });
 
 // Schema untuk Pembelian/Barang Masuk Terintegrasi (Stok + Kas + COA)

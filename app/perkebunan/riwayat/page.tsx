@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import Link from "next/link";
 import { Search } from "lucide-react";
+import { DbErrorBanner } from "@/components/admin/db-error-banner";
 
 const PAGE_SIZE = 20;
 
@@ -24,16 +25,24 @@ export default async function RiwayatPage({ searchParams }: { searchParams: Prom
       }
     : {};
 
-  const [total, data] = await Promise.all([
-    prisma.riwayatKesehatan.count({ where }),
-    prisma.riwayatKesehatan.findMany({
-      where,
-      orderBy: { tanggalCek: "desc" },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
-      include: { pohon: { select: { id: true, varietas: true } }, petugas: { select: { nama: true } } },
-    }),
-  ]);
+  let total = 0;
+  let data: any[] = [];
+  let dbError = false;
+  try {
+    [total, data] = await Promise.all([
+      prisma.riwayatKesehatan.count({ where }),
+      prisma.riwayatKesehatan.findMany({
+        where,
+        orderBy: { tanggalCek: "desc" },
+        skip: (page - 1) * PAGE_SIZE,
+        take: PAGE_SIZE,
+        include: { pohon: { select: { id: true, varietas: true } }, petugas: { select: { nama: true } } },
+      }),
+    ]);
+  } catch (e) {
+    console.error("[perkebunan/riwayat] database tidak terjangkau:", e instanceof Error ? e.message : e);
+    dbError = true;
+  }
 
   const totalPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const cur = Math.min(page, totalPage);
@@ -42,9 +51,11 @@ export default async function RiwayatPage({ searchParams }: { searchParams: Prom
   return (
     <div className="space-y-4 sm:space-y-6 min-w-0">
       <div className="min-w-0">
-        <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-slate-900">Riwayat</h1>
-        <p className="text-xs sm:text-sm text-slate-500">{total} catatan</p>
+        <h1 className="text-base sm:text-xl font-semibold tracking-tight text-slate-900 truncate">Riwayat</h1>
+        <p className="text-[11px] sm:text-sm text-slate-500">{total} catatan</p>
       </div>
+
+      {dbError && <DbErrorBanner />}
 
       <form method="get" action="/perkebunan/riwayat" className="flex gap-2">
         <div className="relative flex-1">

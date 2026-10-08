@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
+import { FakturForm } from "@/components/admin/pembelian-forms";
 
 export default function TukarFakturBaruPage() {
   return (
@@ -14,9 +15,7 @@ export default function TukarFakturBaruPage() {
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">Tukar Faktur Pembelian</h1>
         <p className="mt-1 text-sm text-slate-400">Tukarkan faktur pembelian yang sudah ada</p>
       </div>
-      <div className="border border-dashed border-slate-300 rounded-lg p-8 text-center text-slate-400">
-        <p>Form Tukar Faktur akan segera hadir.</p>
-      </div>
+      <FakturForm title="Tukar Faktur Pembelian" subtitle="Tukarkan faktur pembelian yang sudah ada" />
     </div>
   );
 }

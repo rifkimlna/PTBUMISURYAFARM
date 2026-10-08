@@ -39,8 +39,9 @@ const STATIC_COA_KEWAJIBAN: AkunCOA[] = [
   { kode: "2104", nama: "Utang Lain-lain", kelompok: "Kewajiban", golongan: "Utang", tipe: "NETRAL" },
 ];
 
-// Modal
-const STATIC_COA_MODAL: AkunCOA[] = [
+// Modal (untuk fallback dropdown Setor Modal bila API tak bisa diakses;
+// 3104 Laba Ditahan dikecualikan di form karena dihitung otomatis dari laba)
+export const STATIC_COA_MODAL: AkunCOA[] = [
   { kode: "3101", nama: "Modal Disetor / Setoran Pemilik (Bapak)", kelompok: "Modal", golongan: "Modal", tipe: "NETRAL" },
   { kode: "3102", nama: "Modal Disetor / Setoran Pemilik (Riki)", kelompok: "Modal", golongan: "Modal", tipe: "NETRAL" },
   { kode: "3103", nama: "Prive / Penarikan Modal", kelompok: "Modal", golongan: "Modal", tipe: "NETRAL" },

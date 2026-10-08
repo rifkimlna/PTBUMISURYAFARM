@@ -83,6 +83,7 @@ export async function POST(req: NextRequest, { params }: Params) {
           jenis: "MASUK",
           jumlah: parsed.jumlah,
           keterangan: parsed.keterangan ? `Pembelian: ${parsed.keterangan}` : "Pembelian barang",
+          sumber: "PEMBELIAN",
           tanggal: parsed.tanggal ?? new Date(),
         },
       });

@@ -13,7 +13,7 @@ const menus: { label: string; href?: string; subs?: Sub[] }[] = [
       { label: "Tentang Kami", href: "/#tentang", desc: "Profil & sejarah", icon: Building2 },
       { label: "Visi & Misi", href: "/#tentang", desc: "Tujuan berkelanjutan", icon: Award },
       { label: "Manajemen", href: "/#tentang", desc: "Struktur organisasi", icon: Users },
-      { label: "Legalitas", href: "/#tentang", desc: "RSPO • ISPO", icon: FileCheck },
+      { label: "Legalitas", href: "/#tentang", desc: "GAP • Organik", icon: FileCheck },
     ],
   },
   {
@@ -28,9 +28,9 @@ const menus: { label: string; href?: string; subs?: Sub[] }[] = [
   {
     label: "Produk",
     subs: [
-      { label: "TBS Sawit", href: "/#produk", desc: "DxP • Premium", icon: Package },
-      { label: "Bibit Unggul", href: "/#produk", desc: "TN1 bersertifikat", icon: Sprout },
-      { label: "Pupuk Organik", href: "/#produk", desc: "Organik Surya Farm", icon: Leaf },
+      { label: "Durian Premium", href: "/#produk", desc: "Montong • Bawor", icon: Package },
+      { label: "Alpukat Mentega", href: "/#produk", desc: "Mentega • Kendil", icon: Sprout },
+      { label: "Jambu Kristal", href: "/#produk", desc: "Kristal • Madu Deli", icon: Leaf },
     ],
   },
   { label: "Kontak", href: "/#kontak" },

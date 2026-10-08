@@ -53,7 +53,7 @@ export function TindakanDropdown({
       const res = await fetch(`/api/penjualan/dokumen/${encodeURIComponent(docId)}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: ditutup ? "TERBUKA" : "DITUTUP" }),
+        body: JSON.stringify({ status: ditutup ? "BELUM_DITAGIH" : "SELESAI" }),
       });
       const result = await res.json().catch(() => ({ message: "Gagal ubah status" }));
       if (!res.ok) throw new Error(result.message || "Gagal ubah status");
@@ -106,7 +106,7 @@ export function TindakanDropdown({
                 <span><span className="block font-medium text-slate-900">Buat Penagihan</span><span className="block text-xs text-slate-500">Tagih pesanan ini (jadi piutang)</span></span>
               </Link>
               <button type="button" role="menuitem" className={itemCls} disabled={busy} onClick={toggleTutup}>
-                <span><span className="block font-medium text-slate-900">{ditutup ? "Buka kembali pesanan" : "Tutup pesanan"}</span><span className="block text-xs text-slate-500">{ditutup ? "Status kembali TERBUKA" : "Tandai selesai/ditutup"}</span></span>
+                <span><span className="block font-medium text-slate-900">{ditutup ? "Buka kembali pesanan" : "Tutup pesanan"}</span><span className="block text-xs text-slate-500">{ditutup ? "Status kembali Belum Ditagih" : "Tandai selesai/ditutup"}</span></span>
               </button>
             </>
           )}
@@ -122,7 +122,7 @@ export function TindakanDropdown({
                 <span><span className="block font-medium text-slate-900">Buat Penagihan</span><span className="block text-xs text-slate-500">Tagih langsung (jadi piutang)</span></span>
               </Link>
               <button type="button" role="menuitem" className={itemCls} disabled={busy} onClick={toggleTutup}>
-                <span><span className="block font-medium text-slate-900">{ditutup ? "Buka kembali penawaran" : "Tutup penawaran"}</span><span className="block text-xs text-slate-500">{ditutup ? "Status kembali TERBUKA" : "Tandai selesai/ditutup"}</span></span>
+                <span><span className="block font-medium text-slate-900">{ditutup ? "Buka kembali penawaran" : "Tutup penawaran"}</span><span className="block text-xs text-slate-500">{ditutup ? "Status kembali Belum Ditagih" : "Tandai selesai/ditutup"}</span></span>
               </button>
             </>
           )}

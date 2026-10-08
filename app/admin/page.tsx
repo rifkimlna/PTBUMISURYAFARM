@@ -34,7 +34,7 @@ export default function AdminIndex() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-sm text-slate-600">Kas, karyawan, aset & persediaan. Lokasi baru: /keuangan</p>
+            <p className="text-sm text-slate-600">Kas, kontak, produk & aset. Lokasi baru: /keuangan</p>
             <Link href="/keuangan" className="block">
               <Button className="bg-emerald-700 hover:bg-emerald-800 w-full sm:w-auto cursor-pointer">
                 Buka Keuangan <ArrowRight className="h-4 w-4" />
@@ -42,9 +42,9 @@ export default function AdminIndex() {
             </Link>
             <div className="flex flex-wrap gap-2 text-xs">
               <Link href="/keuangan/kas" className="text-emerald-700 hover:underline">Kas →</Link>
-              <Link href="/keuangan/karyawan" className="text-emerald-700 hover:underline">Karyawan →</Link>
+              <Link href="/keuangan/kontak" className="text-emerald-700 hover:underline">Kontak →</Link>
               <Link href="/keuangan/aset" className="text-emerald-700 hover:underline">Aset →</Link>
-              <Link href="/keuangan/persediaan" className="text-emerald-700 hover:underline">Persediaan →</Link>
+              <Link href="/keuangan/produk" className="text-emerald-700 hover:underline">Produk →</Link>
             </div>
           </CardContent>
         </Card>

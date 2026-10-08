@@ -3,7 +3,9 @@ import { PembelianContent } from "@/components/admin/pembelian-content";
 
 // Halaman Pembelian PT BST.
 // Tab Faktur memakai data nyata (FakturPembelian + Tagihan HUTANG);
-// tab lain masih tahap UI (empty state, tanpa dummy).
+// tab Pengiriman/Pesanan/Penawaran/Permintaan memakai DokumenPembelian +
+// PengirimanPembelian nyata. Alur: Permintaan -> Penawaran -> Pesanan (PO) ->
+// Pengiriman (penerimaan) -> Faktur -> Utang -> Pembayaran -> Kas & Bank -> COA.
 const TAB_VALID = ["faktur", "tukar-faktur", "pengiriman", "pesanan", "penawaran", "permintaan"] as const;
 
 export default async function PembelianPage({
@@ -23,14 +25,55 @@ export default async function PembelianPage({
   awal30Hari.setDate(awal30Hari.getDate() - 30);
   awal30Hari.setHours(0, 0, 0, 0);
 
-  const rows = await prisma.fakturPembelian.findMany({
+  const [rows, docs, kirim, semuaReferensi] = await Promise.all([
+    prisma.fakturPembelian.findMany({
+      orderBy: { tanggal: "desc" },
+      take: 100,
+      include: {
+        supplier: { select: { nama: true } },
+        tagihan: { select: { id: true, status: true, sisa: true } },
+      },
+    }),
+    prisma.dokumenPembelian.findMany({
+      where: { tipe: { in: ["PESANAN", "PENAWARAN", "PERMINTAAN"] } },
+      orderBy: { tanggal: "desc" },
+      take: 100,
+      include: {
+        supplier: { select: { nama: true } },
+        _count: { select: { pengiriman: true } },
+      },
+    }),
+    prisma.pengirimanPembelian.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      include: {
+        supplier: { select: { nama: true } },
+        pesanan: { select: { id: true, noDokumen: true } },
+        _count: { select: { items: true } },
+      },
+    }),
+    prisma.dokumenPembelian.findMany({
+      take: 500,
+      orderBy: { tanggal: "desc" },
+      select: { tipe: true, referensiIds: true },
+    }),
+  ]);
+
+  // Himpunan id yang sudah dirujuk dokumen turunan / faktur.
+  const dirujukDokumen = new Set<string>();
+  for (const r of semuaReferensi) {
+    if (!r.referensiIds || r.referensiIds.length === 0) continue;
+    for (const refId of r.referensiIds) dirujukDokumen.add(refId);
+  }
+  const fakturMerujuk = await prisma.fakturPembelian.findMany({
+    take: 500,
     orderBy: { tanggal: "desc" },
-    take: 100,
-    include: {
-      supplier: { select: { nama: true } },
-      tagihan: { select: { id: true, status: true, sisa: true } },
-    },
+    select: { referensiIds: true },
   });
+  const dirujukFaktur = new Set<string>();
+  for (const f of fakturMerujuk) {
+    for (const refId of f.referensiIds ?? []) dirujukFaktur.add(refId);
+  }
 
   // Ringkasan WAJIB dari sumber yang sama dengan tabel (FakturPembelian +
   // utang tertautnya), bukan seluruh Tagihan HUTANG — agar angka card
@@ -93,6 +136,35 @@ export default async function PembelianPage({
             tagihanId: f.tagihan?.id ?? null,
           };
         })}
+        docs={docs.map((d) => {
+          let status = d.status === "DITUTUP" ? "SELESAI" : d.status;
+          // Dokumen yang sudah ada turunan / faktur / pengiriman bukan lagi Belum Ditagih.
+          if (status === "BELUM_DITAGIH") {
+            if (d.tipe === "PESANAN" && ((d._count?.pengiriman ?? 0) > 0 || dirujukFaktur.has(d.id))) status = "SELESAI";
+            else if (dirujukDokumen.has(d.id) || dirujukFaktur.has(d.id)) status = "SELESAI";
+          }
+          return {
+            id: d.id,
+            tipe: d.tipe,
+            noDokumen: d.noDokumen,
+            pihak: d.supplier?.nama ?? d.departemen ?? "-",
+            tanggal: d.tanggal.toISOString(),
+            jatuhTempo: d.jatuhTempo?.toISOString() ?? null,
+            status,
+            total: Number(d.total),
+          };
+        })}
+        kirim={kirim.map((p) => ({
+          id: p.id,
+          noPengiriman: p.noPengiriman,
+          pesananId: p.pesanan.id,
+          pesananNo: p.pesanan.noDokumen,
+          supplier: p.supplier.nama,
+          tanggal: (p.tanggalPengiriman ?? p.createdAt).toISOString(),
+          jumlahItem: p._count.items,
+          // Penerimaan baru = Belum Ditagih; Selesai setelah pesanan asalnya difaktur.
+          status: dirujukFaktur.has(p.pesanan.id) ? "SELESAI" : "BELUM_DITAGIH",
+        }))}
       />
     </div>
   );
