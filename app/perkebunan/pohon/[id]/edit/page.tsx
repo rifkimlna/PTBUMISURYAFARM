@@ -58,7 +58,7 @@ export default async function EditPohonMasterPage({ params }: { params: Promise<
           hasilPanen: (pohon as any).hasilPanen?.toString?.() ?? "",
           pemupukan: (pohon as any).pemupukan || "",
           pengobatan: (pohon as any).pengobatan || "",
-          tinggiCm: (pohon as any).tinggiCm != null ? String((pohon as any).tinggiCm) : "",
+          tinggiM: (pohon as any).tinggiM != null ? String((pohon as any).tinggiM) : "",
           lingkarBatangCm: (pohon as any).lingkarBatangCm != null ? String((pohon as any).lingkarBatangCm) : "",
           phTanah: (pohon as any).phTanah != null ? String((pohon as any).phTanah) : "",
           fotoGeotagUrl: pohon.fotoGeotagUrl || null,

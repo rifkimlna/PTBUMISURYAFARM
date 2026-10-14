@@ -30,13 +30,13 @@ export default async function PublicPohonPage({ params }: { params: Promise<{ id
     where: { id },
     select: {
       id: true, namaPohon: true, varietas: true, lokasiBlok: true, tanggalTanam: true,
-      tinggiCm: true, status: true, fotoGeotagUrl: true, latitude: true, longitude: true,
+      tinggiM: true, status: true, fotoGeotagUrl: true, latitude: true, longitude: true,
     },
   });
   if (!pohon) notFound();
   const p = pohon as unknown as {
     id: string; namaPohon: string | null; varietas: string; lokasiBlok: string; tanggalTanam: Date;
-    tinggiCm: number | null; status: string;
+    tinggiM: number | null; status: string;
     fotoGeotagUrl: string | null; latitude: number | null; longitude: number | null;
   };
 
@@ -44,7 +44,7 @@ export default async function PublicPohonPage({ params }: { params: Promise<{ id
   const usiaHari = Math.floor((Date.now() - new Date(p.tanggalTanam).getTime()) / (1000 * 60 * 60 * 24));
   const usiaTahun = (usiaHari / 365).toFixed(1);
   const hasFoto = isRealFotoUrl(p.fotoGeotagUrl);
-  const kategori = klasifikasiUkuran(p.tinggiCm);
+  const kategori = klasifikasiUkuran(p.tinggiM);
   const mapsUrl = p.latitude != null && p.longitude != null
     ? `https://maps.google.com/?q=${p.latitude},${p.longitude}`
     : null;
@@ -89,7 +89,7 @@ export default async function PublicPohonPage({ params }: { params: Promise<{ id
           </div>
           <div className="rounded-2xl bg-green-700 px-4 py-3.5 text-white">
             <div className="text-[11px] font-medium tracking-wide text-green-100">UKURAN</div>
-            <div className="mt-1 text-sm font-semibold">{p.tinggiCm != null ? `${p.tinggiCm} cm` : "Belum ukur"}</div>
+            <div className="mt-1 text-sm font-semibold">{p.tinggiM != null ? `${Number(p.tinggiM).toFixed(2)} m` : "Belum ukur"}</div>
             <div className="text-xs text-green-100">{labelKategori(kategori)}</div>
           </div>
         </div>
