@@ -56,10 +56,10 @@ export default async function DataPohonPage({ searchParams }: { searchParams: Pr
   } else if (hasGeotag === "true") {
     and.push({ fotoGeotagUrl: { not: null } });
   }
-  if (ukuran === "KECIL") and.push({ tinggiCm: { lt: 150 } });
-  else if (ukuran === "SEDANG") and.push({ tinggiCm: { gte: 150, lte: 400 } });
-  else if (ukuran === "BESAR") and.push({ tinggiCm: { gt: 400 } });
-  else if (ukuran === "BELUM_UKUR") and.push({ tinggiCm: null });
+  if (ukuran === "KECIL") and.push({ tinggiM: { lt: 1.5 } });
+  else if (ukuran === "SEDANG") and.push({ tinggiM: { gte: 1.5, lte: 4 } });
+  else if (ukuran === "BESAR") and.push({ tinggiM: { gt: 4 } });
+  else if (ukuran === "BELUM_UKUR") and.push({ tinggiM: null });
   const where: Prisma.PohonWhereInput = and.length > 0 ? { AND: and } : {};
 
   let total = 0;
@@ -163,7 +163,7 @@ export default async function DataPohonPage({ searchParams }: { searchParams: Pr
             hasilPanen: p.hasilPanen != null ? p.hasilPanen.toString() : null,
             pemupukan: p.pemupukan,
             pengobatan: p.pengobatan,
-            tinggiCm: p.tinggiCm ?? null,
+            tinggiM: p.tinggiM ?? null,
             lingkarBatangCm: p.lingkarBatangCm != null ? p.lingkarBatangCm.toString() : null,
             phTanah: p.phTanah != null ? p.phTanah.toString() : null,
             diukurPada: p.diukurPada?.toISOString?.() ?? null,

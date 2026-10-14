@@ -181,7 +181,7 @@ model Pohon {
   pemupukan    String?  @db.Text // PEMUPUKAN - riwayat pupuk terakhir
   pengobatan   String?  @db.Text // PENGOBATAN - riwayat obat terakhir
   // Dimensi pohon - untuk bedakan besar/kecil (diukur petugas lapangan)
-  tinggiCm         Int?     // cm, tanah ke pucuk ex: 180
+  tinggiM          Decimal? @db.Decimal(6, 2) // m, tanah ke pucuk ex: 1.80
   lingkarBatangCm  Decimal? @db.Decimal(6, 2) // cm, ukur 130cm dari tanah
   phTanah          Decimal? @db.Decimal(3, 1) // 0.0-14.0, pH meter tusuk per pohon
   diukurPada       DateTime? // kapan terakhir ukur dimensi/pH
@@ -209,7 +209,7 @@ model Pohon {
   @@index([tanggalTanam])
   @@index([geotagAdminId])
   @@index([geotagTimestamp])
-  @@index([tinggiCm])
+  @@index([tinggiM])
   @@index([phTanah])
   @@map("pohon")
 }

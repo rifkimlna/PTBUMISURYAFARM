@@ -42,19 +42,19 @@ export async function GET(req: NextRequest) {
     if ((query as any).hasGeotag === "true") where.fotoGeotagUrl = { not: null };
     if ((query as any).hasGeotag === "false") where.fotoGeotagUrl = null;
     if (query.minTinggi != null || query.maxTinggi != null) {
-      where.tinggiCm = {};
-      if (query.minTinggi != null) where.tinggiCm.gte = query.minTinggi;
-      if (query.maxTinggi != null) where.tinggiCm.lte = query.maxTinggi;
+      where.tinggiM = {};
+      if (query.minTinggi != null) where.tinggiM.gte = query.minTinggi;
+      if (query.maxTinggi != null) where.tinggiM.lte = query.maxTinggi;
     }
     if (query.phMin != null || query.phMax != null) {
       where.phTanah = {};
       if (query.phMin != null) where.phTanah.gte = query.phMin;
       if (query.phMax != null) where.phTanah.lte = query.phMax;
     }
-    if (query.kategoriUkuran === "KECIL") where.tinggiCm = { lt: 150 };
-    else if (query.kategoriUkuran === "SEDANG") where.tinggiCm = { gte: 150, lte: 400 };
-    else if (query.kategoriUkuran === "BESAR") where.tinggiCm = { gt: 400 };
-    else if (query.kategoriUkuran === "BELUM_UKUR") where.tinggiCm = null;
+    if (query.kategoriUkuran === "KECIL") where.tinggiM = { lt: 1.5 };
+    else if (query.kategoriUkuran === "SEDANG") where.tinggiM = { gte: 1.5, lte: 4 };
+    else if (query.kategoriUkuran === "BESAR") where.tinggiM = { gt: 4 };
+    else if (query.kategoriUkuran === "BELUM_UKUR") where.tinggiM = null;
 
     const [data, total] = await Promise.all([
       prisma.pohon.findMany({
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
         hasilPanen: formData.get("hasilPanen"),
         pemupukan: formData.get("pemupukan"),
         pengobatan: formData.get("pengobatan"),
-        tinggiCm: formData.get("tinggiCm"),
+        tinggiM: formData.get("tinggiM"),
         lingkarBatangCm: formData.get("lingkarBatangCm"),
         phTanah: formData.get("phTanah"),
         status: formData.get("status"),
@@ -161,7 +161,7 @@ export async function POST(req: NextRequest) {
 
     const koordinatFinal = latitude != null && longitude != null ? `${latitude}, ${longitude}` : ((parsed.koordinat as string) || null);
 
-    const hasDimensi = parsed.tinggiCm != null || parsed.lingkarBatangCm != null || parsed.phTanah != null;
+    const hasDimensi = parsed.tinggiM != null || parsed.lingkarBatangCm != null || parsed.phTanah != null;
     const pohon = await prisma.pohon.create({
       data: {
         id: parsed.id,
@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
         hasilPanen: (parsed.hasilPanen as any) ?? null,
         pemupukan: (parsed.pemupukan as string) || null,
         pengobatan: (parsed.pengobatan as string) || null,
-        tinggiCm: (parsed.tinggiCm as number) ?? null,
+        tinggiM: (parsed.tinggiM as number) ?? null,
         lingkarBatangCm: (parsed.lingkarBatangCm as number) ?? null,
         phTanah: (parsed.phTanah as number) ?? null,
         ...(hasDimensi ? { diukurPada: new Date() } : {}),
