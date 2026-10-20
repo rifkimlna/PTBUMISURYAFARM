@@ -988,3 +988,52 @@ model AnggaranItem {
   @@index([anggaranId])
   @@map("anggaran_item")
 }
+
+// ===================== KARIR =====================
+enum TipeLowongan {
+  KERJA
+  MAGANG
+}
+
+enum StatusPelamar {
+  BARU
+  SELEKSI
+  INTERVIEW
+  DITERIMA
+  DITOLAK
+}
+
+model Lowongan {
+  id          String      @id @default(cuid())
+  judul       String
+  divisi      String
+  lokasi      String
+  tipe        TipeLowongan @default(KERJA)
+  deskripsi   String      @db.Text
+  kualifikasi String      @db.Text
+  deadline    DateTime?
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  pelamar     Pelamar[]
+
+  @@index([isActive])
+  @@map("lowongan")
+}
+
+model Pelamar {
+  id         String        @id @default(cuid())
+  lowonganId String
+  lowongan   Lowongan      @relation(fields: [lowonganId], references: [id], onDelete: Cascade)
+  nama       String
+  email      String
+  wa         String
+  cvUrl      String
+  tipe       TipeLowongan  @default(KERJA)
+  status     StatusPelamar @default(BARU)
+  createdAt  DateTime      @default(now())
+
+  @@index([lowonganId])
+  @@index([status])
+  @@map("pelamar")
+}

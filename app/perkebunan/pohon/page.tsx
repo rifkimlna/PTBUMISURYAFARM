@@ -163,7 +163,7 @@ export default async function DataPohonPage({ searchParams }: { searchParams: Pr
             hasilPanen: p.hasilPanen != null ? p.hasilPanen.toString() : null,
             pemupukan: p.pemupukan,
             pengobatan: p.pengobatan,
-            tinggiM: p.tinggiM ?? null,
+            tinggiM: p.tinggiM == null ? null : Number(p.tinggiM),
             lingkarBatangCm: p.lingkarBatangCm != null ? p.lingkarBatangCm.toString() : null,
             phTanah: p.phTanah != null ? p.phTanah.toString() : null,
             diukurPada: p.diukurPada?.toISOString?.() ?? null,
