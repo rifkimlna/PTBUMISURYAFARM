@@ -105,7 +105,7 @@ const emptyForm: FormValues = {
   tanggal: "",
 };
 
-// Menu tombol "+ Tambah Transaksi": form Mekari + dialog manual lama.
+// Menu tombol "+ Tambah Transaksi": form Mekari (Transfer/Terima/Kirim/Setor Modal).
 const TAMBAH_ITEMS = [
   {
     href: "/keuangan/kas/transfer",
@@ -298,15 +298,6 @@ export function TransaksiTable({
     setForm((current) => ({ ...current, [key]: value }));
   };
 
-  const openCreate = () => {
-    setEditingId(null);
-    setForm(emptyForm);
-    setMessage("");
-    setPendingBukti([]);
-    setPendingBuktiErrors([]);
-    setDialogOpen(true);
-  };
-
   const openEdit = (row: TransaksiRow) => {
     setEditingId(row.id);
     setForm({
@@ -484,24 +475,6 @@ export function TransaksiTable({
                       </span>
                     </Link>
                   ))}
-                  <div className="border-t border-slate-100" />
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setAksiOpen(false);
-                      openCreate();
-                    }}
-                    className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
-                  >
-                    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-                      <Pencil className="h-4 w-4" />
-                    </span>
-                    <span>
-                      <span className="block text-sm font-medium text-slate-900">Transaksi Manual</span>
-                      <span className="block text-xs text-slate-500">Catat cepat via dialog</span>
-                    </span>
-                  </button>
                 </div>
               )}
             </div>
@@ -535,7 +508,7 @@ export function TransaksiTable({
                       <TableCell className="text-xs text-slate-500">{formatDate(row.tanggal)}</TableCell>
                       <TableCell className="text-xs text-slate-500">{row.noTransaksi || "—"}</TableCell>
                       <TableCell>
-                        <Badge variant={row.tipe === "PEMASUKAN" ? "sehat" : "outline"} className="text-[11px]">
+                        <Badge variant={row.tipe === "PEMASUKAN" ? "sehat" : row.tipe === "PENGELUARAN" ? "destructive" : "info"} className="text-[11px]">
                           {row.tipe}
                         </Badge>
                       </TableCell>
@@ -597,7 +570,7 @@ export function TransaksiTable({
       >
         <DialogContent onClose={() => setDialogOpen(false)} className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editingId ? "Edit Transaksi" : "Tambah Transaksi"}</DialogTitle>
+            <DialogTitle>Edit Transaksi</DialogTitle>
             <DialogDescription>Catat pemasukan atau pengeluaran kas PT Bumi Surya Farm.</DialogDescription>
           </DialogHeader>
           <form onSubmit={saveTransaksi} className="grid gap-4">

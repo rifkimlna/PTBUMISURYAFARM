@@ -3,7 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { requireAuthAndRole } from "@/lib/auth";
 import { baseDokumenSchema } from "@/lib/validations/penjualanValidation";
 import { hitungJumlahBaris } from "@/lib/penjualan-server";
+import { hubungkanProdukItem } from "@/lib/produk-master";
 import { deleteBuktiFile } from "@/lib/storage";
+import { hapusDokumenPenjualanSumber } from "@/lib/hapus-rantai";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 import { z, ZodError } from "zod";
 
@@ -40,6 +42,18 @@ export async function GET(req: NextRequest, { params }: Params) {
     ? await prisma.transaksiKas.count({ where: { tagihanId: dokumen.tagihanId } })
     : 0;
 
+  // Tukar Faktur merujuk Tagihan PIUTANG (bukan dokumen) — sertakan rinciannya
+  // sekaligus hitung ulang total dari sisa rujukan (dokumen lama bisa tersimpan 0).
+  const rujukanPiutang =
+    dokumen.tipe === "TUKAR_FAKTUR" && dokumen.referensiIds.length > 0
+      ? await prisma.tagihan.findMany({
+          where: { id: { in: dokumen.referensiIds } },
+          select: { id: true, pihak: true, jumlah: true, sisa: true, status: true, jatuhTempo: true, noInvoice: true },
+          orderBy: { jatuhTempo: "asc" },
+        })
+      : [];
+  const totalRujukan = rujukanPiutang.reduce((s, r) => s + Number(r.sisa), 0);
+
   // Telusur relasi: dokumen sumber (referensiIds menunjuk id dokumen lain)
   // dan dokumen turunan (dokumen lain yang referensiIds-nya memuat id ini).
   const [sumber, turunan] = await Promise.all([
@@ -58,8 +72,9 @@ export async function GET(req: NextRequest, { params }: Params) {
 
   return successResponse({
     ...dokumen,
-    subtotal: Number(dokumen.subtotal),
-    total: Number(dokumen.total),
+    subtotal: dokumen.tipe === "TUKAR_FAKTUR" ? Math.round(totalRujukan * 100) / 100 : Number(dokumen.subtotal),
+    total: dokumen.tipe === "TUKAR_FAKTUR" ? Math.round(totalRujukan * 100) / 100 : Number(dokumen.total),
+    rujukanPiutang: rujukanPiutang.map((r) => ({ ...r, jumlah: Number(r.jumlah), sisa: Number(r.sisa) })),
     items: dokumen.items.map((it) => ({
       ...it,
       kuantitas: Number(it.kuantitas),
@@ -90,16 +105,29 @@ export async function PUT(req: NextRequest, { params }: Params) {
       const dokumen = await tx.dokumenPenjualan.findUnique({ where: { id } });
       if (!dokumen) throw new Error("Dokumen tidak ditemukan");
 
+      // Ambil item lama untuk membalikan stok saat edit penjualan (PENAGIHAN),
+      // agar edit tidak menyebabkan perubahan stok ganda.
+      const oldItems =
+        dokumen.tipe === "PENAGIHAN"
+          ? await tx.dokumenPenjualanItem.findMany({
+              where: { dokumenId: id },
+              select: { produkId: true, kuantitas: true },
+            })
+          : [];
+
+      let totalRujukan = 0;
       if (dokumen.tipe === "TUKAR_FAKTUR") {
+        if (!parsed.syaratPembayaran?.trim()) throw new Error("Syarat pembayaran wajib dipilih");
         if (parsed.referensiIds.length === 0) throw new Error("Pilih minimal 1 faktur/penagihan");
         const rujukan = await tx.tagihan.findMany({
           where: { id: { in: parsed.referensiIds } },
-          select: { id: true, tipe: true, status: true },
+          select: { id: true, tipe: true, status: true, sisa: true },
         });
         if (rujukan.length !== parsed.referensiIds.length) throw new Error("Sebagian faktur rujukan tidak ditemukan");
         if (rujukan.some((r) => r.tipe !== "PIUTANG" || r.status === "LUNAS")) {
           throw new Error("Rujukan harus berupa piutang yang belum lunas");
         }
+        totalRujukan = rujukan.reduce((s, r) => s + Number(r.sisa), 0);
       } else if (parsed.items.length === 0) {
         throw new Error("Tambahkan minimal 1 baris produk");
       }
@@ -107,8 +135,12 @@ export async function PUT(req: NextRequest, { params }: Params) {
         throw new Error("Tanggal jatuh tempo wajib diisi");
       }
 
-      const items = parsed.items.map((it) => ({
-        produkId: it.produkId?.trim() || null,
+      // Hubungkan baris ke master Produk (pakai ulang bila sudah ada, daftarkan
+      // bila baru) — sumber data sama dengan halaman Produk, tanpa duplikat.
+      const itemsTerhubung = await hubungkanProdukItem(tx, parsed.items);
+
+      const items = itemsTerhubung.map((it) => ({
+        produkId: it.produkId,
         deskripsi: it.deskripsi.trim(),
         kuantitas: it.kuantitas,
         unit: it.unit.trim(),
@@ -116,7 +148,10 @@ export async function PUT(req: NextRequest, { params }: Params) {
         diskonPersen: it.diskonPersen ?? 0,
         jumlah: hitungJumlahBaris(it.kuantitas, it.harga, it.diskonPersen ?? 0),
       }));
-      const newTotal = Math.round(items.reduce((s, it) => s + it.jumlah, 0) * 100) / 100;
+      const newTotal =
+        dokumen.tipe === "TUKAR_FAKTUR"
+          ? Math.round(totalRujukan * 100) / 100
+          : Math.round(items.reduce((s, it) => s + it.jumlah, 0) * 100) / 100;
 
       // Kunci total bila piutang tertaut sudah dibayar sebagian/lunas.
       let tagihanSync: { jumlah: number; sisa: number } | null = null;
@@ -186,6 +221,74 @@ export async function PUT(req: NextRequest, { params }: Params) {
         include: { _count: { select: { items: true, lampiran: true } } },
       });
 
+      // Edit penjualan (PENAGIHAN): balikan stok lama lalu terapkan stok baru,
+      // dengan validasi agar tidak ada perubahan ganda dan stok tidak negatif.
+      if (dokumen.tipe === "PENAGIHAN") {
+        for (const it of oldItems) {
+          if (it.produkId && Number(it.kuantitas) > 0) {
+            await tx.riwayatStok.create({
+              data: {
+                barangId: it.produkId,
+                jenis: "MASUK",
+                jumlah: Number(it.kuantitas),
+                keterangan: `Reversal: edit penjualan ${dokumen.noDokumen}`,
+                sumber: "PENJUALAN",
+                tanggal: parsed.tanggal ?? dokumen.tanggal,
+              },
+            });
+          }
+        }
+        const newItems = items.filter((it) => it.produkId && it.kuantitas > 0);
+        if (newItems.length > 0) {
+          const produkIds = [...new Set(newItems.map((it) => it.produkId!).filter(Boolean))];
+          const barangData = await tx.persediaanBarang.findMany({
+            where: { id: { in: produkIds } },
+            select: { id: true, namaBarang: true, stokAwal: true },
+          });
+          const stokAwalMap = new Map(barangData.map((b) => [b.id, b.stokAwal]));
+          const namaMap = new Map(barangData.map((b) => [b.id, b.namaBarang]));
+          const riwayatAgg = await tx.riwayatStok.groupBy({
+            by: ["barangId", "jenis"],
+            where: { barangId: { in: produkIds } },
+            _sum: { jumlah: true },
+          });
+          const stokMap = new Map<string, number>();
+          for (const pid of produkIds) {
+            let stok = stokAwalMap.get(pid) ?? 0;
+            for (const a of riwayatAgg) {
+              if (a.barangId === pid) {
+                stok += a.jenis === "MASUK" ? (a._sum.jumlah ?? 0) : -(a._sum.jumlah ?? 0);
+              }
+            }
+            stokMap.set(pid, stok);
+          }
+          const qtyMap = new Map<string, number>();
+          for (const it of newItems) {
+            qtyMap.set(it.produkId!, (qtyMap.get(it.produkId!) ?? 0) + it.kuantitas);
+          }
+          for (const [pid, qty] of qtyMap) {
+            const stok = stokMap.get(pid) ?? 0;
+            if (stok < qty) {
+              throw new Error(
+                `Stok tidak cukup untuk "${namaMap.get(pid) ?? pid}": tersedia ${stok}, dijual ${qty}.`
+              );
+            }
+          }
+          for (const it of newItems) {
+            await tx.riwayatStok.create({
+              data: {
+                barangId: it.produkId!,
+                jenis: "KELUAR",
+                jumlah: it.kuantitas,
+                keterangan: `Jual via ${dokumen.noDokumen}`,
+                sumber: "PENJUALAN",
+                tanggal: parsed.tanggal ?? dokumen.tanggal,
+              },
+            });
+          }
+        }
+      }
+
       if (dokumen.tagihanId && tagihanSync) {
         await tx.tagihan.update({
           where: { id: dokumen.tagihanId },
@@ -222,53 +325,18 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   if (auth instanceof Response) return auth;
   const { id } = await params;
 
-  const dokumen = await prisma.dokumenPenjualan.findUnique({
-    where: { id },
-    select: { id: true, tipe: true, tagihanId: true, referensiIds: true },
-  });
-  if (!dokumen) return errorResponse("Dokumen tidak ditemukan", 404);
+  try {
+    const hasil = await prisma.$transaction((tx) => hapusDokumenPenjualanSumber(tx, id));
 
-  const lampiran = await prisma.dokumenLampiran.findMany({
-    where: { dokumenId: id },
-    select: { fileUrl: true },
-  });
-
-  if (dokumen.tagihanId) {
-    const bayarCount = await prisma.transaksiKas.count({ where: { tagihanId: dokumen.tagihanId } });
-    if (bayarCount > 0) {
-      return errorResponse("Dokumen tidak bisa dihapus karena piutangnya sudah ada pembayaran", 400);
+    for (const url of hasil.hapusUrls) {
+      await deleteBuktiFile(url);
     }
-    await prisma.tagihan.delete({ where: { id: dokumen.tagihanId } });
+
+    return successResponse(null, "Dokumen berhasil dihapus");
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Gagal hapus dokumen";
+    if (msg.includes("tidak ditemukan")) return errorResponse(msg, 404);
+    if (msg.includes("sudah ada pembayaran")) return errorResponse(msg, 400);
+    return errorResponse(msg, 500);
   }
-
-  await prisma.dokumenPenjualan.delete({ where: { id } });
-
-  for (const l of lampiran) {
-    await deleteBuktiFile(l.fileUrl);
-  }
-
-  // Kembalikan dokumen asal ke Belum Ditagih bila sudah tidak dirujuk dokumen lain
-  // dan (untuk pesanan) sudah tidak ada pengirimannya.
-  if (dokumen.referensiIds.length > 0) {
-    const asal = await prisma.dokumenPenjualan.findMany({
-      where: { id: { in: dokumen.referensiIds }, tipe: { in: ["PESANAN", "PENAWARAN"] } },
-      select: { id: true, tipe: true },
-    });
-    for (const a of asal) {
-      const [masihDirujuk, sisaKirim] = await Promise.all([
-        prisma.dokumenPenjualan.count({ where: { referensiIds: { has: a.id } } }),
-        a.tipe === "PESANAN"
-          ? prisma.pengirimanPenjualan.count({ where: { pesananId: a.id } })
-          : Promise.resolve(1),
-      ]);
-      if (masihDirujuk === 0 && sisaKirim === 0) {
-        await prisma.dokumenPenjualan.updateMany({
-          where: { id: a.id },
-          data: { status: "BELUM_DITAGIH" },
-        });
-      }
-    }
-  }
-
-  return successResponse(null, "Dokumen berhasil dihapus");
 }

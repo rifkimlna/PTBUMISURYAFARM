@@ -107,6 +107,7 @@ export function DokumenBeliForm({ tipe, initial }: { tipe: TipeDokBeli; initial?
     setError("");
     try {
       if (tipe !== "PERMINTAAN" && !header.supplierId) throw new Error("Supplier wajib dipilih");
+      if (!header.syarat.trim()) throw new Error("Syarat pembayaran wajib dipilih");
       const payload = {
         ...(isEdit ? {} : { tipe, supplierId: header.supplierId || undefined }),
         departemen: header.departemen.trim() || undefined,
@@ -115,7 +116,7 @@ export function DokumenBeliForm({ tipe, initial }: { tipe: TipeDokBeli; initial?
         tanggal: header.tanggal || undefined,
         jatuhTempo: header.jatuhTempo || undefined,
         noRefSupplier: header.noRef.trim() || undefined,
-        syaratPembayaran: header.syarat.trim() || undefined,
+        syaratPembayaran: header.syarat.trim(),
         gudang: header.gudang.trim() || undefined,
         pesan: header.pesan.trim() || undefined,
         memo: header.memo.trim() || undefined,
@@ -220,18 +221,21 @@ export function DokumenBeliForm({ tipe, initial }: { tipe: TipeDokBeli; initial?
               <Input value={header.noRef} onChange={(e) => set("noRef", e.target.value)} placeholder="No. referensi" maxLength={50} />
             </label>
             <label className="grid gap-1.5">
-              <span className="text-xs font-medium text-slate-600">Syarat pembayaran</span>
+              <span className="text-xs font-medium text-slate-600">Syarat pembayaran *</span>
               <Select value={header.syarat} onChange={(e) => {
                 const s = e.target.value;
                 set("syarat", s);
                 const jt = jatuhTempoDari(header.tanggal, s);
                 if (jt) set("jatuhTempo", jt);
-              }}>
+              }} required>
                 <option value="">Pilih syarat</option>
                 {SYARAT_OPTIONS.map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
               </Select>
+              {!header.syarat.trim() && (
+                <span className="text-[11px] text-red-600">Syarat pembayaran wajib dipilih sebelum menyimpan.</span>
+              )}
             </label>
             <label className="grid gap-1.5 sm:col-span-2">
               <span className="text-xs font-medium text-slate-600">Gudang</span>
@@ -262,7 +266,11 @@ export function DokumenBeliForm({ tipe, initial }: { tipe: TipeDokBeli; initial?
         <Button type="button" variant="outline" onClick={() => router.push(`/keuangan/pembelian?tab=${meta.tab}`)} disabled={saving}>
           Batal
         </Button>
-        <Button type="submit" disabled={saving}>
+        <Button
+          type="submit"
+          disabled={saving || !header.syarat.trim()}
+          title={!header.syarat.trim() ? "Pilih syarat pembayaran terlebih dahulu" : undefined}
+        >
           {saving ? "Menyimpan..." : isEdit ? "Simpan Perubahan" : "Buat"}
         </Button>
       </div>
@@ -272,7 +280,7 @@ export function DokumenBeliForm({ tipe, initial }: { tipe: TipeDokBeli; initial?
 
 // ---------- Tombol Tindakan di halaman detail ----------
 
-export function DokumenBeliActions({ id, tipe, status }: { id: string; tipe: TipeDokBeli; status: string }) {
+export function DokumenBeliActions({ id, tipe, status }: { id: string; tipe: TipeDokBeli | "TUKAR_FAKTUR"; status: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -327,7 +335,7 @@ export function DokumenBeliActions({ id, tipe, status }: { id: string; tipe: Tip
       const res = await fetch(`/api/pembelian/dokumen/${encodeURIComponent(id)}`, { method: "DELETE" });
       const result = await res.json().catch(() => ({ message: "Gagal menghapus" }));
       if (!res.ok) throw new Error(result.message || "Gagal menghapus");
-      router.push(`/keuangan/pembelian?tab=${tipe === "PESANAN" ? "pesanan" : tipe === "PENAWARAN" ? "penawaran" : "permintaan"}`);
+      router.push(`/keuangan/pembelian?tab=${tipe === "PESANAN" ? "pesanan" : tipe === "PENAWARAN" ? "penawaran" : tipe === "TUKAR_FAKTUR" ? "tukar-faktur" : "permintaan"}`);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Gagal menghapus");
@@ -357,16 +365,18 @@ export function DokumenBeliActions({ id, tipe, status }: { id: string; tipe: Tip
           {tipe === "PESANAN" && (
             <>
               <Link href={`/keuangan/pembelian/pengiriman/baru?pesananId=${id}`} role="menuitem" className={itemCls} onClick={() => setOpen(false)}>
-                <span><span className="block font-medium text-slate-900">Buat Penerimaan</span><span className="block text-xs text-slate-500">Terima barang sesuai PO</span></span>
+                <span><span className="block font-medium text-slate-900">Buat Pengiriman</span><span className="block text-xs text-slate-500">Terima barang sesuai PO</span></span>
               </Link>
               <Link href={`/keuangan/pembelian/faktur/baru?dariPesanan=${id}`} role="menuitem" className={itemCls} onClick={() => setOpen(false)}>
                 <span><span className="block font-medium text-slate-900">Buat Faktur</span><span className="block text-xs text-slate-500">Tagih jadi utang</span></span>
               </Link>
             </>
           )}
-          <button type="button" role="menuitem" className={itemCls} disabled={busy} onClick={toggle}>
-            <span><span className="block font-medium text-slate-900">{selesai ? "Buka kembali" : "Tutup dokumen"}</span><span className="block text-xs text-slate-500">{selesai ? "Status kembali Belum Ditagih" : "Tandai selesai"}</span></span>
-          </button>
+          {tipe !== "TUKAR_FAKTUR" && (
+            <button type="button" role="menuitem" className={itemCls} disabled={busy} onClick={toggle}>
+              <span><span className="block font-medium text-slate-900">{selesai ? "Buka kembali" : "Tutup dokumen"}</span><span className="block text-xs text-slate-500">{selesai ? "Status kembali Belum Ditagih" : "Tandai selesai"}</span></span>
+            </button>
+          )}
           <div className="border-t border-slate-100" />
           <button type="button" role="menuitem" className={itemCls} disabled={busy} onClick={hapus}>
             <Trash2 className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
@@ -482,7 +492,7 @@ export function PengirimanBeliForm({ pesanan }: { pesanan: PengirimanBeliPesanan
               </p>
             </div>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-medium text-slate-500">
-              No. Penerimaan: otomatis (PENG-B-...)
+              No. Pengiriman: otomatis (PENG-B-...)
             </span>
           </div>
         </CardHeader>

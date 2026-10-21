@@ -73,11 +73,16 @@ export const queryKeuanganSchema = z.object({
 
 // Validasi Aset - pakai coerce biar string "1" dari form tetap valid
 export const createAsetSchema = z.object({
-  id: z
-    .string()
-    .trim()
-    .toUpperCase()
-    .regex(/^AST-\d{3,}$/, "ID harus format AST-001 (contoh: AST-005)"),
+  // Nomor aset opsional: bila kosong, server membuat AST-001, AST-002, dst.
+  id: z.preprocess(
+    (v) => (v == null || (typeof v === "string" && v.trim() === "") ? undefined : v),
+    z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^AST-\d{3,}$/, "ID harus format AST-001 (contoh: AST-005)")
+      .optional()
+  ),
   namaAset: z.string().min(2, "Nama aset minimal 2 karakter").max(100).trim(),
   jumlah: z.coerce.number().int().min(1, "Jumlah minimal 1").default(1).optional(),
   kategori: z.enum(KATEGORI_ASET, { message: "Kategori harus dari daftar COA" }),
@@ -124,6 +129,7 @@ export const updateAsetSchema = z.object({
   kondisi: z.string().min(2).max(50).optional(),
   status: z.enum(STATUS_ASET, { message: "Status harus dari daftar yang tersedia" }).optional(),
   nilaiAset: z.coerce.number().positive().min(1000).max(10_000_000_000).optional(),
+  biayaAkuisisi: z.coerce.number().positive("Biaya harus positif").min(1000, "Biaya minimal Rp 1.000").max(10_000_000_000, "Biaya terlalu besar").optional(),
   tanggalPerolehan: z.coerce.date().optional().nullable(),
   deskripsi: z.string().trim().max(1000).optional().nullable(),
   tags: z.string().trim().max(200).optional().nullable(),
@@ -146,19 +152,112 @@ export const updateAsetSchema = z.object({
   message: "Minimal satu field harus diisi",
 });
 
-// Jual / lepas aset aktif (dicatat, tanpa Kas otomatis).
+// Jual / lepas aset aktif (dicatat, dengan jurnal akuntansi).
 export const lepasAsetSchema = z.object({
-  cara: z.enum(["DIJUAL", "DILEPAS"], { message: "Cara harus DIJUAL atau DILEPAS" }),
+  jenisPelepasan: z.enum(
+    ["DIJUAL_SUDAH_DIBAYAR", "DIJUAL_BELUM_DIBAYAR", "DILEPAS_TANPA_PENJUALAN"],
+    { message: "Jenis pelepasan harus dipilih" }
+  ),
   tanggal: z.coerce.date({ message: "Tanggal tidak valid" }).optional().nullable(),
   hargaJual: z.preprocess(
     (v) => (v === "" ? undefined : v),
     z.coerce.number().nonnegative("Harga jual tidak boleh negatif").max(10_000_000_000).optional().nullable()
   ),
+  akunPenerima: z.string().trim().max(10, "Kode akun maksimal 10 karakter").optional().nullable(),
   noTransaksi: z.string().trim().max(50, "No. transaksi maksimal 50 karakter").optional().nullable(),
-  keterangan: z.string().trim().max(1000).optional().nullable(),
+  alasanPelepasan: z.string().trim().max(1000, "Alasan maksimal 1000 karakter").optional().nullable(),
+  keterangan: z.string().trim().max(1000, "Keterangan maksimal 1000 karakter").optional().nullable(),
+}).refine((data) => {
+  if (data.jenisPelepasan === "DIJUAL_SUDAH_DIBAYAR" && !data.akunPenerima) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Akun penerima (Kas/Bank/Tabungan) wajib diisi untuk penjualan sudah dibayar",
+  path: ["akunPenerima"],
+}).refine((data) => {
+  if ((data.jenisPelepasan === "DIJUAL_SUDAH_DIBAYAR" || data.jenisPelepasan === "DIJUAL_BELUM_DIBAYAR") && !(data.hargaJual && data.hargaJual > 0)) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Harga jual wajib diisi untuk penjualan aset",
+  path: ["hargaJual"],
+}).refine((data) => {
+  if (data.jenisPelepasan === "DILEPAS_TANPA_PENJUALAN" && !data.alasanPelepasan) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Alasan pelepasan wajib diisi untuk dilepas tanpa penjualan",
+  path: ["alasanPelepasan"],
+});
+
+// Konfirmasi pembayaran untuk penjualan belum dibayar.
+export const konfirmasiPembayaranSchema = z.object({
+  tanggalPembayaran: z.coerce.date({ message: "Tanggal pembayaran tidak valid" }).optional().nullable(),
+  akunPenerima: z.string().trim().max(10, "Kode akun maksimal 10 karakter"),
+  noTransaksi: z.string().trim().max(50, "No. transaksi maksimal 50 karakter").optional().nullable(),
+  keterangan: z.string().trim().max(1000, "Keterangan maksimal 1000 karakter").optional().nullable(),
+}).refine((data) => {
+  const isKasBankTabungan = ["1101", "1103", "1104"].includes(data.akunPenerima.trim());
+  if (!isKasBankTabungan) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Akun penerima harus Kas (1101) / Bank (1103) / Tabungan (1104)",
+  path: ["akunPenerima"],
 });
 
 export type CreateTransaksiInput = z.infer<typeof createTransaksiKasSchema>;
 export type UpdateTransaksiInput = z.infer<typeof updateTransaksiKasSchema>;
 export type CreateAsetInput = z.infer<typeof createAsetSchema>;
 export type BuktiTransaksiInput = z.infer<typeof createBuktiTransaksiSchema>;
+
+// ---------- Biaya ----------
+
+export const TipeBiayaEnum = z.enum(["TUNAI", "HUTANG"]);
+
+export type TipeBiaya = z.infer<typeof TipeBiayaEnum>;
+
+export const createBiayaSchema = z.object({
+  tipe: TipeBiayaEnum,
+  tanggal: z.coerce.date({ message: "Tanggal tidak valid" }),
+  jatuhTempo: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.coerce.date({ message: "Jatuh tempo tidak valid" }).optional().nullable()
+  ),
+  kategori: z.string().min(2, "Kategori minimal 2 karakter").max(100).trim(),
+  kodeAkun: z.string().trim().max(10, "Kode akun maksimal 10 karakter").optional().nullable(),
+  penerima: z.string().min(2, "Penerima minimal 2 karakter").max(150).trim(),
+  jumlah: z
+    .number({ message: "Jumlah harus angka" })
+    .positive("Jumlah harus positif")
+    .min(1000, "Jumlah minimal Rp 1.000")
+    .max(10_000_000_000, "Jumlah terlalu besar"),
+  sumberDana: z.enum(["KAS", "BANK", "TABUNGAN"]).optional().nullable(),
+  tags: z.string().trim().max(200, "Tags maksimal 200 karakter").optional().nullable(),
+  memo: z.string().trim().max(1000, "Keterangan maksimal 1000 karakter").optional().nullable(),
+  // Untuk menautkan Biaya ke TransaksiKas PENGELUARAN yang sudah ada (biaya tunai dari Kas & Bank)
+  transaksiKasId: z.string().cuid("ID transaksi kas tidak valid").optional().nullable(),
+}).refine(
+  (data) => {
+    if (data.tipe === "TUNAI") {
+      if (!data.sumberDana) return false;
+      // Jika transaksiKasId diisi, sumberDana diambil dari transaksi kas yang sudah ada
+      if (data.transaksiKasId && data.sumberDana) return true;
+      if (!data.transaksiKasId && data.sumberDana) return true;
+    }
+    if (data.tipe === "HUTANG") {
+      if (!data.jatuhTempo) return false;
+    }
+    return true;
+  },
+  {
+    message: "Field tidak lengkap untuk tipe biaya yang dipilih",
+    path: ["tipe"],
+  }
+);
+
+export type CreateBiayaInput = z.infer<typeof createBiayaSchema>;

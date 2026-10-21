@@ -6,7 +6,10 @@ import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-resp
 import { ZodError } from "zod";
 
 function hitungJumlah(kuantitas: number, harga: number, diskonPersen: number): number {
-  return Math.round(kuantitas * harga * (1 - diskonPersen / 100) * 100) / 100;
+  const bruto = kuantitas * harga;
+  if (diskonPersen === 0) return bruto;
+  const discAmount = Math.round((bruto * diskonPersen) / 100);
+  return bruto - discAmount;
 }
 
 function randomSuffix(length = 4) {
@@ -167,7 +170,7 @@ export async function POST(req: NextRequest) {
           jumlah: hitungJumlah(it.kuantitas, it.harga, it.diskonPersen ?? 0),
         });
       }
-      const subtotal = Math.round(items.reduce((s, it) => s + it.jumlah, 0) * 100) / 100;
+      const subtotal = Math.round(items.reduce((s, it) => s + it.jumlah, 0));
       const noFaktur = await generateNoFaktur(tanggal);
 
       if (referensiIds.length > 0) {

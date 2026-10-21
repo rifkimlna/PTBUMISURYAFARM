@@ -64,7 +64,8 @@ const STATUS_VARIANT: Record<StatusTagihan, "perhatian" | "warning" | "sehat"> =
 function formatDate(value: string | null) {
   if (!value) return "-";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+  // Kunci ke WIB agar tanggal pembayaran tidak mundur sehari.
+  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Jakarta" });
 }
 
 function isOverdue(row: TagihanRow) {
@@ -176,7 +177,7 @@ export function TagihanTable({ data, summary, tab }: { data: TagihanRow[]; summa
   };
 
   const deleteTagihan = async (row: TagihanRow) => {
-    if (!window.confirm(`Hapus tagihan ${row.pihak} Rp ${formatRupiah(row.jumlah)}?`)) return;
+    if (!window.confirm(`Hapus tagihan ${row.pihak} Rp ${formatRupiah(row.jumlah)}? Dokumen sumber yang tertaut (bila ada) ikut terhapus.`)) return;
     setMessage("");
     try {
       const response = await fetch(`/api/tagihan/${encodeURIComponent(row.id)}`, { method: "DELETE" });

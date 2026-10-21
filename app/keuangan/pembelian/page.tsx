@@ -35,7 +35,7 @@ export default async function PembelianPage({
       },
     }),
     prisma.dokumenPembelian.findMany({
-      where: { tipe: { in: ["PESANAN", "PENAWARAN", "PERMINTAAN"] } },
+      where: { tipe: { in: ["PESANAN", "PENAWARAN", "PERMINTAAN", "TUKAR_FAKTUR"] } },
       orderBy: { tanggal: "desc" },
       take: 100,
       include: {
@@ -58,6 +58,18 @@ export default async function PembelianPage({
       select: { tipe: true, referensiIds: true },
     }),
   ]);
+
+  // Total Tukar Faktur = jumlah sisa utang yang dirujuk. Dokumen lama bisa
+  // tersimpan dengan total 0, jadi dihitung ulang saat tampil sebagai cadangan.
+  const tukarReferensiIds = docs.filter((d) => d.tipe === "TUKAR_FAKTUR").flatMap((d) => d.referensiIds);
+  const tukarTagihan =
+    tukarReferensiIds.length > 0
+      ? await prisma.tagihan.findMany({
+          where: { id: { in: tukarReferensiIds } },
+          select: { id: true, sisa: true },
+        })
+      : [];
+  const sisaRujukanMap = new Map(tukarTagihan.map((t) => [t.id, Number(t.sisa)]));
 
   // Himpunan id yang sudah dirujuk dokumen turunan / faktur.
   const dirujukDokumen = new Set<string>();
@@ -151,7 +163,10 @@ export default async function PembelianPage({
             tanggal: d.tanggal.toISOString(),
             jatuhTempo: d.jatuhTempo?.toISOString() ?? null,
             status,
-            total: Number(d.total),
+            total:
+              d.tipe === "TUKAR_FAKTUR"
+                ? d.referensiIds.reduce((s, id) => s + (sisaRujukanMap.get(id) ?? 0), 0)
+                : Number(d.total),
           };
         })}
         kirim={kirim.map((p) => ({

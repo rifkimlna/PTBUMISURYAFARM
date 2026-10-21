@@ -8,7 +8,6 @@ import {
   TrendingUp,
   TrendingDown,
   Wallet,
-  CreditCard,
 } from "lucide-react";
 import { TransaksiTable } from "@/components/admin/transaksi-table";
 import type { TransaksiRow, RingkasanTransaksi } from "@/components/admin/transaksi-table";
@@ -18,7 +17,6 @@ type PerSumber = {
   KAS: number;
   BANK: number;
   TABUNGAN: number;
-  KARTU_KREDIT: number;
 };
 
 type Summary = {
@@ -48,7 +46,6 @@ function SummaryCard30({
     up: TrendingUp,
     down: TrendingDown,
     wallet: Wallet,
-    creditCard: CreditCard,
   };
 
   const Icon = icon ? (iconMap[icon] || undefined) : undefined;
@@ -64,24 +61,24 @@ function SummaryCard30({
     <Card
       className={`rounded-2xl border shadow-sm ${cardColors[tone]}`}
     >
-      <CardContent className="p-5">
-        <div className="flex items-center gap-2 text-xs font-medium tracking-wide text-slate-500">
+      <CardContent className="p-3">
+        <div className="flex items-center gap-1 text-xs font-medium tracking-wide text-slate-500">
           {Icon && (
             <Icon
               aria-hidden="true"
-              className={`h-4 w-4 ${isNeutral ? "text-slate-400" : tone === "negative" ? "text-red-500" : "text-green-600"}`}
+              className={`h-3.5 w-3.5 ${isNeutral ? "text-slate-400" : tone === "negative" ? "text-red-500" : "text-green-600"}`}
             />
           )}
           <span>{label}</span>
         </div>
         <div
-          className={`mt-3 text-2xl sm:text-3xl font-semibold tracking-tight ${
+          className={`mt-2 text-xl sm:text-2xl font-semibold tracking-tight ${
             tone === "positive" ? "text-green-700" : tone === "negative" ? "text-red-600" : "text-slate-900"
           }`}
         >
           Rp {formatRupiah(value)}
         </div>
-        <div className="mt-1.5 text-xs text-slate-400">{note}</div>
+        <div className="mt-1 text-xs text-slate-400">{note}</div>
       </CardContent>
     </Card>
   );
@@ -99,9 +96,9 @@ function AccountCard({
   detailHref: string;
 }) {
   return (
-    <Card className="border-slate-100 p-6 hover:bg-slate-50 transition-colors">
-      <div className="flex items-center gap-3 mb-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-50">
+    <Card className="border-slate-100 p-4 hover:bg-slate-50 transition-colors">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-50">
           <svg
             className="h-4 w-4"
             viewBox="0 0 24 24"
@@ -122,10 +119,10 @@ function AccountCard({
           <p className="text-xs text-slate-500">{keterangan}</p>
         </div>
       </div>
-      <p className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900">
+      <p className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900">
         Rp {formatRupiah(saldo)}
       </p>
-      <Link href={detailHref} className={buttonVariants({ variant: "outline", size: "sm" }) + " mt-3 w-full"}>
+      <Link href={detailHref} className={buttonVariants({ variant: "outline", size: "sm" }) + " mt-2 w-full"}>
         Detail
       </Link>
     </Card>
@@ -164,7 +161,6 @@ export function KeuanganContent({
             KAS: next.perSumber.KAS,
             BANK: next.perSumber.BANK,
             TABUNGAN: next.perSumber.TABUNGAN,
-            KARTU_KREDIT: prev.perSumber?.KARTU_KREDIT ?? 0,
           }
         : prev.perSumber,
       saldoKasDanBank: next.perSumber ? next.perSumber.KAS + next.perSumber.BANK : prev.saldoKasDanBank,
@@ -194,9 +190,9 @@ export function KeuanganContent({
     : "Semua transaksi";
 
   return (
-    <div className="space-y-6">
-      {/* 2. CARD RINGKASAN DI BAGIAN ATAS - 4 cards */}
-      <div className="grid gap-3 md:grid-cols-4">
+    <div className="space-y-4">
+      {/* 2. CARD RINGKASAN DI BAGIAN ATAS - 3 cards */}
+      <div className="grid gap-2 md:grid-cols-3">
         <SummaryCard30
           label="Pemasukan 30 Hari Mendatang"
           value={summary.pemasukan30Hari}
@@ -218,17 +214,10 @@ export function KeuanganContent({
           tone="neutral"
           icon="wallet"
         />
-        <SummaryCard30
-          label="Saldo Kartu Kredit"
-          value={summary.perSumber?.KARTU_KREDIT ?? 0}
-          note="Saldo kartu kredit PT BST"
-          tone="neutral"
-          icon="creditCard"
-        />
       </div>
 
       {/* 3. BAGIAN DAFTAR AKUN */}
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-2 md:grid-cols-3">
         <AccountCard
           label="Kas"
           saldo={summary.perSumber?.KAS ?? 0}

@@ -54,10 +54,35 @@ export async function GET(req: NextRequest, { params }: Params) {
     orderBy: { tanggal: "desc" },
   });
 
+  // Tukar Faktur merujuk Tagihan HUTANG (bukan dokumen) — sertakan rinciannya.
+  const rujukanHutang =
+    dokumen.tipe === "TUKAR_FAKTUR" && dokumen.referensiIds.length > 0
+      ? await prisma.tagihan.findMany({
+          where: { id: { in: dokumen.referensiIds } },
+          select: {
+            id: true,
+            pihak: true,
+            jumlah: true,
+            sisa: true,
+            status: true,
+            jatuhTempo: true,
+            fakturPembelian: { select: { noFaktur: true } },
+          },
+          orderBy: { jatuhTempo: "asc" },
+        })
+      : [];
+
+  const totalRujukan = rujukanHutang.reduce((s, r) => s + Number(r.sisa), 0);
+
   return successResponse({
     ...dokumen,
-    subtotal: Number(dokumen.subtotal),
-    total: Number(dokumen.total),
+    subtotal: dokumen.tipe === "TUKAR_FAKTUR" ? Math.round(totalRujukan * 100) / 100 : Number(dokumen.subtotal),
+    total: dokumen.tipe === "TUKAR_FAKTUR" ? Math.round(totalRujukan * 100) / 100 : Number(dokumen.total),
+    rujukanHutang: rujukanHutang.map((r) => ({
+      ...r,
+      jumlah: Number(r.jumlah),
+      sisa: Number(r.sisa),
+    })),
     items: dokumen.items.map((it) => ({
       ...it,
       kuantitas: Number(it.kuantitas),
@@ -84,7 +109,22 @@ export async function PUT(req: NextRequest, { params }: Params) {
     const result = await prisma.$transaction(async (tx) => {
       const dokumen = await tx.dokumenPembelian.findUnique({ where: { id } });
       if (!dokumen) throw new Error("Dokumen tidak ditemukan");
-      if (parsed.items.length === 0) throw new Error("Tambahkan minimal 1 baris produk");
+      let totalRujukan = 0;
+      if (dokumen.tipe === "TUKAR_FAKTUR") {
+        if (!parsed.syaratPembayaran?.trim()) throw new Error("Syarat pembayaran wajib dipilih");
+        if (parsed.referensiIds.length === 0) throw new Error("Pilih minimal 1 faktur pembelian");
+        const rujukan = await tx.tagihan.findMany({
+          where: { id: { in: parsed.referensiIds } },
+          select: { id: true, tipe: true, status: true, sisa: true },
+        });
+        if (rujukan.length !== parsed.referensiIds.length) throw new Error("Sebagian faktur rujukan tidak ditemukan");
+        if (rujukan.some((r) => r.tipe !== "HUTANG" || r.status === "LUNAS")) {
+          throw new Error("Rujukan harus berupa utang yang belum lunas");
+        }
+        totalRujukan = rujukan.reduce((s, r) => s + Number(r.sisa), 0);
+      } else if (parsed.items.length === 0) {
+        throw new Error("Tambahkan minimal 1 baris produk");
+      }
 
       const items = parsed.items.map((it) => ({
         produkId: it.produkId?.trim() || null,
@@ -96,7 +136,10 @@ export async function PUT(req: NextRequest, { params }: Params) {
         kodeAkun: it.kodeAkun?.trim() || null,
         jumlah: hitungJumlahBarisBeli(it.kuantitas, it.harga, it.diskonPersen ?? 0),
       }));
-      const newTotal = Math.round(items.reduce((s, it) => s + it.jumlah, 0) * 100) / 100;
+      const newTotal =
+        dokumen.tipe === "TUKAR_FAKTUR"
+          ? Math.round(totalRujukan * 100) / 100
+          : Math.round(items.reduce((s, it) => s + it.jumlah, 0) * 100) / 100;
 
       let hapusUrls: string[] = [];
       if (parsed.hapusLampiranIds.length > 0) {

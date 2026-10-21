@@ -42,7 +42,7 @@ function useSection<T>(section: string, periode: string, extra = "") {
     let cancelled = false;
     setLoading(true);
     setError("");
-    fetch(`/api/keuangan/dashboard?section=${section}&periode=${periode}${extra}`, { credentials: "include" })
+    fetch(`/api/keuangan/dashboard?section=${section}&periode=${periode}${extra}`, { credentials: "include", cache: "no-store" })
       .then((res) => res.json())
       .then((result) => {
         if (cancelled) return;
@@ -378,7 +378,8 @@ function ArusKasSection() {
           ) : (
             <PagedTable
               head={<><TableHead>Periode</TableHead><TableHead className="text-right">Total Kas Masuk</TableHead><TableHead className="text-right">Total Kas Keluar</TableHead><TableHead className="text-right">Perpindahan Kas Bersih</TableHead></>}
-              rows={data.items}
+              rows={data.items.filter((it) => it.masuk !== 0 || it.keluar !== 0)}
+              emptyText="Belum ada transaksi pada periode ini"
               renderRow={(it) => (
                 <TableRow key={it.label}>
                   <TableCell className="text-xs font-medium text-slate-600">{it.label}</TableCell>
@@ -473,7 +474,8 @@ function LabaRugiSection() {
           ) : (
             <PagedTable
               head={<><TableHead>Periode</TableHead><TableHead className="text-right">Pendapatan</TableHead><TableHead className="text-right">Beban</TableHead><TableHead className="text-right">Laba Bersih</TableHead></>}
-              rows={data.items}
+              rows={data.items.filter((it) => it.pendapatan !== 0 || it.beban !== 0)}
+              emptyText="Belum ada transaksi pada periode ini"
               renderRow={(it) => (
                 <TableRow key={it.label}>
                   <TableCell className="text-xs font-medium text-slate-600">{it.label}</TableCell>
@@ -531,7 +533,7 @@ function BiayaOperasionalSection() {
 type AkunData = { akun: { kode: string; nama: string; bulanIni: number; tahunIni: number; countBulan?: number; countTahun?: number }[] };
 function AkunTerpantauSection() {
   const [periode, setPeriode] = useState("bulan-ini");
-  const { data, loading, error } = useSection<AkunData>("akun-terpantau", "bulan-ini");
+  const { data, loading, error } = useSection<AkunData>("akun-terpantau", periode);
   const tahun = periode === "tahun-ini";
   return (
     <SectionShell

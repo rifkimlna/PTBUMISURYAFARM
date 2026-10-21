@@ -25,6 +25,10 @@ export async function GET(req: NextRequest, { params }: Params) {
     hargaSatuan: Number(barang.hargaSatuan),
     hargaBeli: barang.hargaBeli == null ? null : Number(barang.hargaBeli),
     hargaJual: barang.hargaJual == null ? null : Number(barang.hargaJual),
+    hargaRataRataManual:
+      barang.hargaRataRataManual == null ? null : Number(barang.hargaRataRataManual),
+    hargaBeliTerakhirManual:
+      barang.hargaBeliTerakhirManual == null ? null : Number(barang.hargaBeliTerakhirManual),
     tipeProduk: barang.tipeProduk ?? "BARANG",
     riwayat: barang.riwayat.map((r) => ({
       id: r.id,
@@ -60,6 +64,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
       data: {
         ...(parsed.namaBarang !== undefined ? { namaBarang: parsed.namaBarang } : {}),
         ...(parsed.kategori !== undefined ? { kategori: parsed.kategori } : {}),
+        ...(parsed.sumberProduk !== undefined ? { sumberProduk: parsed.sumberProduk } : {}),
         ...(parsed.satuan !== undefined ? { satuan: parsed.satuan } : {}),
         // hargaSatuan mengikuti Harga Jual bila dikirim (saran harga form);
         // bila tidak, pakai nilai eksplisit bila ada.
@@ -73,6 +78,12 @@ export async function PUT(req: NextRequest, { params }: Params) {
         ...(parsed.tipeProduk !== undefined ? { tipeProduk: parsed.tipeProduk } : {}),
         ...(parsed.hargaBeli !== undefined ? { hargaBeli: parsed.hargaBeli } : {}),
         ...(parsed.hargaJual !== undefined ? { hargaJual: parsed.hargaJual } : {}),
+        ...(parsed.hargaRataRataManual !== undefined
+          ? { hargaRataRataManual: parsed.hargaRataRataManual }
+          : {}),
+        ...(parsed.hargaBeliTerakhirManual !== undefined
+          ? { hargaBeliTerakhirManual: parsed.hargaBeliTerakhirManual }
+          : {}),
         ...(parsed.batasMinimum !== undefined && parsed.batasMinimum !== null
           ? { batasMinimum: parsed.batasMinimum }
           : {}),

@@ -237,7 +237,7 @@ export function UsiaPiutangContent() {
           <div className="space-y-4">
             <div className="flex flex-col items-center gap-1 border-b border-slate-100 pb-4 text-center">
               <p className="text-sm font-semibold tracking-tight text-slate-900">PT BUMI SURYA FARM</p>
-              <p className="text-sm font-semibold text-slate-900">Laporan Piutang Pelanggan</p>
+              <p className="text-sm font-semibold text-slate-900">Laporan Usia Piutang</p>
               <p className="text-xs text-slate-500">{data?.label ?? "—"}</p>
               <p className="text-xs text-slate-400">(dalam IDR)</p>
             </div>

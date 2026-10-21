@@ -325,9 +325,15 @@ export async function getNeracaSnapshot(
     const harga = Number(b.hargaSatuan ?? b.hargaBeli ?? 0);
     const nilai = Math.round(qty * harga);
     if (nilai === 0) continue;
+    // Resolve kode persediaan: tersimpan -> database (tahan penomoran ulang) -> statis.
+    const mappingPersediaan = getCOAMappingByKategori(b.kategori as never);
+    const kodeDinamis = mappingPersediaan
+      ? akunDb.find((a) => a.nama.trim().toLowerCase() === mappingPersediaan.namaAkunPersediaan.trim().toLowerCase())?.kode
+      : undefined;
     const kode =
       b.kodeAkunCOA?.trim() ||
-      getCOAMappingByKategori(b.kategori as never)?.kodeAkunPersediaan ||
+      kodeDinamis ||
+      mappingPersediaan?.kodeAkunPersediaan ||
       "";
     const key = kode || "(tanpa kode COA)";
     nilaiPersediaan.set(key, (nilaiPersediaan.get(key) ?? 0) + nilai);
@@ -404,10 +410,19 @@ export async function getNeracaSnapshot(
 
   const totalAktiva = aktivaLancar.total + aktivaTetap.total - penyusutan.total;
 
-  const barisUtang: NeracaBaris[] = ["2101", "2102", "2103", "2104"].map((kode) => ({
+  // Resolve kode sistem dari NAMA akun (tahan terhadap penomoran ulang COA).
+  const kodeUtangUsaha =
+    akunDb.find((a) => a.nama.trim().toLowerCase() === "utang usaha")?.kode ?? "2101";
+  const kodeLaba =
+    akunDb.find((a) => a.nama.trim().toLowerCase().includes("laba ditahan"))?.kode ?? "3104";
+  const setUtang = new Set(["2101", "2102", "2103", "2104"]);
+  for (const a of akunDb) {
+    if ((a as { kelompok?: string }).kelompok === "Kewajiban") setUtang.add(a.kode);
+  }
+  const barisUtang: NeracaBaris[] = [...setUtang].sort().map((kode) => ({
     kode,
     nama: namaAkun(kode),
-    nilai: kode === "2101" ? num(hutangAgg._sum.sisa) : 0,
+    nilai: kode === kodeUtangUsaha ? num(hutangAgg._sum.sisa) : 0,
   }));
   const kewajibanLancar: NeracaKelompok = {
     judul: "Kewajiban Lancar",
@@ -426,14 +441,14 @@ export async function getNeracaSnapshot(
   }
   const barisModalTercatat: NeracaBaris[] = [...kodeModalSet]
     .sort()
-    .filter((kode) => kode !== "3104")
+    .filter((kode) => kode !== kodeLaba)
     .map((kode) => ({ kode, nama: namaAkun(kode), nilai: netModal(kode) }));
   const modalSetorTercatat = barisModalTercatat.reduce((s, b) => s + b.nilai, 0);
 
   const modalImplisit = totalAktiva - totalKewajiban - labaBasisKas - modalSetorTercatat;
   const barisModal: NeracaBaris[] = [
     ...barisModalTercatat,
-    { kode: "3104", nama: `${namaAkun("3104")} (basis kas)`, nilai: labaBasisKas },
+    { kode: kodeLaba, nama: `${namaAkun(kodeLaba)} (basis kas)`, nilai: labaBasisKas },
     {
       kode: "3101/3102",
       nama: "Modal Disetor (implisit — penyeimbang)",

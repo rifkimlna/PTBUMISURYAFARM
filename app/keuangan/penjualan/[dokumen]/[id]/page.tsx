@@ -44,7 +44,9 @@ function formatDate(value: Date | null | undefined) {
   if (!value) return "—";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+  // Kunci ke WIB agar tanggal yang tersimpan tidak mundur sehari
+  // bila server berjalan di zona waktu UTC.
+  return d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Jakarta" });
 }
 
 // Halaman Detail dokumen: informasi pesanan/penawaran/penagihan yang sudah tersimpan

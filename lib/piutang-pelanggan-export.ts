@@ -26,11 +26,11 @@ const PAGE_H = 595;
 const MARGIN = 36;
 
 const X_TGL = MARGIN;
-const X_TRX = 100;
-const X_NO = 168;
-const X_DES = 282;
-const X_JT = 474;
-const X_JML_R = 648;
+const X_TRX = 122;
+const X_NO = 202;
+const X_DES = 308;
+const X_JT = 500;
+const X_JML_R = 656;
 const X_SISA_R = PAGE_W - MARGIN;
 
 const HELV_W: Record<string, number> = {
@@ -194,7 +194,7 @@ export function buildPiutangPdf(snapshots: PiutangPelangganSnapshot[]): Buffer {
         stream += draw(line.text, 8, true, MARGIN, yTop - 10.5);
       } else if (line.kind === "head") {
         const bot = yTop - 13;
-        stream += draw("Pelanggan / Tanggal", 7, true, X_TGL, bot);
+        stream += draw("Tanggal", 7, true, X_TGL, bot);
         stream += draw("Transaksi", 7, true, X_TRX, bot);
         stream += draw("No.", 7, true, X_NO, bot);
         stream += draw("Deskripsi", 7, true, X_DES, bot);

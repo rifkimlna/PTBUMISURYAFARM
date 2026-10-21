@@ -52,7 +52,47 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     select: { fileUrl: true },
   });
 
-  await prisma.pengirimanPembelian.delete({ where: { id } });
+  // Ambil pengiriman beserta item & pesanan asal untuk membalikan stok
+  // (MASUK yang dibuat saat penerimaan) agar hapus tidak menimpa stok ganda.
+  const pengiriman = await prisma.pengirimanPembelian.findUnique({
+    where: { id },
+    select: {
+      id: true, noPengiriman: true, pesananId: true, tanggalPengiriman: true,
+      items: { select: { id: true, deskripsi: true, kuantitas: true, unit: true } },
+    },
+  });
+  if (!pengiriman) return errorResponse("Pengiriman tidak ditemukan", 404);
+
+  const pesanan = await prisma.dokumenPembelian.findUnique({
+    where: { id: pengiriman.pesananId },
+    select: { id: true, items: { select: { produkId: true, deskripsi: true, unit: true, kuantitas: true } } },
+  });
+
+  await prisma.$transaction(async (tx) => {
+    // Balikan stok: buat riwayat KELUAR sejumlah MASUK yang pernah dicatat.
+    if (pesanan) {
+      for (let i = 0; i < pengiriman.items.length; i++) {
+        const pit = pengiriman.items[i];
+        const psnItem = pesanan.items[i];
+        const produkId = psnItem?.produkId || null;
+        if (produkId && Number(pit.kuantitas) > 0) {
+          await tx.riwayatStok.create({
+            data: {
+              barangId: produkId,
+              jenis: "KELUAR",
+              jumlah: Number(pit.kuantitas),
+              keterangan: `Reversal: hapus pengiriman ${pengiriman.noPengiriman ?? id}`,
+              sumber: "PEMBELIAN",
+              tanggal: pengiriman.tanggalPengiriman ?? new Date(),
+            },
+          });
+        }
+      }
+    }
+
+    await tx.pengirimanPembelian.delete({ where: { id } });
+  });
+
   for (const l of lampiran) {
     await deleteBuktiFile(l.fileUrl);
   }

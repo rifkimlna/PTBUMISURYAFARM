@@ -1,0 +1,607 @@
+// Export Laporan Detail Aset Tetap (mandiri - tidak mengubah builder lain).
+// PDF landscape A4, XLSX semua kolom, memakai snapshot API yang sama dengan web.
+// Tidak ada data dummy: seluruh angka berasal dari DetailAsetSnapshot.
+
+import type { DetailAsetSnapshot } from "@/lib/ringkasan-aset-detail-types";
+
+export const ASET_PERUSAHAAN = "PT BUMI SURYA FARM";
+
+export function fmtTglEkspor(iso: string | null): string {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+/** Rupiah untuk ekspor, tanpa karakter non-ASCII, ex: "Rp 1.000.000". */
+export function formatRupiahEkspor(n: number): string {
+  return `Rp ${Math.round(Number(n) || 0).toLocaleString("id-ID")}`;
+}
+
+// ---------------------------------------------------------------------------
+// PDF (PDF 1.4, landscape A4, font base-14)
+// ---------------------------------------------------------------------------
+
+const PAGE_W = 842;
+const PAGE_H = 595;
+const MARGIN = 36;
+
+const X_TGL = MARGIN;
+const X_TINDAKAN = 86;
+const X_TRX = 150;
+const X_NOMOR = 230;
+const X_NOMOR_AKUN = 288;
+const X_NAMA_AKUN = 355;
+const X_DEBIT_R = 490;
+const X_KREDIT_R = 580;
+const X_BUKU_R = PAGE_W - MARGIN;
+
+const HELV_W: Record<string, number> = {
+  " ": 278, "(": 333, ")": 333, ",": 333, "-": 333, ".": 278, "/": 278,
+  "0": 556, "1": 556, "2": 556, "3": 556, "4": 556, "5": 556, "6": 556, "7": 556,
+  "8": 556, "9": 556, R: 722, p: 556, r: 333,
+};
+
+function lebarTeks(t: string, size: number): number {
+  let w = 0;
+  for (const ch of t) w += HELV_W[ch] ?? 550;
+  return (w / 1000) * size;
+}
+
+function sanitasiPdf(t: string): string {
+  const map: Record<string, string> = {
+    "–": "-", "—": "-", "“": '"', "”": '"', "‘": "'", "’": "'", "…": "...",
+    "−": "-", "\u00a0": " ",
+  };
+  let out = "";
+  for (const ch of t) {
+    if (map[ch]) out += map[ch];
+    else if (ch.charCodeAt(0) <= 255 && ch !== "\n" && ch !== "\r") out += ch;
+  }
+  return out;
+}
+
+function escapePdf(t: string): string {
+  return t.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+
+function potong(t: string, max: number): string {
+  const s = (t || "").replace(/\s+/g, " ").trim() || "-";
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+function wrapText(t: string, size: number, maxWidth: number): string[] {
+  const words = sanitasiPdf(t).replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  const lines: string[] = [];
+  let cur = "";
+  for (const w of words) {
+    const candidate = cur ? `${cur} ${w}` : w;
+    if (lebarTeks(candidate, size) > maxWidth && cur) {
+      lines.push(cur);
+      cur = w;
+    } else {
+      cur = candidate;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+type PdfLine =
+  | { kind: "center"; text: string; size: number; bold: boolean }
+  | { kind: "left"; text: string; size: number; bold: boolean }
+  | { kind: "head" }
+  | { kind: "group"; text: string }
+  | {
+      kind: "row";
+      tgl: string;
+      tindakan: string;
+      transaksi: string;
+      nomor: string;
+      nomorAkun: string;
+      namaAkun: string;
+      debit: string;
+      kredit: string;
+      buku: string;
+      bold: boolean;
+      informational: boolean;
+    }
+  | { kind: "subtotal"; label: string; debit: string; kredit: string; buku: string }
+  | { kind: "total"; debit: string; kredit: string; buku: string };
+
+function snapshotKeLines(s: DetailAsetSnapshot): PdfLine[] {
+  const lines: PdfLine[] = [
+    { kind: "center", text: ASET_PERUSAHAAN, size: 12, bold: true },
+    { kind: "center", text: "Detail Aset Tetap", size: 12, bold: true },
+    { kind: "center", text: s.label, size: 9.5, bold: true },
+    { kind: "center", text: "(dalam Rupiah)", size: 9.5, bold: true },
+    { kind: "left", text: "", size: 9, bold: false },
+    { kind: "head" },
+  ];
+
+  if (s.totalAset === 0) {
+    lines.push({
+      kind: "left",
+      text: "Tidak ada transaksi aset tetaptetap pada periode ini.",
+      size: 9,
+      bold: false,
+    });
+  }
+
+  for (const g of s.grup) {
+    const label = `${g.kode} - ${g.nama}`;
+    lines.push({ kind: "group", text: label });
+    for (const b of g.baris) {
+      lines.push({
+        kind: "row",
+        tgl: fmtTglEkspor(b.tanggal),
+        tindakan: b.tindakan === "AKUISISI" ? "Akuisisi" : b.tindakan === "PENYUSUTAN" ? "Penyusutan" : "Pelepasan",
+        transaksi: potong(b.transaksi, 40),
+        nomor: potong(b.nomor, 12),
+        nomorAkun: potong(b.nomorAkun, 10),
+        namaAkun: potong(b.namaAkun, 30),
+        debit: b.debit > 0 ? formatRupiahEkspor(b.debit) : "-",
+        kredit: b.kredit > 0 ? formatRupiahEkspor(b.kredit) : "-",
+        buku: formatRupiahEkspor(b.nilaiBuku),
+        bold: false,
+        informational: b.isInformational,
+      });
+    }
+    lines.push({
+      kind: "subtotal",
+      label: `Subtotal ${g.kode}`,
+      debit: formatRupiahEkspor(g.subtotalDebit),
+      kredit: formatRupiahEkspor(g.subtotalKredit),
+      buku: formatRupiahEkspor(g.saldoAkhir),
+    });
+  }
+
+  lines.push({
+    kind: "total",
+    debit: formatRupiahEkspor(s.totalDebit),
+    kredit: formatRupiahEkspor(s.totalKredit),
+    buku: formatRupiahEkspor(s.totalSaldoAkhir),
+  });
+
+  if (s.catatan.length > 0) {
+    lines.push({ kind: "left", text: "", size: 8, bold: false });
+    lines.push({ kind: "left", text: "Catatan:", size: 7.5, bold: true });
+    for (const note of s.catatan) {
+      for (const w of wrapText(note, 7, PAGE_W - MARGIN * 2)) {
+        lines.push({ kind: "left", text: w, size: 7, bold: false });
+      }
+    }
+  }
+
+  return lines;
+}
+
+function tanggalLaporan(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export function buildDetailAsetPdf(snapshots: DetailAsetSnapshot[]): Buffer {
+  const pages: { line: PdfLine; yTop: number }[][] = [];
+  let cur: { line: PdfLine; yTop: number }[] = [];
+  let y = PAGE_H - MARGIN;
+
+  const need = (l: PdfLine): number => {
+    if (l.kind === "head") return 22;
+    if (l.kind === "center") return l.size * 1.5;
+    if (l.kind === "row" || l.kind === "group" || l.kind === "subtotal" || l.kind === "total")
+      return 7.5 * 1.45;
+    return l.size * 1.6;
+  };
+
+  const push = (line: PdfLine) => {
+    const h = need(line) || 12;
+    if (y - h < MARGIN + 14) {
+      pages.push(cur);
+      cur = [];
+      y = PAGE_H - MARGIN;
+    }
+    cur.push({ line, yTop: y });
+    y -= h;
+  };
+
+  snapshots.forEach((s, si) => {
+    for (const l of snapshotKeLines(s)) push(l);
+    if (si !== snapshots.length - 1) {
+      pages.push(cur);
+      cur = [];
+      y = PAGE_H - MARGIN;
+    }
+  });
+  if (cur.length) pages.push(cur);
+  if (pages.length === 0) pages.push([]);
+
+  const offsets: number[] = [];
+  let pos = 0;
+  const header = Buffer.from("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n", "latin1");
+  const parts: Buffer[] = [header];
+  pos = header.length;
+
+  const emit = (body: string | Buffer) => {
+    const b = typeof body === "string" ? Buffer.from(body, "latin1") : body;
+    offsets.push(pos);
+    parts.push(b);
+    pos += b.length;
+  };
+
+  const n = pages.length;
+  const fontReg = 3;
+  const fontBold = 4;
+  const firstPageObj = 5;
+  const kids = Array.from({ length: n }, (_, i) => `${firstPageObj + i * 2} 0 R`).join(" ");
+  const ordered: { num: number; body: string | Buffer }[] = [
+    { num: 1, body: `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n` },
+    { num: 2, body: `2 0 obj\n<< /Type /Pages /Kids [${kids}] /Count ${n} >>\nendobj\n` },
+    { num: fontReg, body: `${fontReg} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n` },
+    { num: fontBold, body: `${fontBold} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj\n` },
+  ];
+
+  const draw = (t: string, size: number, bold: boolean, x: number, baseline: number) =>
+    `BT /${bold ? "F2" : "F1"} ${size} Tf 1 0 0 1 ${x.toFixed(1)} ${baseline.toFixed(1)} Tm (${escapePdf(sanitasiPdf(t))}) Tj ET\n`;
+  const drawRight = (t: string, size: number, bold: boolean, rightX: number, baseline: number) =>
+    draw(t, size, bold, rightX - lebarTeks(sanitasiPdf(t), size), baseline);
+
+  const tglLap = tanggalLaporan();
+  for (let i = 0; i < n; i++) {
+    const pageObj = firstPageObj + i * 2;
+    const contentObj = pageObj + 1;
+    let stream = "";
+
+    for (const { line, yTop } of pages[i]) {
+      if (line.kind === "center") {
+        const w = lebarTeks(sanitasiPdf(line.text), line.size);
+        stream += draw(line.text, line.size, line.bold, (PAGE_W - w) / 2, yTop - line.size - 2);
+      } else if (line.kind === "left") {
+        if (line.text) stream += draw(line.text, line.size, line.bold, MARGIN, yTop - line.size - 2);
+      } else if (line.kind === "head") {
+        const bot = yTop - 13;
+        stream += draw("Tanggal", 7, true, X_TGL, bot);
+        stream += draw("Tindakan", 7, true, X_TINDAKAN, bot);
+        stream += draw("Transaksi", 7, true, X_TRX, bot);
+        stream += draw("Nomor", 7, true, X_NOMOR, bot);
+        stream += draw("No. Akun", 7, true, X_NOMOR_AKUN, bot);
+        stream += draw("Nama Akun", 7, true, X_NAMA_AKUN, bot);
+        stream += drawRight("Debit", 7, true, X_DEBIT_R, bot);
+        stream += drawRight("Kredit", 7, true, X_KREDIT_R, bot);
+        stream += drawRight("Nilai Buku", 7, true, X_BUKU_R, bot);
+      } else if (line.kind === "group") {
+        const size = 7.5;
+        stream += draw(line.text, size, true, X_TGL, yTop - size - 2);
+      } else if (line.kind === "row") {
+        const size = 7;
+        const base = yTop - size - 2;
+        const f = line.bold;
+        const gray = line.informational;
+        stream += draw(line.tgl, size, f || gray, X_TGL, base);
+        stream += draw(line.tindakan, size, f || gray, X_TINDAKAN, base);
+        stream += draw(line.transaksi, size, f || gray, X_TRX, base);
+        stream += draw(line.nomor, size, f || gray, X_NOMOR, base);
+        stream += draw(line.nomorAkun, size, f || gray, X_NOMOR_AKUN, base);
+        stream += draw(line.namaAkun, size, f || gray, X_NAMA_AKUN, base);
+        stream += drawRight(line.debit, size, f || gray, X_DEBIT_R, base);
+        stream += drawRight(line.kredit, size, f || gray, X_KREDIT_R, base);
+        stream += drawRight(line.buku, size, f || gray, X_BUKU_R, base);
+      } else if (line.kind === "subtotal") {
+        const size = 7.5;
+        const base = yTop - size - 2;
+        stream += draw(line.label, size, true, X_TGL, base);
+        stream += drawRight(line.debit, size, true, X_DEBIT_R, base);
+        stream += drawRight(line.kredit, size, true, X_KREDIT_R, base);
+        stream += drawRight(line.buku, size, true, X_BUKU_R, base);
+      } else {
+        const size = 7.5;
+        const base = yTop - size - 2;
+        stream += draw("TOTAL", size, true, X_TGL, base);
+        stream += drawRight(line.debit, size, true, X_DEBIT_R, base);
+        stream += drawRight(line.kredit, size, true, X_KREDIT_R, base);
+        stream += drawRight(line.buku, size, true, X_BUKU_R, base);
+      }
+    }
+
+    stream += draw(`Detail Aset Tetap - ${tglLap}`, 7, false, MARGIN, MARGIN - 16);
+    stream += drawRight(`Halaman ${i + 1} dari ${n}`, 7, false, PAGE_W - MARGIN, MARGIN - 16);
+    const streamBuf = Buffer.from(stream, "latin1");
+    ordered.push({
+      num: pageObj,
+      body:
+        `${pageObj} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] ` +
+        `/Resources << /Font << /F1 ${fontReg} 0 R /F2 ${fontBold} 0 R >> >> /Contents ${contentObj} 0 R >>\nendobj\n`,
+    });
+    ordered.push({
+      num: contentObj,
+      body: Buffer.concat([
+        Buffer.from(`${contentObj} 0 obj\n<< /Length ${streamBuf.length} >>\nstream\n`, "latin1"),
+        streamBuf,
+        Buffer.from("\nendstream\nendobj\n", "latin1"),
+      ]),
+    });
+  }
+
+  for (const o of ordered) emit(o.body);
+  const xrefPos = pos;
+  const total = firstPageObj + n * 2;
+  let xref = `xref\n0 ${total}\n0000000000 65535 f \n`;
+  for (let i = 1; i < total; i++) xref += `${String(offsets[i - 1]).padStart(10, "0")} 00000 n \n`;
+  parts.push(Buffer.from(`${xref}trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF`, "latin1"));
+  return Buffer.concat(parts);
+}
+
+// ---------------------------------------------------------------------------
+// XLSX (OOXML minimal, ZIP stored)
+// ---------------------------------------------------------------------------
+
+export type XlsxCell = { v: string | number; bold?: boolean; num?: boolean };
+export type XlsxSheet = { name: string; rows: XlsxCell[][] };
+
+const KOLOM = [
+  "Tanggal",
+  "Tindakan",
+  "Transaksi",
+  "Nomor",
+  "Nomor Akun",
+  "Nama Akun",
+  "Debit",
+  "Kredit",
+  "Nilai Buku",
+];
+
+export function snapshotKeSheetDetailAset(s: DetailAsetSnapshot, sheetName: string): XlsxSheet {
+  const rows: XlsxCell[][] = [
+    [{ v: ASET_PERUSAHAAN, bold: true }],
+    [{ v: "Detail Aset Tetap", bold: true }],
+    [{ v: s.label }],
+    [{ v: "(dalam Rupiah)" }],
+    [],
+    KOLOM.map((v) => ({ v, bold: true })),
+  ];
+
+  if (s.totalAset === 0) {
+    rows.push([{ v: "Tidak ada transaksi aset tetap pada periode ini." }]);
+  }
+
+  for (const g of s.grup) {
+    const label = `${g.kode} - ${g.nama}`;
+    rows.push([{ v: label, bold: true }]);
+    for (const b of g.baris) {
+      rows.push([
+        { v: fmtTglEkspor(b.tanggal) },
+        { v: b.tindakan === "AKUISISI" ? "Akuisisi" : b.tindakan === "PENYUSUTAN" ? "Penyusutan" : "Pelepasan" },
+        { v: b.transaksi },
+        { v: b.nomor },
+        { v: b.nomorAkun },
+        { v: b.namaAkun },
+        { v: b.debit, num: true },
+        { v: b.kredit, num: true },
+        { v: b.nilaiBuku, num: true },
+      ]);
+    }
+    rows.push([
+      { v: `Subtotal ${g.kode}`, bold: true },
+      { v: "" },
+      { v: "" },
+      { v: "" },
+      { v: "" },
+      { v: "" },
+      { v: g.subtotalDebit, bold: true, num: true },
+      { v: g.subtotalKredit, bold: true, num: true },
+      { v: g.saldoAkhir, bold: true, num: true },
+    ]);
+  }
+
+  rows.push([
+    { v: "TOTAL", bold: true },
+    { v: "" },
+    { v: "" },
+    { v: "" },
+    { v: "" },
+    { v: "" },
+    { v: s.totalDebit, bold: true, num: true },
+    { v: s.totalKredit, bold: true, num: true },
+    { v: s.totalSaldoAkhir, bold: true, num: true },
+  ]);
+
+  if (s.catatan.length > 0) {
+    rows.push([]);
+    rows.push([{ v: "Catatan:", bold: true }]);
+    for (const note of s.catatan) rows.push([{ v: note }]);
+  }
+
+  return { name: sheetName.slice(0, 31), rows };
+}
+
+function escXml(t: string): string {
+  return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function colName(i: number): string {
+  let n = i;
+  let s = "";
+  do {
+    s = String.fromCharCode(65 + (n % 26)) + s;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return s;
+}
+
+function sheetXml(sheet: XlsxSheet): string {
+  const nCols = Math.max(...sheet.rows.map((r) => r.length), 1);
+  const dims = `A1:${colName(nCols - 1)}${sheet.rows.length}`;
+  let rows = "";
+  sheet.rows.forEach((r, ri) => {
+    let cells = "";
+    r.forEach((c, ci) => {
+      const ref = `${colName(ci)}${ri + 1}`;
+      const style = c.num ? (c.bold ? 2 : 1) : c.bold ? 3 : 0;
+      const sAttr = style ? ` s="${style}"` : "";
+      if (typeof c.v === "number") {
+        cells += `<c r="${ref}"${sAttr}><v>${c.v}</v></c>`;
+      } else {
+        cells += `<c r="${ref}"${sAttr} t="inlineStr"><is><t>${escXml(c.v)}</t></is></c>`;
+      }
+    });
+    rows += `<row r="${ri + 1}">${cells}</row>`;
+  });
+  const widths = [12, 14, 30, 14, 12, 34, 16, 16, 18]
+    .slice(0, nCols)
+    .map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`)
+    .join("");
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+    `<dimension ref="${dims}"/><sheetViews><sheetView workbookViewId="0"/></sheetViews>` +
+    `<sheetFormat defaultRowHeight="15"/>` +
+    `<cols>${widths}</cols>` +
+    `<sheetData>${rows}</sheetData></worksheet>`
+  );
+}
+
+function crc32(buf: Buffer): number {
+  let table = (crc32 as unknown as { t?: number[] }).t;
+  if (!table) {
+    table = [];
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      table[i] = c >>> 0;
+    }
+    (crc32 as unknown as { t: number[] }).t = table;
+  }
+  let crc = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) crc = table[(crc ^ buf[i]) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+export function buildXlsx(sheets: XlsxSheet[]): Buffer {
+  const contentTypes =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+    `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+    `<Default Extension="xml" ContentType="application/xml"/>` +
+    `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
+    sheets
+      .map(
+        (_, i) =>
+          `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`
+      )
+      .join("") +
+    `<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>` +
+    `</Types>`;
+  const rels =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+    `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>` +
+    `</Relationships>`;
+  const wbRels =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+    sheets
+      .map(
+        (_, i) =>
+          `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`
+      )
+      .join("") +
+    `<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>` +
+    `</Relationships>`;
+  const workbook =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+    `<sheets>${sheets
+      .map((s, i) => `<sheet name="${escXml(s.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`)
+      .join("")}</sheets></workbook>`;
+  const styles =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+    `<numFmts count="1"><numFmt numFmtId="165" formatCode="#,##0"/></numFmts>` +
+    `<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>` +
+    `<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>` +
+    `<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>` +
+    `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellStyleXfs>` +
+    `<cellXfs count="4">` +
+    `<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>` +
+    `<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>` +
+    `<xf numFmtId="165" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>` +
+    `<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>` +
+    `</cellXfs>` +
+    `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  const files = [
+    { name: "[Content_Types].xml", data: Buffer.from(contentTypes, "utf8") },
+    { name: "_rels/.rels", data: Buffer.from(rels, "utf8") },
+    { name: "xl/workbook.xml", data: Buffer.from(workbook, "utf8") },
+    { name: "xl/_rels/workbook.xml.rels", data: Buffer.from(wbRels, "utf8") },
+    { name: "xl/styles.xml", data: Buffer.from(styles, "utf8") },
+    ...sheets.map((s, i) => ({
+      name: `xl/worksheets/sheet${i + 1}.xml`,
+      data: Buffer.from(sheetXml(s), "utf8"),
+    })),
+  ];
+  const chunks: Buffer[] = [];
+  const central: Buffer[] = [];
+  let offset = 0;
+  for (const f of files) {
+    const nameBuf = Buffer.from(f.name, "utf8");
+    const crc = crc32(f.data);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0x0800, 6);
+    local.writeUInt16LE(0, 8);
+    local.writeUInt16LE(0, 10);
+    local.writeUInt16LE(0, 12);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(f.data.length, 18);
+    local.writeUInt32LE(f.data.length, 22);
+    local.writeUInt16LE(nameBuf.length, 26);
+    local.writeUInt16LE(0, 28);
+    chunks.push(local, nameBuf, f.data);
+
+    const cen = Buffer.alloc(46);
+    cen.writeUInt32LE(0x02014b50, 0);
+    cen.writeUInt16LE(20, 4);
+    cen.writeUInt16LE(20, 6);
+    cen.writeUInt16LE(0x0800, 8);
+    cen.writeUInt16LE(0, 10);
+    cen.writeUInt16LE(0, 12);
+    cen.writeUInt16LE(0, 14);
+    cen.writeUInt32LE(crc, 16);
+    cen.writeUInt32LE(f.data.length, 20);
+    cen.writeUInt32LE(f.data.length, 24);
+    cen.writeUInt16LE(nameBuf.length, 28);
+    cen.writeUInt16LE(0, 30);
+    cen.writeUInt16LE(0, 32);
+    cen.writeUInt16LE(0, 34);
+    cen.writeUInt16LE(0, 36);
+    cen.writeUInt32LE(0, 38);
+    cen.writeUInt32LE(offset, 42);
+    central.push(cen, nameBuf);
+    offset += local.length + nameBuf.length + f.data.length;
+  }
+  const centralStart = offset;
+  const centralBuf = Buffer.concat(central);
+  chunks.push(centralBuf);
+  offset += centralBuf.length;
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(0, 4);
+  end.writeUInt16LE(0, 6);
+  end.writeUInt16LE(files.length, 8);
+  end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(centralBuf.length, 12);
+  end.writeUInt32LE(centralStart, 16);
+  end.writeUInt16LE(0, 20);
+  chunks.push(end);
+  return Buffer.concat(chunks);
+}
+
+function ymdLokal(d: Date): string {
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Nama file unduhan, ex: Detail_Aset_Tetap_PT_Bumi_Surya_Farm_20261001_20261031.pdf */
+export function detailAsetNamaFile(ext: "pdf" | "xlsx", dari: Date, sampai: Date): string {
+  return `Detail_Aset_Tetap_PT_Bumi_Surya_Farm_${ymdLokal(dari)}_${ymdLokal(sampai)}.${ext}`;
+}

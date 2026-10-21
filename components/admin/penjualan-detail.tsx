@@ -105,6 +105,9 @@ export function TindakanDropdown({
               <Link href={`/keuangan/penjualan/penagihan/baru?dari=${docId}`} role="menuitem" className={itemCls} onClick={() => setOpen(false)}>
                 <span><span className="block font-medium text-slate-900">Buat Penagihan</span><span className="block text-xs text-slate-500">Tagih pesanan ini (jadi piutang)</span></span>
               </Link>
+              <Link href={`/keuangan/penjualan/proforma/baru?dari=${docId}`} role="menuitem" className={itemCls} onClick={() => setOpen(false)}>
+                <span><span className="block font-medium text-slate-900">Buat Proforma</span><span className="block text-xs text-slate-500">Faktur sementara dari pesanan ini</span></span>
+              </Link>
               <button type="button" role="menuitem" className={itemCls} disabled={busy} onClick={toggleTutup}>
                 <span><span className="block font-medium text-slate-900">{ditutup ? "Buka kembali pesanan" : "Tutup pesanan"}</span><span className="block text-xs text-slate-500">{ditutup ? "Status kembali Belum Ditagih" : "Tandai selesai/ditutup"}</span></span>
               </button>
@@ -127,9 +130,14 @@ export function TindakanDropdown({
             </>
           )}
           {kind === "PENAGIHAN" && (
-            <Link href={`/keuangan/penjualan/penagihan/baru?dari=${docId}&mode=duplikat`} role="menuitem" className={itemCls} onClick={() => setOpen(false)}>
-              <span><span className="block font-medium text-slate-900">Duplikat transaksi</span><span className="block text-xs text-slate-500">Salin sebagai penagihan baru</span></span>
-            </Link>
+            <>
+              <Link href={`/keuangan/penjualan/proforma/baru?dari=${docId}`} role="menuitem" className={itemCls} onClick={() => setOpen(false)}>
+                <span><span className="block font-medium text-slate-900">Buat Proforma</span><span className="block text-xs text-slate-500">Faktur sementara dari invoice ini</span></span>
+              </Link>
+              <Link href={`/keuangan/penjualan/penagihan/baru?dari=${docId}&mode=duplikat`} role="menuitem" className={itemCls} onClick={() => setOpen(false)}>
+                <span><span className="block font-medium text-slate-900">Duplikat transaksi</span><span className="block text-xs text-slate-500">Salin sebagai penagihan baru</span></span>
+              </Link>
+            </>
           )}
           <div className="border-t border-slate-100" />
           <button type="button" role="menuitem" className={itemCls} disabled={busy} onClick={() => hapus(kind === "PESANAN" ? "pesanan" : kind === "PENAWARAN" ? "penawaran" : "penagihan")}>

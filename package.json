@@ -12,6 +12,7 @@
     "lint": "eslint",
     "seed": "tsx prisma/seed.ts",
     "db:seed": "tsx prisma/seed.ts",
+    "produk:backfill": "tsx prisma/backfill-produk.ts",
     "db:migrate": "prisma migrate deploy"
   },
   "dependencies": {

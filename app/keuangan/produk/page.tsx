@@ -8,23 +8,17 @@ import { ProdukContent } from "@/components/admin/produk-content";
 
 // Halaman Produk PT BST (modul utama DATA MASTER, pengganti Persediaan Barang).
 // Sumber data: PersediaanBarang + RiwayatStok (model lama dipertahankan agar
-// Pembelian/Penjualan/Pengiriman tidak terganggu) + Gudang. Tanpa Transfer
-// Gudang. Tanpa dummy: kosong berarti empty state.
+// Pembelian/Penjualan/Pengiriman tidak terganggu). Tanpa dummy: kosong berarti
+// empty state.
 export default async function ProdukPage() {
-  const [barang, agg, gudang, penyesuaian, kategoriAgg, cookieStore] = await Promise.all([
+  const [barang, agg, penyesuaian, cookieStore] = await Promise.all([
     prisma.persediaanBarang.findMany({ orderBy: { createdAt: "desc" }, take: 500 }),
     prisma.riwayatStok.groupBy({ by: ["barangId", "jenis"], _sum: { jumlah: true } }),
-    prisma.gudang.findMany({ orderBy: { kode: "asc" }, take: 200 }),
     prisma.riwayatStok.findMany({
       where: { sumber: "PENYESUAIAN" },
       orderBy: { tanggal: "desc" },
       take: 100,
       include: { barang: { select: { id: true, namaBarang: true, satuan: true } } },
-    }),
-    prisma.persediaanBarang.groupBy({
-      by: ["kategori"],
-      _count: { id: true },
-      orderBy: { kategori: "asc" },
     }),
     cookies(),
   ]);
@@ -79,12 +73,12 @@ export default async function ProdukPage() {
           { jenis: "KELUAR", jumlah: sums.KELUAR },
         ]);
     const acc = sumMap.get(b.id);
-    return {
-      id: b.id,
-      namaBarang: b.namaBarang,
-      kategori: b.kategori,
+      return {
+        id: b.id,
+        namaBarang: b.namaBarang,
       tipeProduk: b.tipeProduk ?? "BARANG",
-      barcode: b.barcode,
+      sumberProduk: (b.sumberProduk ?? null) as "PENJUALAN" | "PEMBELIAN" | null,
+        barcode: b.barcode,
       satuan: b.satuan,
       stokAwal: b.stokAwal,
       stok,
@@ -92,9 +86,21 @@ export default async function ProdukPage() {
       hargaSatuan: Number(b.hargaSatuan),
       hargaBeli: b.hargaBeli == null ? null : Number(b.hargaBeli),
       hargaJual: b.hargaJual == null ? null : Number(b.hargaJual),
-      hargaBeliTerakhir: lastMap.get(b.id) ?? null,
+      hargaBeliTerakhir:
+        b.hargaBeliTerakhirManual != null
+          ? Number(b.hargaBeliTerakhirManual)
+          : (lastMap.get(b.id) ?? null),
       hargaRataRata:
-        acc && acc.qty > 0 ? Math.round((acc.nilai / acc.qty) * 100) / 100 : null,
+        b.hargaRataRataManual != null
+          ? Number(b.hargaRataRataManual)
+          : acc && acc.qty > 0
+            ? Math.round((acc.nilai / acc.qty) * 100) / 100
+            : null,
+      // Nilai manual (opsional) mengalahkan hasil perhitungan faktur.
+      hargaRataRataManual:
+        b.hargaRataRataManual == null ? null : Number(b.hargaRataRataManual),
+      hargaBeliTerakhirManual:
+        b.hargaBeliTerakhirManual == null ? null : Number(b.hargaBeliTerakhirManual),
       status: isJasa ? ("Jasa" as const) : tentukanStatusStokDenganBatas(stok as number, b.batasMinimum),
       keterangan: b.keterangan,
       createdAt: b.createdAt.toISOString(),
@@ -107,8 +113,6 @@ export default async function ProdukPage() {
     segeraHabis: barangSaja.filter((p) => p.status === "Stok Menipis").length,
     habis: barangSaja.filter((p) => p.status === "Habis").length,
     totalStok: barangSaja.reduce((s, p) => s + (p.stok ?? 0), 0),
-    gudangAktif: gudang.filter((g) => g.status === "AKTIF").length,
-    gudangTotal: gudang.length,
   };
 
   return (
@@ -117,14 +121,6 @@ export default async function ProdukPage() {
         canDelete={canDelete}
         summary={summary}
         produk={produk}
-        gudang={gudang.map((g) => ({
-          id: g.id,
-          kode: g.kode,
-          nama: g.nama,
-          alamat: g.alamat,
-          status: g.status,
-          createdAt: g.createdAt.toISOString(),
-        }))}
         penyesuaian={penyesuaian.map((r) => ({
           id: r.id,
           tanggal: r.tanggal.toISOString(),
@@ -135,7 +131,6 @@ export default async function ProdukPage() {
           jumlah: r.jumlah,
           keterangan: r.keterangan,
         }))}
-        kategori={kategoriAgg.map((k) => ({ kategori: k.kategori, jumlahProduk: k._count.id }))}
       />
     </div>
   );

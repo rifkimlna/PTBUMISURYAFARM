@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuthAndRole } from "@/lib/auth";
+import { getSaldoPerSumber } from "@/lib/keuangan-server";
 import { successResponse, errorResponse } from "@/lib/api-response";
 import { z } from "zod";
 
@@ -163,9 +164,15 @@ function resolveRange(
 
 // Ringkasan kas (masuk/keluar/bersih) + per bucket dalam rentang.
 // TRANSFER dikecualikan (perpindahan internal), konsisten dengan modul Kas & Bank.
-async function arusKas(start: Date, end: Date, buckets: Bucket[]) {
+// Set excludeModal31 agar tidak memperhitungkan setoran/penarikan modal 31xx
+// sebagai pendapatan atau beban (masuk Perubahan Modal, bukan Laba Rugi).
+async function arusKas(start: Date, end: Date, buckets: Bucket[], excludeModal31 = false) {
   const rows = await prisma.transaksiKas.findMany({
-    where: { tanggal: { gte: start, lte: end }, tipe: { in: ["PEMASUKAN", "PENGELUARAN"] } },
+    where: {
+      tanggal: { gte: start, lte: end },
+      tipe: { in: ["PEMASUKAN", "PENGELUARAN"] },
+      ...(excludeModal31 ? { kodeAkun: { not: { startsWith: "31" } } } : {}),
+    },
     select: { tipe: true, jumlah: true, tanggal: true },
   });
   let masuk = 0;
@@ -188,8 +195,9 @@ async function arusKas(start: Date, end: Date, buckets: Bucket[]) {
 }
 
 // Laba rugi basis kas: Pendapatan = PEMASUKAN, Beban = PENGELUARAN.
+// Setoran modal 31xx bukan pendapatan atau beban — dikecualikan (masuk Perubahan Modal).
 async function labaRugi(start: Date, end: Date, buckets: Bucket[]) {
-  const kas = await arusKas(start, end, buckets);
+  const kas = await arusKas(start, end, buckets, true);
   return {
     pendapatan: kas.totalMasuk,
     beban: kas.totalKeluar,
@@ -239,24 +247,18 @@ async function biayaOperasional(start: Date, end: Date) {
   };
 }
 
-// Akun terpantau: Kas/Bank/Tabungan = arus bersih rentang; Piutang/Utang = sisa berjalan.
+// Akun terpantau: Kas/Bank/Tabungan = saldo transfer-aware dalam rentang
+// (rumus yang sama dengan halaman Kas & Bank: masuk - keluar - transfer
+// keluar + transfer masuk); Piutang/Utang = sisa berjalan.
 async function akunTerpantau() {
   const now = new Date();
   const awalBulan = new Date(now.getFullYear(), now.getMonth(), 1);
   const awalTahun = new Date(now.getFullYear(), 0, 1);
   const akhir = endOfDay(now);
 
-  const [kasBulan, kasTahun, piutangBulan, piutangTahun, hutangBulan, hutangTahun, akunDb] = await Promise.all([
-    prisma.transaksiKas.groupBy({
-      by: ["sumberDana", "tipe"],
-      where: { tanggal: { gte: awalBulan, lte: akhir }, tipe: { in: ["PEMASUKAN", "PENGELUARAN"] } },
-      _sum: { jumlah: true },
-    }),
-    prisma.transaksiKas.groupBy({
-      by: ["sumberDana", "tipe"],
-      where: { tanggal: { gte: awalTahun, lte: akhir }, tipe: { in: ["PEMASUKAN", "PENGELUARAN"] } },
-      _sum: { jumlah: true },
-    }),
+  const [saldoBulan, saldoTahun, piutangBulan, piutangTahun, hutangBulan, hutangTahun, akunDb] = await Promise.all([
+    getSaldoPerSumber({ gte: awalBulan, lte: akhir }),
+    getSaldoPerSumber({ gte: awalTahun, lte: akhir }),
     prisma.tagihan.aggregate({
       where: { tipe: "PIUTANG", status: { not: "LUNAS" }, tanggal: { gte: awalBulan, lte: akhir } },
       _sum: { sisa: true }, _count: { id: true },
@@ -279,19 +281,15 @@ async function akunTerpantau() {
     }),
   ]);
 
-  const net = (rows: { sumberDana: string; tipe: string; _sum: { jumlah: unknown } }[], sumber: string) =>
-    Number(rows.find((r) => r.sumberDana === sumber && r.tipe === "PEMASUKAN")?._sum.jumlah ?? 0) -
-    Number(rows.find((r) => r.sumberDana === sumber && r.tipe === "PENGELUARAN")?._sum.jumlah ?? 0);
-
   const nama = (kode: string, fallback: string) => akunDb.find((a) => a.kode === kode)?.nama ?? fallback;
 
   return {
     akun: [
-      { kode: "1101", nama: nama("1101", "Kas"), bulanIni: net(kasBulan, "KAS"), tahunIni: net(kasTahun, "KAS") },
-      { kode: "1103", nama: nama("1103", "Bank"), bulanIni: net(kasBulan, "BANK"), tahunIni: net(kasTahun, "BANK") },
-      { kode: "1104", nama: nama("1104", "Tabungan"), bulanIni: net(kasBulan, "TABUNGAN"), tahunIni: net(kasTahun, "TABUNGAN") },
+      { kode: "1101", nama: nama("1101", "Kas"), bulanIni: saldoBulan.KAS, tahunIni: saldoTahun.KAS },
+      { kode: "1103", nama: nama("1103", "Bank"), bulanIni: saldoBulan.BANK, tahunIni: saldoTahun.BANK },
+      { kode: "1104", nama: nama("1104", "Tabungan"), bulanIni: saldoBulan.TABUNGAN, tahunIni: saldoTahun.TABUNGAN },
       { kode: "1102", nama: nama("1102", "Piutang"), bulanIni: Number(piutangBulan._sum.sisa ?? 0), tahunIni: Number(piutangTahun._sum.sisa ?? 0), countBulan: piutangBulan._count.id, countTahun: piutangTahun._count.id },
-      { kode: "2101", nama: nama("2101", "Utang Usaha"), bulanIni: Number(hutangBulan._sum.sisa ?? 0), tahunIni: Number(hutangTahun._sum.sisa ?? 0), countBulan: hutangBulan._count.id, countTahun: hutangTahun._count.id },
+      { kode: "2101", nama: nama("2101", "Utang Usaha"), bulanIni: Number(hutangBulan._sum.sisa ?? 0), tahunIni: Number(hutangTahun._sum.sisa ?? 0), countBulan: hutangBulan._count.id, countTahun: hutangBulan._count.id },
     ],
   };
 }
@@ -355,29 +353,17 @@ async function piutangUsaha(buckets: Bucket[], start: Date) {
 }
 
 // Kas: saldo Bank, saldo Jurnal (seluruh sumber), grafik saldo berjalan kumulatif.
+// Saldo memakai rumus transfer-aware yang sama dengan halaman Kas & Bank.
 async function kasSection(buckets: Bucket[], start: Date) {
-  const [all, beforeRows] = await Promise.all([
-    prisma.transaksiKas.groupBy({
-      by: ["sumberDana", "tipe"],
-      where: { tipe: { in: ["PEMASUKAN", "PENGELUARAN"] } },
-      _sum: { jumlah: true },
-    }),
+  const [saldoSemua, beforeRows] = await Promise.all([
+    getSaldoPerSumber(),
     prisma.transaksiKas.findMany({
       where: { tanggal: { lt: start }, tipe: { in: ["PEMASUKAN", "PENGELUARAN"] } },
       select: { tipe: true, jumlah: true, tanggal: true },
     }),
   ]);
-  const net = (sumber?: string) => {
-    let masuk = 0, keluar = 0;
-    for (const r of all) {
-      if (sumber && r.sumberDana !== sumber) continue;
-      if (r.tipe === "PEMASUKAN") masuk += Number(r._sum.jumlah ?? 0);
-      else keluar += Number(r._sum.jumlah ?? 0);
-    }
-    return masuk - keluar;
-  };
-  const saldoBank = net("BANK");
-  const saldoJurnal = net(undefined);
+  const saldoBank = saldoSemua.BANK;
+  const saldoJurnal = saldoSemua.KAS + saldoSemua.BANK + saldoSemua.TABUNGAN;
 
   let berjalan = 0;
   for (const r of beforeRows) berjalan += (r.tipe === "PEMASUKAN" ? 1 : -1) * Number(r.jumlah);

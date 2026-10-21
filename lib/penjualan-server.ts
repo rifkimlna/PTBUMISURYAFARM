@@ -1,14 +1,30 @@
 // Helper server-side modul Penjualan (JANGAN diimpor dari Client Component).
 import { prisma } from "@/lib/prisma";
+import { getKodeAkunByNamaFromDB } from "@/lib/coa-server";
 import type { JenisPenjualan, TipeDokumen } from "@/lib/validations/penjualanValidation";
 
 // Jenis penjualan → akun pendapatan otomatis (COA PT BST, dari database saat dipakai).
 export const AKUN_PENDAPATAN_BY_JENIS: Record<JenisPenjualan, string> = {
   HASIL_KEBUN: "4101",
   TERNAK: "4102",
-  IKAN: "4103",
   LAINNYA: "4104",
 };
+
+const NAMA_PENDAPATAN_BY_JENIS: Record<JenisPenjualan, string> = {
+  HASIL_KEBUN: "Pendapatan Penjualan Hasil Kebun",
+  TERNAK: "Pendapatan Penjualan Ternak (Ayam)",
+  LAINNYA: "Pendapatan Lain-lain",
+};
+
+// Resolve kode akun pendapatan dari NAMA di database (tahan terhadap
+// penomoran ulang COA); fallback ke peta statis bila nama berubah.
+export async function kodeAkunPendapatanUntukJenis(jenis: JenisPenjualan): Promise<string | null> {
+  return (
+    (await getKodeAkunByNamaFromDB(NAMA_PENDAPATAN_BY_JENIS[jenis], "PEMASUKAN")) ??
+    AKUN_PENDAPATAN_BY_JENIS[jenis] ??
+    null
+  );
+}
 
 const PREFIX_BY_TIPE: Record<TipeDokumen, string> = {
   PENAWARAN: "QTN",

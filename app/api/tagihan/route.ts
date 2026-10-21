@@ -15,6 +15,27 @@ const queryTagihanSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20).optional(),
 });
 
+// Input <input type="date"> mengirim "YYYY-MM-DD" tanpa zona waktu.
+// Tafsirkan sebagai tengah hari waktu server agar hari kalendernya
+// stabil dan tidak mundur sehari (lihat juga app/api/tagihan/[id]).
+function parseTanggalKalender(val: unknown) {
+  if (val === "" || val === undefined || val === null) return undefined;
+  if (typeof val === "string") {
+    const m = val.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0);
+  }
+  return val;
+}
+
+const tanggalKalenderSchema = z.preprocess(
+  parseTanggalKalender,
+  z.coerce.date({ message: "Tanggal tidak valid" })
+);
+const jatuhTempoKalenderSchema = z.preprocess(
+  parseTanggalKalender,
+  z.coerce.date({ message: "Jatuh tempo tidak valid" })
+);
+
 const createTagihanSchema = z.object({
   tipe: TipeTagihanEnum,
   pihak: z.string().trim().min(2, "Nama pihak minimal 2 karakter").max(100),
@@ -24,11 +45,11 @@ const createTagihanSchema = z.object({
     .positive("Jumlah harus positif")
     .min(1000, "Jumlah minimal Rp 1.000")
     .max(10_000_000_000, "Jumlah terlalu besar"),
-  tanggal: z.coerce.date({ message: "Tanggal tidak valid" }).optional(),
-  jatuhTempo: z.coerce.date({ message: "Jatuh tempo tidak valid" }).optional().nullable(),
+  tanggal: tanggalKalenderSchema.optional(),
+  jatuhTempo: jatuhTempoKalenderSchema.optional().nullable(),
   // Persiapan modul Penjualan (opsional; diisi form Penagihan tahap berikut)
   noInvoice: z.string().trim().max(50, "No invoice maksimal 50 karakter").optional().nullable(),
-  jenis: z.enum(["HASIL_KEBUN", "TERNAK", "IKAN", "LAINNYA"]).optional().nullable(),
+  jenis: z.enum(["HASIL_KEBUN", "TERNAK", "LAINNYA"]).optional().nullable(),
   dokumen: z.enum(["PENAGIHAN", "PROFORMA", "TUKAR_FAKTUR"]).optional().nullable(),
 });
 

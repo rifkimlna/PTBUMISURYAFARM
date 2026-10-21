@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { CalendarDays, Clock, FileText, PackageSearch, Plus, Search, Wallet, X } from "lucide-react";
 import { formatRupiah } from "@/lib/utils";
+import { BiayaFormDialog } from "@/components/admin/biaya-form-dialog";
 
 // Halaman Biaya PT BST (tahap UI, baca saja).
 // Data gabungan pengeluaran tunai + utang yang sudah ada di database.
@@ -23,7 +24,7 @@ export type BiayaRow = {
   sisa: number;
   total: number;
   tags: string | null;
-  sumber: "TUNAI" | "HUTANG";
+  sumber: "TUNAI" | "HUTANG" | "KAS";
   keterangan: string | null;
   sumberDana: string | null;
 };
@@ -89,6 +90,7 @@ export function BiayaContent({ summary, rows }: { summary: BiayaSummary; rows: B
   const [tab, setTab] = useState<TabKey>("biaya");
   const [search, setSearch] = useState("");
   const [detailRow, setDetailRow] = useState<BiayaRow | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -105,7 +107,7 @@ export function BiayaContent({ summary, rows }: { summary: BiayaSummary; rows: B
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Biaya</h1>
           <p className="mt-1 text-sm text-slate-400">Pengeluaran PT Bumi Surya Farm</p>
         </div>
-        <Button type="button" disabled title="Segera hadir" className="cursor-not-allowed">
+        <Button type="button" onClick={() => setCreateOpen(true)}>
           <Plus className="h-4 w-4" /> Buat Biaya Baru
         </Button>
       </div>
@@ -349,6 +351,15 @@ export function BiayaContent({ summary, rows }: { summary: BiayaSummary; rows: B
           )}
         </DialogContent>
       </Dialog>
+
+      <BiayaFormDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onSuccess={() => {
+          setCreateOpen(false);
+          // Biaya baru akan muncul setelah halaman direfresh oleh parent (server component)
+        }}
+      />
     </div>
   );
 }

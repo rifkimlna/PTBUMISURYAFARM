@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Search, X, Pencil, Trash2, Check, PackageSearch, TrendingDown, Undo2 } from "lucide-react";
+import { Plus, Search, X, Pencil, Trash2, Check, PackageSearch, TrendingDown } from "lucide-react";
 import { formatRupiah } from "@/lib/utils";
 import { KATEGORI_ASET } from "@/lib/aset";
 import { METODE_SUSUT_LABEL, SUMBER_DANA_BY_KODE_AKUN } from "@/lib/aset";
@@ -54,6 +54,8 @@ export type AsetRow = {
   noTransaksiLepas: string | null;
   caraLepas: string | null;
   keteranganLepas: string | null;
+  statusPembayaran: string | null;
+  akunPenerima: string | null;
   untungRugi: number | null;
   createdAt: string;
 };
@@ -118,7 +120,6 @@ function akunLabel(kode: string | null, nama: string | null) {
 
 // ================= Form tambah =================
 type AsetForm = {
-  id: string;
   nama: string;
   kategori: string;
   kondisi: string;
@@ -141,7 +142,6 @@ type AsetForm = {
 };
 
 const emptyAsetForm = (akunBebanDefault: string): AsetForm => ({
-  id: "",
   nama: "",
   kategori: KATEGORI_ASET[0],
   kondisi: "Baik",
@@ -186,20 +186,31 @@ export function AsetContent({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<AsetForm>(() => emptyAsetForm("5408"));
-  const [editSusut, setEditSusut] = useState({ metode: "", masa: "", residu: "", akunBeban: "", akunAkumulasi: "", tanggalMulai: "", deskripsi: "", tags: "" });
+  const [editSusut, setEditSusut] = useState({ biaya: "", metode: "", masa: "", residu: "", akunBeban: "", akunAkumulasi: "", tanggalMulai: "", deskripsi: "", tags: "" });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [confirmHapusId, setConfirmHapusId] = useState<string | null>(null);
 
   const [lepasOpen, setLepasOpen] = useState(false);
   const [lepasId, setLepasId] = useState<string | null>(null);
-  const [lepasCara, setLepasCara] = useState<"DIJUAL" | "DILEPAS">("DIJUAL");
+  const [lepasJenis, setLepasJenis] = useState<"DIJUAL_SUDAH_DIBAYAR" | "DIJUAL_BELUM_DIBAYAR" | "DILEPAS_TANPA_PENJUALAN" | "">("");
   const [lepasTanggal, setLepasTanggal] = useState(todayInput());
   const [lepasHarga, setLepasHarga] = useState("");
+  const [lepasAkunPenerima, setLepasAkunPenerima] = useState("");
   const [lepasNo, setLepasNo] = useState("");
+  const [lepasAlasan, setLepasAlasan] = useState("");
   const [lepasKet, setLepasKet] = useState("");
   const [lepasSaving, setLepasSaving] = useState(false);
   const [lepasMsg, setLepasMsg] = useState("");
+
+  const [konfirmasiOpen, setKonfirmasiOpen] = useState(false);
+  const [konfirmasiId, setKonfirmasiId] = useState<string | null>(null);
+  const [konfirmasiTanggal, setKonfirmasiTanggal] = useState(todayInput());
+  const [konfirmasiAkunPenerima, setKonfirmasiAkunPenerima] = useState("");
+  const [konfirmasiNo, setKonfirmasiNo] = useState("");
+  const [konfirmasiKet, setKonfirmasiKet] = useState("");
+  const [konfirmasiSaving, setKonfirmasiSaving] = useState(false);
+  const [konfirmasiMsg, setKonfirmasiMsg] = useState("");
 
   const counts = useMemo(() => {
     const c: Record<TabKey, number> = { TERTUNDA: 0, AKTIF: 0, LEPAS: 0, SUSUT: 0 };
@@ -246,6 +257,7 @@ export function AsetContent({
   const openEdit = (r: AsetRow) => {
     setEditingId(r.id);
     setEditSusut({
+      biaya: String(r.biayaTampil),
       metode: r.metodeSusut ?? "",
       masa: r.masaManfaatBulan == null ? "" : String(r.masaManfaatBulan),
       residu: r.nilaiResidu == null ? "" : String(r.nilaiResidu),
@@ -274,6 +286,7 @@ export function AsetContent({
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            biayaAkuisisi: Number(editSusut.biaya),
             deskripsi: editSusut.deskripsi.trim() || null,
             tags: editSusut.tags.trim() || null,
             metodeSusut: editSusut.metode === "" ? null : editSusut.metode,
@@ -294,7 +307,6 @@ export function AsetContent({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: form.id.trim().toUpperCase(),
           namaAset: form.nama.trim(),
           kategori: form.kategori,
           kondisi: form.kondisi,
@@ -361,28 +373,16 @@ export function AsetContent({
     }
   };
 
-  const batalLepas = async (id: string) => {
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/aset/${encodeURIComponent(id)}/lepas`, { method: "DELETE" });
-      const result = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(result.message || "Gagal membatalkan");
-      setTab("AKTIF");
-      router.refresh();
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Gagal membatalkan");
-    } finally {
-      setSaving(false);
-    }
-  };
 
   // ---------- Lepas ----------
   const openLepas = (r: AsetRow) => {
     setLepasId(r.id);
-    setLepasCara("DIJUAL");
+    setLepasJenis("");
     setLepasTanggal(todayInput());
     setLepasHarga("");
+    setLepasAkunPenerima("");
     setLepasNo("");
+    setLepasAlasan("");
     setLepasKet("");
     setLepasMsg("");
     setLepasOpen(true);
@@ -393,6 +393,10 @@ export function AsetContent({
   const saveLepas = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!lepasId) return;
+    if (!lepasJenis) {
+      setLepasMsg("Pilih jenis pelepasan terlebih dahulu");
+      return;
+    }
     setLepasSaving(true);
     setLepasMsg("");
     try {
@@ -400,10 +404,18 @@ export function AsetContent({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          cara: lepasCara,
+          jenisPelepasan: lepasJenis,
           tanggal: lepasTanggal || null,
-          hargaJual: lepasCara === "DIJUAL" ? Number(lepasHarga) : null,
+          hargaJual:
+            lepasJenis === "DILEPAS_TANPA_PENJUALAN"
+              ? null
+              : lepasHarga.trim() !== ""
+                ? Number(lepasHarga)
+                : null,
+          akunPenerima: lepasJenis === "DIJUAL_SUDAH_DIBAYAR" ? lepasAkunPenerima.trim() || null : null,
           noTransaksi: lepasNo.trim() || null,
+          alasanPelepasan:
+            lepasJenis === "DILEPAS_TANPA_PENJUALAN" ? lepasAlasan.trim() || null : null,
           keterangan: lepasKet.trim() || null,
         }),
       });
@@ -416,6 +428,48 @@ export function AsetContent({
       setLepasMsg(err instanceof Error ? err.message : "Gagal mencatat pelepasan");
     } finally {
       setLepasSaving(false);
+    }
+  };
+
+  const openKonfirmasi = (r: AsetRow) => {
+    setKonfirmasiId(r.id);
+    setKonfirmasiTanggal(todayInput());
+    setKonfirmasiAkunPenerima("");
+    setKonfirmasiNo("");
+    setKonfirmasiKet("");
+    setKonfirmasiMsg("");
+    setKonfirmasiOpen(true);
+  };
+
+  const saveKonfirmasi = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!konfirmasiId) return;
+    if (!konfirmasiAkunPenerima) {
+      setKonfirmasiMsg("Pilih akun penerima Kas/Bank/Tabungan");
+      return;
+    }
+    setKonfirmasiSaving(true);
+    setKonfirmasiMsg("");
+    try {
+      const res = await fetch(`/api/aset/${encodeURIComponent(konfirmasiId)}/konfirmasi-pembayaran`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tanggalPembayaran: konfirmasiTanggal || null,
+          akunPenerima: konfirmasiAkunPenerima.trim(),
+          noTransaksi: konfirmasiNo.trim() || null,
+          keterangan: konfirmasiKet.trim() || null,
+        }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(fieldError(result, "Gagal konfirmasi pembayaran"));
+      setKonfirmasiOpen(false);
+      setTab("LEPAS");
+      router.refresh();
+    } catch (err) {
+      setKonfirmasiMsg(err instanceof Error ? err.message : "Gagal konfirmasi pembayaran");
+    } finally {
+      setKonfirmasiSaving(false);
     }
   };
 
@@ -501,7 +555,6 @@ export function AsetContent({
                 <div className="flex flex-wrap gap-2">
                   {tab === "TERTUNDA" && <Button variant="outline" size="sm" className="flex-1 rounded-full h-9 cursor-pointer" disabled={saving} onClick={() => aktifkan(r.id)}><Check className="h-3.5 w-3.5" /> Aktifkan</Button>}
                   {tab === "AKTIF" && <Button variant="outline" size="sm" className="flex-1 rounded-full h-9 cursor-pointer" onClick={() => openLepas(r)}><TrendingDown className="h-3.5 w-3.5" /> Jual/Lepas</Button>}
-                  {tab === "LEPAS" && <Button variant="outline" size="sm" className="flex-1 rounded-full h-9 cursor-pointer" disabled={saving} onClick={() => batalLepas(r.id)}><Undo2 className="h-3.5 w-3.5" /> Kembalikan</Button>}
                   {(tab === "TERTUNDA" || tab === "AKTIF") && <Button variant="outline" size="sm" className="flex-1 rounded-full h-9 cursor-pointer" onClick={() => openEdit(r)}><Pencil className="h-3.5 w-3.5" /> Edit</Button>}
                 </div>
               </div>
@@ -557,17 +610,42 @@ export function AsetContent({
               </Table></div>
             )}
             {tab === "LEPAS" && (
-              <div className="min-w-[860px]"><Table>
+              <div className="min-w-[1000px]"><Table>
                 <TableHeader><TableRow>
-                  <TableHead>Tanggal</TableHead><TableHead>Detail Aset</TableHead><TableHead>No. Transaksi</TableHead>
-                  <TableHead className="text-right">Harga Jual</TableHead><TableHead className="text-right">Untung/Rugi</TableHead><TableHead className="text-right">Aksi</TableHead>
+                  <TableHead>Tanggal</TableHead><TableHead>Detail Aset</TableHead><TableHead>Jenis</TableHead>
+                  <TableHead className="text-right">Harga Jual</TableHead><TableHead className="text-right">Untung/Rugi</TableHead><TableHead className="text-right">Status</TableHead><TableHead className="text-right">Aksi</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
-                  {filtered.length === 0 ? <TableRow><TableCell colSpan={6} className="py-8"><AsetEmpty tab={tab} /></TableCell></TableRow>
+                  {filtered.length === 0 ? <TableRow><TableCell colSpan={7} className="py-8"><AsetEmpty tab={tab} /></TableCell></TableRow>
                     : filtered.map((r) => (
                       <TableRow key={r.id}>
                         <TableCell className="text-sm whitespace-nowrap">{formatTanggal(r.tanggalLepas)}</TableCell>
-                        <TableCell><DetailAset r={r} /> <Badge variant="secondary" className="ml-1 text-[10px]">{r.caraLepas === "DIJUAL" ? "Dijual" : "Dilepas"}</Badge></TableCell>
+                        <TableCell><DetailAset r={r} /></TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          <Badge
+                            variant={
+                              r.caraLepas === "DIJUAL"
+                                ? r.statusPembayaran === "SUDAH_DIBAYAR"
+                                  ? "default"
+                                  : r.statusPembayaran === "BELUM_DIBAYAR"
+                                    ? "secondary"
+                                    : "outline"
+                                : "secondary"
+                            }
+                            className="text-[10px] px-2 py-1"
+                          >
+                            {r.caraLepas === "DIJUAL"
+                              ? r.statusPembayaran === "SUDAH_DIBAYAR"
+                                ? "Dijual – Sudah Dibayar"
+                                : r.statusPembayaran === "BELUM_DIBAYAR"
+                                  ? "Dijual – Belum Dibayar"
+                                  : "Dijual – Belum Dikonfirmasi"
+                              : "Dilepas Tanpa Penjualan"}
+                          </Badge>
+                          {r.akunPenerima && (
+                            <span className="ml-1 text-[10px] text-slate-500">({r.akunPenerima})</span>
+                          )}
+                        </TableCell>
                         <TableCell className="font-mono text-xs">{dash(r.noTransaksiLepas)}</TableCell>
                         <TableCell className="text-right text-sm whitespace-nowrap">{r.hargaJual == null ? "—" : `Rp ${formatRupiah(r.hargaJual)}`}</TableCell>
                         <TableCell className={`text-right text-sm font-semibold whitespace-nowrap ${r.untungRugi == null ? "" : r.untungRugi >= 0 ? "text-green-700" : "text-red-600"}`}>
@@ -575,7 +653,16 @@ export function AsetContent({
                         </TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="sm" className="h-8 cursor-pointer text-xs" disabled={saving} onClick={() => batalLepas(r.id)}><Undo2 className="h-3.5 w-3.5" /> Kembalikan</Button>
+                            {r.caraLepas === "DIJUAL" && r.statusPembayaran === "BELUM_DIBAYAR" && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 cursor-pointer text-xs bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+                                onClick={() => openKonfirmasi(r)}
+                              >
+                                Konfirmasi Pembayaran
+                              </Button>
+                            )}
                             <HapusButton id={r.id} />
                           </div>
                         </TableCell>
@@ -628,8 +715,8 @@ export function AsetContent({
                 <Field label="Nama aset" required className="sm:col-span-2">
                   <Input value={form.nama} onChange={(e) => setForm({ ...form, nama: e.target.value })} placeholder="Mesin perontok padi" maxLength={100} required />
                 </Field>
-                <Field label="Nomor aset" required>
-                  <Input value={form.id} onChange={(e) => setForm({ ...form, id: e.target.value.toUpperCase() })} placeholder="AST-006" maxLength={20} required />
+                <Field label="Nomor aset">
+                  <Input value="Otomatis (AST-...)" disabled className="bg-slate-50 font-mono text-slate-500" />
                 </Field>
                 <Field label="Akun aset tetap" required>
                   <Select value={form.akunAset} onChange={(e) => setForm({ ...form, akunAset: e.target.value })} required>
@@ -738,6 +825,9 @@ export function AsetContent({
                 <Field label="Tags" className="sm:col-span-2">
                   <Input value={editSusut.tags} onChange={(e) => setEditSusut({ ...editSusut, tags: e.target.value })} maxLength={200} />
                 </Field>
+                <Field label="Biaya akuisisi (Rp)" className="sm:col-span-2" required>
+                  <Input type="number" min="1000" step="any" value={editSusut.biaya} onChange={(e) => setEditSusut({ ...editSusut, biaya: e.target.value })} required />
+                </Field>
                 <Field label="Metode penyusutan" className="sm:col-span-2">
                   <Select value={editSusut.metode} onChange={(e) => setEditSusut({ ...editSusut, metode: e.target.value })}>
                     <option value="">Tidak diatur</option>
@@ -765,7 +855,7 @@ export function AsetContent({
                   <Input value={editSusut.akunAkumulasi} onChange={(e) => setEditSusut({ ...editSusut, akunAkumulasi: e.target.value })} placeholder="Belum ada akun di COA" maxLength={100} />
                 </Field>
               </div>
-              <p className="text-[11px] text-slate-400">Biaya, akun, dan tanggal akuisisi dikunci setelah jurnal tercatat.</p>
+              <p className="text-[11px] text-slate-400">Perubahan biaya ikut menyesuaikan jurnal akuisisi terkait. Akun dan tanggal akuisisi dikunci setelah jurnal tercatat.</p>
               {message && <p className="text-sm text-red-600">{message}</p>}
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Batal</Button>
@@ -781,33 +871,181 @@ export function AsetContent({
         <DialogContent onClose={() => setLepasOpen(false)} className="max-w-md">
           <DialogHeader>
             <DialogTitle>Jual / Lepas Aset</DialogTitle>
-            <DialogDescription>{lepasRow ? `${lepasRow.namaAset} (${lepasRow.id}) · Nilai buku Rp ${formatRupiah(lepasRow.nilaiBuku)}` : ""} — pencatatan saja, tanpa Kas otomatis.</DialogDescription>
+            <DialogDescription>{lepasRow ? `${lepasRow.namaAset} (${lepasRow.id}) · Nilai buku Rp ${formatRupiah(lepasRow.nilaiBuku)}` : ""}</DialogDescription>
           </DialogHeader>
           <form onSubmit={saveLepas} className="grid gap-4">
-            <Field label="Cara" required>
-              <Select value={lepasCara} onChange={(e) => setLepasCara(e.target.value as "DIJUAL" | "DILEPAS")}>
-                <option value="DIJUAL">Dijual</option>
-                <option value="DILEPAS">Dilepas (hibah/hilang/rusak total)</option>
-              </Select>
+            <Field label="Jenis pelepasan" required>
+              <div className="grid gap-2">
+                <label className="flex items-center gap-2 cursor-pointer p-2 rounded border border-slate-200 hover:bg-slate-50">
+                  <input
+                    type="radio"
+                    name="lepasJenis"
+                    value="DIJUAL_SUDAH_DIBAYAR"
+                    checked={lepasJenis === "DIJUAL_SUDAH_DIBAYAR"}
+                    onChange={() => setLepasJenis("DIJUAL_SUDAH_DIBAYAR")}
+                    className="h-4 w-4 shrink-0 text-emerald-600"
+                  />
+                  <span className="text-sm font-medium">Dijual – Sudah Dibayar</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer p-2 rounded border border-slate-200 hover:bg-slate-50">
+                  <input
+                    type="radio"
+                    name="lepasJenis"
+                    value="DIJUAL_BELUM_DIBAYAR"
+                    checked={lepasJenis === "DIJUAL_BELUM_DIBAYAR"}
+                    onChange={() => setLepasJenis("DIJUAL_BELUM_DIBAYAR")}
+                    className="h-4 w-4 shrink-0 text-amber-600"
+                  />
+                  <span className="text-sm font-medium">Dijual – Belum Dibayar</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer p-2 rounded border border-slate-200 hover:bg-slate-50">
+                  <input
+                    type="radio"
+                    name="lepasJenis"
+                    value="DILEPAS_TANPA_PENJUALAN"
+                    checked={lepasJenis === "DILEPAS_TANPA_PENJUALAN"}
+                    onChange={() => setLepasJenis("DILEPAS_TANPA_PENJUALAN")}
+                    className="h-4 w-4 shrink-0 text-slate-600"
+                  />
+                  <span className="text-sm font-medium">Dilepas Tanpa Penjualan</span>
+                </label>
+              </div>
             </Field>
+
             <Field label="Tanggal" required>
               <Input type="date" value={lepasTanggal} onChange={(e) => setLepasTanggal(e.target.value)} required />
             </Field>
-            {lepasCara === "DIJUAL" && (
-              <Field label="Harga jual (Rp)" required>
-                <Input type="number" min="1" step="any" value={lepasHarga} onChange={(e) => setLepasHarga(e.target.value)} required />
-              </Field>
+
+            {(lepasJenis === "DIJUAL_SUDAH_DIBAYAR" || lepasJenis === "DIJUAL_BELUM_DIBAYAR") && (
+              <>
+                <Field label="Harga jual (Rp)" required>
+                  <Input
+                    type="number"
+                    min="1"
+                    step="any"
+                    value={lepasHarga}
+                    onChange={(e) => setLepasHarga(e.target.value)}
+                    required
+                  />
+                </Field>
+                {lepasJenis === "DIJUAL_SUDAH_DIBAYAR" && (
+                  <>
+                    <Field label="Akun penerima (Kas/Bank/Tabungan)" required>
+                      <Select
+                        value={lepasAkunPenerima}
+                        onChange={(e) => setLepasAkunPenerima(e.target.value)}
+                        required
+                      >
+                        <option value="">Pilih akun penerima</option>
+                        {akunKredit
+                          .filter((a) => ["1101", "1103", "1104"].includes(a.kode) || a.kelompok === "Kewajiban")
+                          .map((a) => (
+                            <option key={a.kode} value={a.kode}>
+                              {a.kode} - {a.nama}
+                            </option>
+                          ))}
+                      </Select>
+                    </Field>
+                    <Field label="No. transaksi">
+                      <Input
+                        value={lepasNo}
+                        onChange={(e) => setLepasNo(e.target.value)}
+                        placeholder="Opsional"
+                        maxLength={50}
+                      />
+                    </Field>
+                  </>
+                )}
+                {lepasJenis === "DIJUAL_BELUM_DIBAYAR" && (
+                  <>
+                    <Field label="No. transaksi">
+                      <Input
+                        value={lepasNo}
+                        onChange={(e) => setLepasNo(e.target.value)}
+                        placeholder="Opsional (nomor piutang)"
+                        maxLength={50}
+                      />
+                    </Field>
+                  </>
+                )}
+                <Field label="Keterangan">
+                  <Input value={lepasKet} onChange={(e) => setLepasKet(e.target.value)} placeholder="Opsional" maxLength={1000} />
+                </Field>
+              </>
             )}
-            <Field label="No. transaksi">
-              <Input value={lepasNo} onChange={(e) => setLepasNo(e.target.value)} placeholder="Opsional" maxLength={50} />
-            </Field>
-            <Field label="Keterangan">
-              <Input value={lepasKet} onChange={(e) => setLepasKet(e.target.value)} placeholder="Opsional" maxLength={1000} />
-            </Field>
+
+            {lepasJenis === "DILEPAS_TANPA_PENJUALAN" && (
+              <>
+                <Field label="Alasan pelepasan" required>
+                  <Input
+                    value={lepasAlasan}
+                    onChange={(e) => setLepasAlasan(e.target.value)}
+                    placeholder="Contoh: rusak total, hilang, hibah"
+                    required
+                    maxLength={1000}
+                  />
+                </Field>
+                <Field label="Keterangan">
+                  <Input value={lepasKet} onChange={(e) => setLepasKet(e.target.value)} placeholder="Opsional" maxLength={1000} />
+                </Field>
+              </>
+            )}
+
             {lepasMsg && <p className="text-sm text-red-600">{lepasMsg}</p>}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setLepasOpen(false)}>Batal</Button>
-              <Button type="submit" disabled={lepasSaving}>{lepasSaving ? "Menyimpan..." : "Catat Pelepasan"}</Button>
+              <Button type="submit" disabled={lepasSaving}>
+                {lepasSaving ? "Menyimpan..." : "Catat Pelepasan"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog konfirmasi pembayaran */}
+      <Dialog open={konfirmasiOpen} onOpenChange={(v) => { setKonfirmasiOpen(v); if (!v) setKonfirmasiMsg(""); }}>
+        <DialogContent onClose={() => setKonfirmasiOpen(false)} className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Konfirmasi Pembayaran</DialogTitle>
+            <DialogDescription>{konfirmasiId ? `Konfirmasi penerimaan pembayaran untuk aset ${data.find((r) => r.id === konfirmasiId)?.namaAset ?? ""}` : ""}</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={saveKonfirmasi} className="grid gap-4">
+            <Field label="Tanggal pembayaran" required>
+              <Input type="date" value={konfirmasiTanggal} onChange={(e) => setKonfirmasiTanggal(e.target.value)} required />
+            </Field>
+            <Field label="Akun penerima (Kas/Bank/Tabungan)" required>
+              <Select
+                value={konfirmasiAkunPenerima}
+                onChange={(e) => setKonfirmasiAkunPenerima(e.target.value)}
+                required
+              >
+                <option value="">Pilih akun penerima</option>
+                {akunKredit
+                  .filter((a) => ["1101", "1103", "1104"].includes(a.kode) || a.kelompok === "Kewajiban")
+                  .map((a) => (
+                    <option key={a.kode} value={a.kode}>
+                      {a.kode} - {a.nama}
+                    </option>
+                  ))}
+              </Select>
+            </Field>
+            <Field label="No. transaksi">
+              <Input
+                value={konfirmasiNo}
+                onChange={(e) => setKonfirmasiNo(e.target.value)}
+                placeholder="Opsional"
+                maxLength={50}
+              />
+            </Field>
+            <Field label="Keterangan">
+              <Input value={konfirmasiKet} onChange={(e) => setKonfirmasiKet(e.target.value)} placeholder="Opsional" maxLength={1000} />
+            </Field>
+            {konfirmasiMsg && <p className="text-sm text-red-600">{konfirmasiMsg}</p>}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setKonfirmasiOpen(false)}>Batal</Button>
+              <Button type="submit" disabled={konfirmasiSaving}>
+                {konfirmasiSaving ? "Menyimpan..." : "Konfirmasi Lunas"}
+              </Button>
             </div>
           </form>
         </DialogContent>

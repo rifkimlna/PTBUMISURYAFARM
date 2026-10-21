@@ -4,8 +4,8 @@ export const TipeDokumenEnum = z.enum(["PENAWARAN", "PESANAN", "PROFORMA", "TUKA
 export type TipeDokumen = z.infer<typeof TipeDokumenEnum>;
 
 // Jenis penjualan → akun pendapatan otomatis (COA PT BST):
-// HASIL_KEBUN → 4101, TERNAK → 4102, IKAN → 4103, LAINNYA → 4104.
-export const JenisPenjualanEnum = z.enum(["HASIL_KEBUN", "TERNAK", "IKAN", "LAINNYA"]);
+// HASIL_KEBUN → 4101, TERNAK → 4102, LAINNYA → 4104.
+export const JenisPenjualanEnum = z.enum(["HASIL_KEBUN", "TERNAK", "LAINNYA"]);
 export type JenisPenjualan = z.infer<typeof JenisPenjualanEnum>;
 
 export const createPelangganSchema = z.object({
@@ -65,6 +65,9 @@ export const createDokumenSchema = baseDokumenSchema.superRefine((data, ctx) => 
     if (data.referensiIds.length === 0) {
       ctx.addIssue({ code: "custom", message: "Pilih minimal 1 faktur/penagihan yang akan ditukar", path: ["referensiIds"] });
     }
+    if (!data.syaratPembayaran?.trim()) {
+      ctx.addIssue({ code: "custom", message: "Syarat pembayaran wajib dipilih", path: ["syaratPembayaran"] });
+    }
   } else if (data.items.length === 0) {
     ctx.addIssue({ code: "custom", message: "Tambahkan minimal 1 baris produk", path: ["items"] });
   }
@@ -93,7 +96,7 @@ export const updatePenagihanSchema = z
       return new Date(y, m - 1, d);
     }),
     noInvoice: z.string().trim().max(50, "No invoice maksimal 50 karakter").optional().nullable(),
-    jenis: z.enum(["HASIL_KEBUN", "TERNAK", "IKAN", "LAINNYA"]).optional().nullable(),
+    jenis: z.enum(["HASIL_KEBUN", "TERNAK", "LAINNYA"]).optional().nullable(),
     dokumen: z.enum(["PENAGIHAN", "PROFORMA", "TUKAR_FAKTUR"]).optional().nullable(),
     jumlah: z
       .number({ message: "Total harus angka" })

@@ -174,7 +174,7 @@ export async function getArusKasSnapshot(
   const sebelum = { lt: start };
   const num = (v: unknown) => Math.round(Number(v ?? 0));
 
-  const [arus, awalSumber, awalTujuan, akhirSumber, akhirTujuan, asetKasIds, akunDb] =
+  const [arus, awalSumber, awalTujuan, akhirSumber, akhirTujuan, asetKasIds, asetJualIds, akunDb] =
     await Promise.all([
       prisma.transaksiKas.findMany({
         where: { tanggal: dalam },
@@ -193,6 +193,7 @@ export async function getArusKasSnapshot(
         _sum: { jumlah: true },
       }),
       prisma.aset.findMany({ where: { transaksiKasId: { not: null } }, select: { transaksiKasId: true } }),
+      prisma.aset.findMany({ where: { transaksiKasJualId: { not: null } }, select: { transaksiKasJualId: true } }),
       prisma.akunCOA.findMany({ where: { isActive: true }, select: { kode: true, nama: true } }),
     ]);
 
@@ -205,7 +206,10 @@ export async function getArusKasSnapshot(
     kodeAkunByNama(tipe, kategori) ||
     kodeByNama.get(kategori.trim().toLowerCase()) ||
     "(tanpa kode)";
+  // Resolve kode sistem dari NAMA akun (tahan terhadap penomoran ulang COA).
+  const KODE_LUNAS_HUTANG = kodeByNama.get("pelunasan hutang usaha") ?? "5501";
   const asetKas = new Set(asetKasIds.map((a) => a.transaksiKasId));
+  const asetJual = new Set(asetJualIds.map((a) => a.transaksiKasJualId).filter(Boolean));
   const catatan: string[] = [];
 
   const op = new Map<string, { nama: string; masuk: number; keluar: number }>();
@@ -231,7 +235,7 @@ export async function getArusKasSnapshot(
     if (t.tipe === "PEMASUKAN") {
       const kode = kodeOf(t.kodeAkun, "PEMASUKAN", t.kategori);
       if (/^31/.test(kode)) tambah(keu, kode, namaAkun(kode), nilai, 0); // setoran modal
-      else if (/^12/.test(kode)) tambah(inv, kode, namaAkun(kode), nilai, 0); // hasil penjualan aset
+      else if (/^12/.test(kode) || asetJual.has(t.id)) tambah(inv, kode, namaAkun(kode), nilai, 0); // hasil penjualan aset
       else tambah(op, kode, kode.startsWith("(") ? t.kategori : namaAkun(kode), nilai, 0);
     } else {
       const kode = kodeOf(t.kodeAkun, "PENGELUARAN", t.kategori);
@@ -240,8 +244,8 @@ export async function getArusKasSnapshot(
       } else if (asetKas.has(t.id) || /^12/.test(kode)) {
         const kunci = /^12/.test(kode) ? kode : "ASET";
         tambah(inv, kunci, /^12/.test(kode) ? namaAkun(kode) : t.kategori, 0, nilai);
-      } else if (t.tagihanId || kode === "5501") {
-        tambah(keu, "5501", namaAkun("5501"), 0, nilai); // pelunasan utang
+      } else if (t.tagihanId || kode === KODE_LUNAS_HUTANG) {
+        tambah(keu, KODE_LUNAS_HUTANG, namaAkun(KODE_LUNAS_HUTANG), 0, nilai); // pelunasan utang
       } else {
         tambah(op, kode, kode.startsWith("(") ? t.kategori : namaAkun(kode), 0, nilai);
       }

@@ -2,7 +2,8 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuthAndRole, getSessionFromRequest } from "@/lib/auth";
 import { createPembelianSchema } from "@/lib/validations/persediaanValidation";
-import { getKodeAkunPersediaan, getKodeAkunSumberDana, validateKategoriHasCOAMapping } from "@/lib/persediaan-coa-mapping";
+import { getCOAMappingByKategori, getKodeAkunPersediaan, getKodeAkunSumberDana, getNamaAkunSumberDana, validateKategoriHasCOAMapping } from "@/lib/persediaan-coa-mapping";
+import { getKodeAkunByNamaFromDB } from "@/lib/coa-server";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 import { ZodError } from "zod";
 
@@ -36,15 +37,23 @@ export async function POST(req: NextRequest, { params }: Params) {
       return errorResponse(validation.error || "Kategori tidak memiliki mapping COA", 400);
     }
 
-    // Ambil kode akun COA - gunakan dari barang jika ada, fallback ke mapping
+    // Ambil kode akun COA - gunakan dari barang jika ada, lalu database
+    // (tahan penomoran ulang), fallback ke mapping statis.
     const kategoriPersediaan = barang.kategori as "Bibit/Benih" | "Pupuk & Obat-obatan" | "Pakan Ternak/Ikan";
-    const kodeAkunPersediaan = barang.kodeAkunCOA ?? getKodeAkunPersediaan(kategoriPersediaan);
+    const mapping = getCOAMappingByKategori(kategoriPersediaan);
+    const kodeAkunPersediaan =
+      barang.kodeAkunCOA ??
+      (mapping ? await getKodeAkunByNamaFromDB(mapping.namaAkunPersediaan) : null) ??
+      getKodeAkunPersediaan(kategoriPersediaan);
     if (!kodeAkunPersediaan) {
       return errorResponse(`Tidak dapat menentukan kode akun COA untuk kategori "${barang.kategori}"`, 400);
     }
 
-    // Ambil kode akun sumber dana
-    const kodeAkunSumberDana = getKodeAkunSumberDana(kategoriPersediaan, parsed.sumberDana);
+    // Ambil kode akun sumber dana (database dulu, lalu statis).
+    const namaSumberDana = mapping ? getNamaAkunSumberDana(kategoriPersediaan, parsed.sumberDana) : null;
+    const kodeAkunSumberDana =
+      (namaSumberDana ? await getKodeAkunByNamaFromDB(namaSumberDana) : null) ??
+      getKodeAkunSumberDana(kategoriPersediaan, parsed.sumberDana);
     if (!kodeAkunSumberDana) {
       return errorResponse(`Tidak dapat menentukan kode akun sumber dana untuk ${parsed.sumberDana}`, 400);
     }

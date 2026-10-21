@@ -23,13 +23,12 @@ type Lampiran = { fileName: string; fileUrl: string; fileType: string; fileSize:
 export const SYARAT_OPTIONS = ["Tunai", "Tempo 7 hari", "Tempo 14 hari", "Tempo 30 hari"];
 
 // Jenis penjualan → akun pendapatan otomatis (COA PT BST):
-// HASIL_KEBUN → 4101, TERNAK → 4102, IKAN → 4103, LAINNYA → 4104.
-export type JenisPenjualan = "HASIL_KEBUN" | "TERNAK" | "IKAN" | "LAINNYA";
+// HASIL_KEBUN → 4101, TERNAK → 4102, LAINNYA → 4104.
+export type JenisPenjualan = "HASIL_KEBUN" | "TERNAK" | "LAINNYA";
 
 const AKUN_PENDAPATAN_BY_JENIS: Record<JenisPenjualan, string> = {
   HASIL_KEBUN: "4101",
   TERNAK: "4102",
-  IKAN: "4103",
   LAINNYA: "4104",
 };
 
@@ -514,6 +513,8 @@ function DocShell({
   onSubmit,
   onCancel,
   children,
+  submitDisabled,
+  submitTitle,
 }: {
   title: string;
   subtitle: string;
@@ -524,6 +525,8 @@ function DocShell({
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
   onCancel: () => void;
   children: ReactNode;
+  submitDisabled?: boolean;
+  submitTitle?: string;
 }) {
   return (
     <form onSubmit={onSubmit}>
@@ -546,7 +549,7 @@ function DocShell({
         <Button type="button" variant="outline" onClick={onCancel} disabled={saving}>
           Batal
         </Button>
-        <Button type="submit" disabled={saving}>
+        <Button type="submit" disabled={saving || submitDisabled} title={submitTitle}>
           {saving ? "Menyimpan..." : "Simpan"}
         </Button>
       </div>
@@ -1013,61 +1016,87 @@ export function TukarFakturForm({ initial }: { initial?: DocInitial | null }) {
   const [memo, setMemo] = useState(initial?.header.memo ?? "");
   const [lampiran, setLampiran] = useState<LampiranItem[]>(initial?.lampiran ?? []);
   const [hapusLampiranIds, setHapusLampiranIds] = useState<string[]>([]);
-  const [cari, setCari] = useState(initial?.pelangganNama ?? "");
+  // Kata kunci dropdown faktur (nomor / pelanggan / keterangan) — independen dari PelangganField.
+  const [cari, setCari] = useState("");
   const [daftar, setDaftar] = useState<FakturTersedia[]>([]);
-  const [memuat, setMemuat] = useState(() => Boolean(initial?.referensiIds.length));
+  const [memuat, setMemuat] = useState(true);
   const [dipilih, setDipilih] = useState<string[]>(initial?.referensiIds ?? []);
+  const [dropdownBuka, setDropdownBuka] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  // Mode edit: tampilkan faktur yang sudah dirujuk (bisa jadi sudah lunas / tak lagi tersedia).
+  // Mode edit: tampilkan faktur yang sudah dirujuk (bisa jadi sudah lunas / tak lagi tersedia),
+  // lalu gabungkan dengan daftar piutang tersedia agar dropdown tetap lengkap.
   useEffect(() => {
-    if (!initial?.referensiIds.length) return;
     let cancelled = false;
-    Promise.all(
-      (initial?.referensiIds ?? []).map((id) =>
-        fetch(`/api/tagihan/${encodeURIComponent(id)}`, { credentials: "include" })
-          .then((res) => (res.ok ? res.json() : null))
-          .then((result) => (result?.success ? result.data : null))
-          .catch(() => null)
-      )
-    )
-      .then((rows) => {
+    const muatAwal = async () => {
+      setMemuat(true);
+      try {
+        const [rujukan, tersedia] = await Promise.all([
+          initial?.referensiIds.length
+            ? Promise.all(
+                (initial?.referensiIds ?? []).map((id) =>
+                  fetch(`/api/tagihan/${encodeURIComponent(id)}`, { credentials: "include" })
+                    .then((res) => (res.ok ? res.json() : null))
+                    .then((result) => (result?.success ? result.data : null))
+                    .catch(() => null)
+                )
+              )
+            : Promise.resolve([]),
+          fetch("/api/penjualan/piutang-tersedia?q=", { credentials: "include" })
+            .then((res) => res.json().catch(() => null))
+            .then((result) => (result?.success && Array.isArray(result.data) ? result.data : []))
+            .catch(() => []),
+        ]);
         if (cancelled) return;
-        setDaftar(
-          rows.filter(Boolean).map(
-            (r: {
-              id: string;
-              pihak: string;
-              keterangan: string | null;
-              tanggal: string;
-              jatuhTempo: string | null;
-              status: string;
-              jumlah: number;
-              sisa: number;
-            }) => ({
-              id: r.id,
-              noInvoice: null,
-              pihak: r.pihak,
-              keterangan: r.keterangan,
-              tanggal: r.tanggal,
-              jatuhTempo: r.jatuhTempo,
-              status: r.status,
-              jumlah: Number(r.jumlah),
-              sisa: Number(r.sisa),
-            })
-          )
-        );
-      })
-      .catch(() => {})
-      .finally(() => {
+        const map = new Map<string, FakturTersedia>();
+        for (const r of (rujukan as Array<{
+          id: string;
+          pihak: string;
+          keterangan: string | null;
+          tanggal: string;
+          jatuhTempo: string | null;
+          status: string;
+          jumlah: number;
+          sisa: number;
+        }>).filter(Boolean)) {
+          map.set(r.id, {
+            id: r.id,
+            noInvoice: null,
+            pihak: r.pihak,
+            keterangan: r.keterangan,
+            tanggal: r.tanggal,
+            jatuhTempo: r.jatuhTempo,
+            status: r.status,
+            jumlah: Number(r.jumlah),
+            sisa: Number(r.sisa),
+          });
+        }
+        for (const d of tersedia as FakturTersedia[]) {
+          if (!map.has(d.id)) map.set(d.id, d);
+        }
+        setDaftar(Array.from(map.values()));
+      } finally {
         if (!cancelled) setMemuat(false);
-      });
+      }
+    };
+    muatAwal();
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Tutup dropdown saat klik di luar.
+  useEffect(() => {
+    if (!dropdownBuka) return;
+    const tutup = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setDropdownBuka(false);
+    };
+    document.addEventListener("mousedown", tutup);
+    return () => document.removeEventListener("mousedown", tutup);
+  }, [dropdownBuka]);
 
   const muatFaktur = async (keyword: string) => {
     setMemuat(true);
@@ -1076,24 +1105,42 @@ export function TukarFakturForm({ initial }: { initial?: DocInitial | null }) {
         credentials: "include",
       });
       const result = await res.json().catch(() => null);
-      if (result?.success && Array.isArray(result.data)) setDaftar(result.data);
-      else setDaftar([]);
+      const tersedia: FakturTersedia[] =
+        result?.success && Array.isArray(result.data) ? result.data : [];
+      // Pertahankan baris yang sudah dipilih (mis. mode edit) agar tidak hilang saat pencarian.
+      setDaftar((cur) => {
+        const map = new Map(tersedia.map((d) => [d.id, d]));
+        for (const d of cur) {
+          if (dipilih.includes(d.id) && !map.has(d.id)) map.set(d.id, d);
+        }
+        return Array.from(map.values());
+      });
     } catch {
-      setDaftar([]);
+      // Biarkan daftar lama (terutama yang sudah dipilih) tetap tampil.
     } finally {
       setMemuat(false);
     }
   };
 
+  // Pilihan pelanggan hanya mengisi header — TIDAK memicu muat ulang / reset faktur,
+  // agar faktur bisa dipilih dulu tanpa wajib cari pelanggan.
   const pilihPelanggan = (id: string, nama: string, pemail: string, palamat: string) => {
     setPelangganId(id);
     setPelangganNama(nama);
     setEmail(pemail);
     setAlamat(palamat);
-    setDipilih([]);
-    setCari(nama);
-    muatFaktur(nama);
   };
+
+  // Filter lokal agar pencarian nomor faktur / nama / keterangan terasa instan.
+  const kataKunci = cari.trim().toLowerCase();
+  const daftarTampil = kataKunci
+    ? daftar.filter((d) =>
+        [d.noInvoice ?? "", d.pihak, d.keterangan ?? "", d.status]
+          .join(" ")
+          .toLowerCase()
+          .includes(kataKunci)
+      )
+    : daftar;
 
   const toggle = (id: string) =>
     setDipilih((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
@@ -1115,13 +1162,14 @@ export function TukarFakturForm({ initial }: { initial?: DocInitial | null }) {
     setError("");
     try {
       if (!pelangganId) throw new Error("Pelanggan wajib dipilih");
+      if (!syarat.trim()) throw new Error("Syarat pembayaran wajib dipilih");
       if (dipilih.length === 0) throw new Error("Pilih minimal 1 faktur/penagihan yang akan ditukar");
       const payload = {
         email: email.trim() || undefined,
         alamat: alamat.trim() || undefined,
         tanggal: tanggal || undefined,
         jatuhTempo: jatuhTempo || undefined,
-        syaratPembayaran: syarat.trim() || undefined,
+        syaratPembayaran: syarat.trim(),
         pesan: pesan.trim() || undefined,
         memo: memo.trim() || undefined,
         items: [],
@@ -1150,6 +1198,8 @@ export function TukarFakturForm({ initial }: { initial?: DocInitial | null }) {
     }
   };
 
+  const syaratKosong = !syarat.trim();
+
   return (
     <DocShell
       title={isEdit ? "Ubah Tukar Faktur" : "Tukar Faktur"}
@@ -1160,6 +1210,8 @@ export function TukarFakturForm({ initial }: { initial?: DocInitial | null }) {
       noPrefix="TF"
       onSubmit={submit}
       onCancel={() => router.push("/keuangan/penjualan?tab=penagihan")}
+      submitDisabled={syaratKosong}
+      submitTitle={syaratKosong ? "Pilih syarat pembayaran terlebih dahulu" : undefined}
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
@@ -1202,13 +1254,13 @@ export function TukarFakturForm({ initial }: { initial?: DocInitial | null }) {
         <Field label="Tanggal jatuh tempo">
           <Input type="date" value={jatuhTempo} onChange={(e) => setJatuhTempo(e.target.value)} />
         </Field>
-        <Field label="Syarat pembayaran" className="sm:col-span-2">
+        <Field label="Syarat pembayaran *" className="sm:col-span-2">
           <Select value={syarat} onChange={(e) => {
             const s = e.target.value;
             setSyarat(s);
             const jt = jatuhTempoDari(tanggal, s);
             if (jt) setJatuhTempo(jt);
-          }}>
+          }} required>
             <option value="">Pilih syarat</option>
             {SYARAT_OPTIONS.map((s) => (
               <option key={s} value={s}>
@@ -1216,69 +1268,129 @@ export function TukarFakturForm({ initial }: { initial?: DocInitial | null }) {
               </option>
             ))}
           </Select>
+          {syaratKosong && (
+            <p className="text-[11px] text-red-600">Syarat pembayaran wajib dipilih sebelum menyimpan.</p>
+          )}
         </Field>
       </div>
 
       <div className="rounded-xl border border-slate-200">
-        <div className="flex flex-col gap-2 border-b border-slate-100 p-4 sm:flex-row sm:items-center">
+        <div className="border-b border-slate-100 p-4">
           <p className="text-xs font-medium text-slate-500">
             Pilih faktur/penagihan yang akan ditukar
             {pelangganNama ? ` — ${pelangganNama}` : ""}
           </p>
-          <div className="flex gap-2 sm:ml-auto">
-            <Input
-              value={cari}
-              onChange={(e) => setCari(e.target.value)}
-              placeholder="Cari pelanggan..."
-              className="sm:max-w-56"
-            />
-            <Button type="button" variant="outline" size="sm" onClick={() => muatFaktur(cari)}>
-              Cari
-            </Button>
+          {/* Dropdown searchable ala Mekari: langsung berisi faktur tersedia (nomor, tempo, status). */}
+          <div ref={dropdownRef} className="relative mt-2">
+            <button
+              type="button"
+              onClick={() => setDropdownBuka((v) => !v)}
+              className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-sm hover:bg-slate-50"
+            >
+              <span className={dipilih.length ? "text-slate-900" : "text-slate-400"}>
+                {dipilih.length ? `${dipilih.length} faktur dipilih` : "Pilih faktur..."}
+              </span>
+              <span className="text-xs text-slate-400">{dropdownBuka ? "▲" : "▼"}</span>
+            </button>
+            {dropdownBuka && (
+              <div className="absolute z-20 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg">
+                <div className="flex gap-2 border-b border-slate-100 p-2">
+                  <Input
+                    value={cari}
+                    onChange={(e) => setCari(e.target.value)}
+                    placeholder="Cari nomor faktur / pelanggan..."
+                    className="flex-1"
+                    autoFocus
+                  />
+                  <Button type="button" variant="outline" size="sm" onClick={() => muatFaktur(cari)}>
+                    Cari
+                  </Button>
+                </div>
+                <div className="max-h-72 overflow-y-auto p-2">
+                  {memuat && <p className="py-4 text-center text-xs text-slate-400">Memuat faktur...</p>}
+                  {!memuat && daftarTampil.length === 0 && (
+                    <p className="py-4 text-center text-xs text-slate-400">Tidak ada piutang yang tersedia</p>
+                  )}
+                  {daftarTampil.map((d) => {
+                    const checked = dipilih.includes(d.id);
+                    return (
+                      <label
+                        key={d.id}
+                        className={`flex cursor-pointer items-start gap-3 rounded-lg border p-2.5 transition-colors ${
+                          checked ? "border-green-600 bg-green-50/50" : "border-transparent hover:bg-slate-50"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggle(d.id)}
+                          className="mt-1 h-4 w-4 accent-green-700"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-medium text-slate-900">
+                            {d.noInvoice ?? `…${d.id.slice(-6).toUpperCase()}`} — {d.pihak}
+                          </span>
+                          <span className="block truncate text-xs text-slate-500">
+                            Tempo:{" "}
+                            {d.jatuhTempo
+                              ? new Date(d.jatuhTempo).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })
+                              : "—"}{" "}
+                            · {d.status === "LUNAS_SEBAGIAN" ? "Lunas Sebagian" : "Belum Lunas"}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
-        <div className="max-h-80 space-y-2 overflow-y-auto p-4">
-          {memuat && <p className="py-4 text-center text-xs text-slate-400">Memuat faktur...</p>}
-          {!memuat && daftar.length === 0 && (
-            <p className="py-4 text-center text-xs text-slate-400">
-              {!pelangganId && !cari
-                ? "Pilih pelanggan untuk menampilkan faktur yang tersedia"
-                : "Tidak ada piutang yang tersedia"}
-            </p>
+        {/* Tabel detail faktur terpilih: jumlah + sisa tagihan. */}
+        <div className="overflow-x-auto p-4">
+          {dipilih.length === 0 ? (
+            <p className="py-2 text-center text-xs text-slate-400">Belum ada faktur dipilih</p>
+          ) : (
+            <table className="w-full min-w-[560px] text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-100 text-slate-500">
+                  <th className="py-2 pr-2 font-medium">No. Faktur</th>
+                  <th className="py-2 pr-2 font-medium">Jatuh Tempo</th>
+                  <th className="py-2 pr-2 font-medium">Status</th>
+                  <th className="py-2 pr-2 text-right font-medium">Jumlah</th>
+                  <th className="py-2 pr-2 text-right font-medium">Sisa</th>
+                  <th className="py-2 font-medium" />
+                </tr>
+              </thead>
+              <tbody>
+                {daftar
+                  .filter((d) => dipilih.includes(d.id))
+                  .map((d) => (
+                    <tr key={d.id} className="border-b border-slate-50 last:border-0">
+                      <td className="py-2 pr-2 font-medium text-slate-900">
+                        {d.noInvoice ?? `…${d.id.slice(-6).toUpperCase()}`}
+                        <span className="block truncate font-normal text-slate-500">{d.pihak}</span>
+                      </td>
+                      <td className="py-2 pr-2 text-slate-600">
+                        {d.jatuhTempo
+                          ? new Date(d.jatuhTempo).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })
+                          : "—"}
+                      </td>
+                      <td className="py-2 pr-2 text-slate-600">
+                        {d.status === "LUNAS_SEBAGIAN" ? "Lunas Sebagian" : "Belum Lunas"}
+                      </td>
+                      <td className="py-2 pr-2 text-right tabular-nums text-slate-700">Rp {formatRupiah(d.jumlah)}</td>
+                      <td className="py-2 pr-2 text-right font-medium tabular-nums text-slate-900">Rp {formatRupiah(d.sisa)}</td>
+                      <td className="py-2 text-right">
+                        <Button type="button" variant="outline" size="sm" onClick={() => toggle(d.id)}>
+                          Hapus
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
           )}
-          {daftar.map((d) => {
-            const checked = dipilih.includes(d.id);
-            return (
-              <label
-                key={d.id}
-                className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${
-                  checked ? "border-green-600 bg-green-50/50" : "border-slate-200 hover:bg-slate-50"
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggle(d.id)}
-                  className="mt-1 h-4 w-4 accent-green-700"
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-slate-900">
-                    {d.noInvoice ?? `…${d.id.slice(-6).toUpperCase()}`} — {d.pihak}
-                  </span>
-                  <span className="block truncate text-xs text-slate-500">
-                    {d.keterangan || "Tanpa deskripsi"} · Tempo:{" "}
-                    {d.jatuhTempo
-                      ? new Date(d.jatuhTempo).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })
-                      : "—"}{" "}
-                    · {d.status === "LUNAS_SEBAGIAN" ? "Lunas Sebagian" : "Belum Lunas"}
-                  </span>
-                  <span className="mt-1 block text-xs text-slate-600">
-                    Tagihan Rp {formatRupiah(d.jumlah)} · Sisa Rp {formatRupiah(d.sisa)}
-                  </span>
-                </span>
-              </label>
-            );
-          })}
         </div>
         {dipilih.length > 0 && (
           <div className="border-t border-slate-100 px-4 py-2.5 text-xs text-slate-600">

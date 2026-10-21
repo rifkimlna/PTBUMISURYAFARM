@@ -5,9 +5,33 @@ import { requireAuthAndRole, getSessionFromRequest } from "@/lib/auth";
 import { kodeAkunByNama } from "@/lib/coa";
 import { getKodeAkunByNamaFromDB } from "@/lib/coa-server";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
+import { deleteBuktiFile } from "@/lib/storage";
+import {
+  hapusBiayaSumber,
+  hapusDokumenPenjualanSumber,
+  hapusFakturPembelianSumber,
+} from "@/lib/hapus-rantai";
 import { ZodError } from "zod";
 
 type Params = { params: Promise<{ id: string }> };
+
+// Input <input type="date"> mengirim "YYYY-MM-DD" tanpa zona waktu.
+// z.coerce.date() menafsirkannya sebagai tengah malam UTC sehingga
+// bisa mundur sehari saat disimpan/ditampilkan. Tafsirkan sebagai
+// tengah hari waktu server agar hari kalendernya stabil (WIB/UTC).
+function parseTanggalKalender(val: unknown) {
+  if (val === "" || val === undefined || val === null) return undefined;
+  if (typeof val === "string") {
+    const m = val.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0);
+  }
+  return val;
+}
+
+const tanggalKalenderSchema = z.preprocess(
+  parseTanggalKalender,
+  z.coerce.date({ message: "Tanggal tidak valid" })
+);
 
 const bayarTagihanSchema = z.object({
   jumlahBayar: z
@@ -16,7 +40,7 @@ const bayarTagihanSchema = z.object({
     .min(1000, "Nominal minimal Rp 1.000")
     .max(10_000_000_000, "Nominal terlalu besar"),
   sumberDana: z.enum(["KAS", "BANK", "TABUNGAN"]).default("KAS"),
-  tanggal: z.coerce.date({ message: "Tanggal tidak valid" }).optional(),
+  tanggal: tanggalKalenderSchema.optional(),
   keterangan: z.string().trim().max(1000, "Keterangan maksimal 1000 karakter").optional().nullable(),
 });
 
@@ -139,10 +163,10 @@ export async function PUT(req: NextRequest, { params }: Params) {
         data: {
           tipe: isHutang ? "PENGELUARAN" : "PEMASUKAN",
           kategori,
-          // Statis dulu, lalu DB agar tetap nyambung walau nama akun diubah/di-rename.
+          // Database dulu (tahan penomoran ulang COA), lalu statis agar tetap nyambung walau nama akun diubah/di-rename.
           kodeAkun:
-            kodeAkunByNama(tipeKas as any, kategori) ??
-            (await getKodeAkunByNamaFromDB(kategori, tipeKas as any)),
+            (await getKodeAkunByNamaFromDB(kategori, tipeKas as any)) ??
+            kodeAkunByNama(tipeKas as any, kategori),
           sumberDana: parsed.sumberDana,
           jumlah: parsed.jumlahBayar,
           keterangan:
@@ -176,7 +200,11 @@ export async function PUT(req: NextRequest, { params }: Params) {
   }
 }
 
-// DELETE /api/tagihan/[id] - hapus tagihan yang belum ada pembayarannya (SUPER_ADMIN, ADMIN_KEUANGAN)
+// DELETE /api/tagihan/[id] - hapus tagihan langsung dari halaman.
+// Aturan: diblokir bila sudah ada pembayaran. Bila tertaut dokumen sumber
+// (Dokumen Penjualan / Faktur Pembelian / Biaya), dokumen sumbernya ikut
+// terhapus dalam satu transaksi sehingga tidak ada yatim
+// (SUPER_ADMIN, ADMIN_KEUANGAN)
 export async function DELETE(req: NextRequest, { params }: Params) {
   const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_KEUANGAN"]);
   if (auth instanceof Response) return auth;
@@ -184,7 +212,15 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   const { id } = await params;
 
   try {
-    const tagihan = await prisma.tagihan.findUnique({ where: { id } });
+    const tagihan = await prisma.tagihan.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        dokumenPenjualan: { select: { id: true } },
+        fakturPembelian: { select: { id: true } },
+        biaya: { select: { id: true } },
+      },
+    });
     if (!tagihan) return errorResponse("Tagihan tidak ditemukan", 404);
 
     const pembayaranCount = await prisma.transaksiKas.count({ where: { tagihanId: id } });
@@ -192,9 +228,48 @@ export async function DELETE(req: NextRequest, { params }: Params) {
       return errorResponse("Tagihan yang sudah ada pembayarannya tidak bisa dihapus", 400);
     }
 
-    await prisma.tagihan.delete({ where: { id } });
-    return successResponse(null, "Tagihan dihapus");
+    const hasil = await prisma.$transaction(async (tx) => {
+      const ikut: string[] = [];
+      let hapusUrls: string[] = [];
+      // Helper sumber sudah menghapus tagihan ikutannya di dalam transaksi
+      // yang sama — tagihan manual tanpa sumber dihapus di akhir.
+      let tagihanTerhapus = false;
+      if (tagihan.dokumenPenjualan) {
+        const r = await hapusDokumenPenjualanSumber(tx, tagihan.dokumenPenjualan.id);
+        ikut.push(`Dokumen ${r.label}`);
+        hapusUrls = hapusUrls.concat(r.hapusUrls);
+        tagihanTerhapus = true;
+      }
+      if (tagihan.fakturPembelian) {
+        const r = await hapusFakturPembelianSumber(tx, tagihan.fakturPembelian.id);
+        ikut.push(`Faktur ${r.label}`);
+        hapusUrls = hapusUrls.concat(r.hapusUrls);
+        tagihanTerhapus = true;
+      }
+      if (tagihan.biaya) {
+        const r = await hapusBiayaSumber(tx, tagihan.biaya.id);
+        ikut.push(`Biaya ${r.label}`);
+        hapusUrls = hapusUrls.concat(r.hapusUrls);
+        tagihanTerhapus = true;
+      }
+      if (!tagihanTerhapus) {
+        await tx.tagihan.delete({ where: { id } });
+      }
+      return { ikut, hapusUrls };
+    });
+
+    for (const url of hasil.hapusUrls) {
+      await deleteBuktiFile(url);
+    }
+
+    return successResponse(
+      null,
+      hasil.ikut.length > 0 ? `Tagihan dihapus (${hasil.ikut.join(", ")} ikut terhapus)` : "Tagihan dihapus"
+    );
   } catch (e) {
+    if ((e as { code?: string })?.code === "P2025") {
+      return errorResponse("Tagihan tidak ditemukan", 404);
+    }
     return errorResponse(e instanceof Error ? e.message : "Gagal hapus tagihan", 500);
   }
 }

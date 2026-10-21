@@ -52,7 +52,6 @@ export const STATIC_COA_MODAL: AkunCOA[] = [
 export const STATIC_COA_PEMASUKAN: AkunCOA[] = [
   { kode: "4101", nama: "Pendapatan Penjualan Hasil Kebun", kelompok: "Pendapatan", golongan: "Pendapatan Usaha", tipe: "PEMASUKAN" },
   { kode: "4102", nama: "Pendapatan Penjualan Ternak (Ayam)", kelompok: "Pendapatan", golongan: "Pendapatan Usaha", tipe: "PEMASUKAN" },
-  { kode: "4103", nama: "Pendapatan Penjualan Ikan", kelompok: "Pendapatan", golongan: "Pendapatan Usaha", tipe: "PEMASUKAN" },
   { kode: "4104", nama: "Pendapatan Lain-lain", kelompok: "Pendapatan", golongan: "Pendapatan Lainnya", tipe: "PEMASUKAN" },
   { kode: "4105", nama: "Penerimaan Piutang Usaha", kelompok: "Pendapatan", golongan: "Pendapatan Lainnya", tipe: "PEMASUKAN" },
 ];

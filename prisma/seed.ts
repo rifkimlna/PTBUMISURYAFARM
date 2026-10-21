@@ -35,7 +35,6 @@ const coaData = [
   // Pendapatan
   { kode: "4101", nama: "Pendapatan Penjualan Hasil Kebun", kelompok: "Pendapatan" as const, golongan: "Pendapatan Usaha", tipe: "PEMASUKAN" as const },
   { kode: "4102", nama: "Pendapatan Penjualan Ternak (Ayam)", kelompok: "Pendapatan" as const, golongan: "Pendapatan Usaha", tipe: "PEMASUKAN" as const },
-  { kode: "4103", nama: "Pendapatan Penjualan Ikan", kelompok: "Pendapatan" as const, golongan: "Pendapatan Usaha", tipe: "PEMASUKAN" as const },
   { kode: "4104", nama: "Pendapatan Lain-lain", kelompok: "Pendapatan" as const, golongan: "Pendapatan Lainnya", tipe: "PEMASUKAN" as const },
   { kode: "4105", nama: "Penerimaan Piutang Usaha", kelompok: "Pendapatan" as const, golongan: "Pendapatan Lainnya", tipe: "PEMASUKAN" as const },
   // Beban

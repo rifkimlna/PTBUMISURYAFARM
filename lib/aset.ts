@@ -23,6 +23,20 @@ export const STATUS_ASET = [
 export type KategoriAset = (typeof KATEGORI_ASET)[number];
 export type StatusAset = (typeof STATUS_ASET)[number];
 
+// Nomor aset berikutnya (AST-001, AST-002, ...). Dipakai server saat form
+// Tambah Aset tidak mengirim nomor (nomor otomatis).
+export async function generateKodeAset(prisma: {
+  aset: { findMany: (args: { select: { id: true } }) => Promise<Array<{ id: string }>> };
+}): Promise<string> {
+  const rows = await prisma.aset.findMany({ select: { id: true } });
+  let max = 0;
+  for (const r of rows) {
+    const m = /^AST-(\d{3,})$/.exec((r.id ?? "").trim().toUpperCase());
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return `AST-${String(max + 1).padStart(3, "0")}`;
+}
+
 export const STATUS_ASET_LIFECYCLE = ["TERTUNDA", "AKTIF", "DIJUAL", "DILEPAS"] as const;
 export type StatusAsetLifecycle = (typeof STATUS_ASET_LIFECYCLE)[number];
 

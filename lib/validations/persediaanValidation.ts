@@ -13,6 +13,10 @@ export const kategoriPersediaanList = [
 
 export type KategoriPersediaan = typeof kategoriPersediaanList[number];
 
+export const SumberProdukEnum = z.enum(["PENJUALAN", "PEMBELIAN"]);
+
+export type SumberProduk = z.infer<typeof SumberProdukEnum>;
+
 export const createPersediaanBarangSchema = z.object({
   kode: z
     .string()
@@ -21,9 +25,14 @@ export const createPersediaanBarangSchema = z.object({
     .regex(/^BRG-\d{3,}$/, "Kode harus format BRG-001 (contoh: BRG-005)")
     .optional(),
   namaBarang: z.string().min(2, "Nama barang minimal 2 karakter").max(100).trim(),
-  kategori: z.enum(kategoriPersediaanList, {
-    message: "Kategori tidak valid",
-  }),
+  // Kategori tidak lagi diisi di form Produk; backend memakai kategori baku
+  // pertama (dipakai juga oleh mapping COA Pembelian & integrasi Penjualan).
+  kategori: z
+    .enum(kategoriPersediaanList, { message: "Kategori tidak valid" })
+    .default(kategoriPersediaanList[0]),
+  // Sumber produk menentukan apakah barang adalah hasil penjualan sendiri
+  // (PENJUALAN) atau dari supplier (PEMBELIAN). Kosong = keduanya/belum ditetapkan.
+  sumberProduk: SumberProdukEnum.optional().nullable(),
   kodeAkunCOA: z.string().max(10).optional().nullable(),
   stokAwal: z.coerce.number().int("Stok awal harus bilangan bulat").min(0, "Stok awal minimal 0").default(0),
   satuan: z.string().min(1, "Satuan wajib diisi").max(20).trim(),
@@ -51,6 +60,16 @@ export const createPersediaanBarangSchema = z.object({
     (v) => (v === "" ? undefined : v),
     z.coerce.number().nonnegative("Harga jual tidak boleh negatif").max(10_000_000_000, "Harga terlalu besar").optional().nullable()
   ),
+  // Harga manual (opsional): bila diisi dipakai apa adanya; bila kosong/null
+  // tabel & laporan tetap memakai hasil perhitungan faktur pembelian.
+  hargaRataRataManual: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.coerce.number().nonnegative("Harga rata-rata tidak boleh negatif").max(10_000_000_000, "Harga terlalu besar").optional().nullable()
+  ),
+  hargaBeliTerakhirManual: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.coerce.number().nonnegative("Beli terakhir tidak boleh negatif").max(10_000_000_000, "Harga terlalu besar").optional().nullable()
+  ),
   batasMinimum: z.preprocess(
     (v) => (v === "" ? undefined : v),
     z.coerce.number().int("Batas minimum harus bilangan bulat").min(0, "Batas minimum minimal 0").max(1_000_000).optional().nullable()
@@ -62,6 +81,7 @@ export const updatePersediaanBarangSchema = z
   .object({
     namaBarang: z.string().min(2).max(100).trim().optional(),
     kategori: z.enum(kategoriPersediaanList).optional(),
+    sumberProduk: SumberProdukEnum.optional().nullable(),
     kodeAkunCOA: z.string().max(10).optional().nullable(),
     satuan: z.string().min(1).max(20).trim().optional(),
     hargaSatuan: z.coerce
@@ -84,6 +104,14 @@ export const updatePersediaanBarangSchema = z
       z.coerce.number().nonnegative().max(10_000_000_000).optional().nullable()
     ),
     hargaJual: z.preprocess(
+      (v) => (v === "" ? undefined : v),
+      z.coerce.number().nonnegative().max(10_000_000_000).optional().nullable()
+    ),
+    hargaRataRataManual: z.preprocess(
+      (v) => (v === "" ? undefined : v),
+      z.coerce.number().nonnegative().max(10_000_000_000).optional().nullable()
+    ),
+    hargaBeliTerakhirManual: z.preprocess(
       (v) => (v === "" ? undefined : v),
       z.coerce.number().nonnegative().max(10_000_000_000).optional().nullable()
     ),

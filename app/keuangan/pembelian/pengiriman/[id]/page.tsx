@@ -13,7 +13,7 @@ function formatDate(value: Date | null | undefined) {
   return d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
 }
 
-// Detail Penerimaan: terhubung ke Pesanan asal, tanpa transaksi keuangan.
+// Detail Pengiriman: terhubung ke Pesanan asal, tanpa transaksi keuangan.
 export default async function DetailPengirimanBeliPage({
   params,
 }: {
@@ -42,7 +42,7 @@ export default async function DetailPengirimanBeliPage({
             <ChevronLeft className="h-3.5 w-3.5" /> Kembali ke Pengiriman
           </Link>
           <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
-            Detail Penerimaan {data.noPengiriman}
+            Detail Pengiriman {data.noPengiriman}
           </h1>
           <p className="mt-1 text-sm text-slate-400">
             Dari Pesanan{" "}
@@ -66,7 +66,7 @@ export default async function DetailPengirimanBeliPage({
         </CardHeader>
         <CardContent className="grid gap-4 p-5 sm:grid-cols-3">
           <div>
-            <div className="text-[11px] uppercase tracking-wide text-slate-400">No. Penerimaan</div>
+            <div className="text-[11px] uppercase tracking-wide text-slate-400">No. Pengiriman</div>
             <div className="mt-0.5 text-sm font-medium">{data.noPengiriman}</div>
           </div>
           <div>

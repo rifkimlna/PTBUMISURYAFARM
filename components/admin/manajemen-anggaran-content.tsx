@@ -284,34 +284,47 @@ function ManajemenAnggaranIsi() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50">
-                        <TableHead className="min-w-56 text-xs">Akun</TableHead>
+                        <TableHead rowSpan={2} className="min-w-56 align-bottom text-xs">Akun</TableHead>
                         {snap.bulan.map((b) => (
-                          <TableHead key={`${b.tahun}-${b.bulan}`} className="min-w-32 text-right text-xs">
+                          <TableHead key={`${b.tahun}-${b.bulan}`} colSpan={3} className="min-w-96 text-center text-xs">
                             {b.label}
                           </TableHead>
                         ))}
-                        <TableHead className="min-w-32 text-right text-xs">Total</TableHead>
+                        <TableHead colSpan={3} className="min-w-96 text-center text-xs">Total</TableHead>
+                      </TableRow>
+                      <TableRow className="bg-slate-50">
+                        {snap.bulan.map((b) => (
+                          <Fragment key={`sub-${b.tahun}-${b.bulan}`}>
+                            <TableHead className="text-right text-[11px] font-medium text-slate-500">Anggaran</TableHead>
+                            <TableHead className="text-right text-[11px] font-medium text-slate-500">Realisasi</TableHead>
+                            <TableHead className="text-right text-[11px] font-medium text-slate-500">Selisih</TableHead>
+                          </Fragment>
+                        ))}
+                        <TableHead className="text-right text-[11px] font-medium text-slate-500">Anggaran</TableHead>
+                        <TableHead className="text-right text-[11px] font-medium text-slate-500">Realisasi</TableHead>
+                        <TableHead className="text-right text-[11px] font-medium text-slate-500">Selisih</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       <GrupRows judul="Revenue" akun={snap.revenue.akun} nBulan={snap.bulan.length} />
                       <GrupRows judul="Cost of Sales" akun={snap.cos.akun} nBulan={snap.bulan.length} />
-                      <TotalRow text="Gross Profit" vals={snap.grossProfit.bulan} total={snap.grossProfit.total} />
+                      <TotalRow text="Gross Profit" baris={snap.grossProfit} />
                       <GrupRows judul="Operational Expense" akun={snap.opex.akun} nBulan={snap.bulan.length} />
-                      <TotalRow text="Total dari Operational Expense" vals={snap.opexTotal.bulan} total={snap.opexTotal.total} />
-                      <TotalRow text="Operating Profit" vals={snap.operatingProfit.bulan} total={snap.operatingProfit.total} />
+                      <TotalRow text="Total dari Operational Expense" baris={snap.opexTotal} />
+                      <TotalRow text="Operating Profit" baris={snap.operatingProfit} />
                       <TableRow className="bg-slate-100/70">
-                        <TableCell colSpan={snap.bulan.length + 2} className="text-xs font-bold uppercase tracking-wide text-slate-700">
+                        <TableCell colSpan={snap.bulan.length * 3 + 4} className="text-xs font-bold uppercase tracking-wide text-slate-700">
                           Other Income (Expense)
                         </TableCell>
                       </TableRow>
                       <GrupRows judul="Other Income" akun={snap.otherIncome.akun} nBulan={snap.bulan.length} />
                       <GrupRows judul="Other Expense" akun={snap.otherExpense.akun} nBulan={snap.bulan.length} />
-                      <TotalRow text="Total dari Other Income (Expense)" vals={snap.otherTotal.bulan} total={snap.otherTotal.total} />
-                      <TotalRow text="Profit (Loss)" vals={snap.profit.bulan} total={snap.profit.total} grand />
+                      <TotalRow text="Total dari Other Income (Expense)" baris={snap.otherTotal} />
+                      <TotalRow text="Profit (Loss)" baris={snap.profit} grand />
                     </TableBody>
                   </Table>
                 </div>
+                <p className="text-[11px] text-slate-400">Selisih = Realisasi − Anggaran per bulan.</p>
 
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
@@ -466,44 +479,95 @@ function ManajemenAnggaranIsi() {
   );
 }
 
+function Sel({ v }: { v: number }) {
+  if (Math.round(Number(v) || 0) === 0) return <span className="text-slate-300">—</span>;
+  return <>{rp(v)}</>;
+}
+
 function GrupRows({ judul, akun, nBulan }: { judul: string; akun: AnggaranDetailSnapshot["revenue"]["akun"]; nBulan: number }) {
   return (
     <Fragment>
       <TableRow className="bg-slate-100/70">
-        <TableCell colSpan={nBulan + 2} className="text-xs font-bold uppercase tracking-wide text-slate-700">
+        <TableCell colSpan={nBulan * 3 + 4} className="text-xs font-bold uppercase tracking-wide text-slate-700">
           {judul}
         </TableCell>
       </TableRow>
-      {akun.map((a) => (
-        <TableRow key={a.kode}>
-          <TableCell className="pl-6 text-xs text-slate-700">
-            <span className="font-mono text-[11px] text-slate-400">{a.kode}</span>
-            <span className="mx-1.5 text-slate-300">·</span>
-            {a.nama}
+      {akun.length === 0 ? (
+        <TableRow>
+          <TableCell colSpan={nBulan * 3 + 4} className="py-3 text-center text-xs text-slate-400">
+            Tidak ada akun pada bagian ini
           </TableCell>
-          {a.bulan.map((v, i) => (
-            <TableCell key={i} className="text-right text-xs tabular-nums text-slate-700">
-              {v !== 0 ? rp(v) : <span className="text-slate-300">—</span>}
-            </TableCell>
-          ))}
-          <TableCell className="text-right text-xs font-semibold tabular-nums text-slate-900">{rp(a.total)}</TableCell>
         </TableRow>
-      ))}
+      ) : (
+        akun.map((a) => (
+          <TableRow key={`${a.kode}|${a.nama}`}>
+            <TableCell className="pl-6 text-xs text-slate-700">
+              <span className="font-mono text-[11px] text-slate-400">{a.kode}</span>
+              <span className="mx-1.5 text-slate-300">·</span>
+              {a.nama}
+            </TableCell>
+            {a.bulan.map((_, i) => (
+              <Fragment key={i}>
+                <TableCell className="whitespace-nowrap text-right text-xs tabular-nums text-slate-700">
+                  <Sel v={a.bulan[i]} />
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-right text-xs tabular-nums text-slate-700">
+                  <Sel v={a.realisasi[i]} />
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-right text-xs tabular-nums text-slate-700">
+                  <Sel v={a.selisih[i]} />
+                </TableCell>
+              </Fragment>
+            ))}
+            <TableCell className="whitespace-nowrap text-right text-xs font-semibold tabular-nums text-slate-900">
+              {rp(a.total)}
+            </TableCell>
+            <TableCell className="whitespace-nowrap text-right text-xs font-semibold tabular-nums text-slate-900">
+              {rp(a.realisasiTotal)}
+            </TableCell>
+            <TableCell className="whitespace-nowrap text-right text-xs font-semibold tabular-nums text-slate-900">
+              {rp(a.selisihTotal)}
+            </TableCell>
+          </TableRow>
+        ))
+      )}
     </Fragment>
   );
 }
 
-function TotalRow({ text, vals, total, grand }: { text: string; vals: number[]; total: number; grand?: boolean }) {
+function TotalRow({
+  text,
+  baris,
+  grand,
+}: {
+  text: string;
+  baris: AnggaranDetailSnapshot["profit"];
+  grand?: boolean;
+}) {
   return (
     <TableRow className={grand ? "bg-emerald-700" : "bg-slate-50/70"}>
       <TableCell className={`text-xs font-semibold ${grand ? "text-white" : "text-slate-900"}`}>{text}</TableCell>
-      {vals.map((v, i) => (
-        <TableCell key={i} className={`text-right text-xs font-semibold tabular-nums ${grand ? "text-white" : "text-slate-900"}`}>
-          {rp(v)}
-        </TableCell>
+      {baris.bulan.map((_, i) => (
+        <Fragment key={i}>
+          <TableCell className={`whitespace-nowrap text-right text-xs font-semibold tabular-nums ${grand ? "text-white" : "text-slate-900"}`}>
+            {rp(baris.bulan[i])}
+          </TableCell>
+          <TableCell className={`whitespace-nowrap text-right text-xs font-semibold tabular-nums ${grand ? "text-white" : "text-slate-900"}`}>
+            {rp(baris.realisasi[i])}
+          </TableCell>
+          <TableCell className={`whitespace-nowrap text-right text-xs font-semibold tabular-nums ${grand ? "text-white" : "text-slate-900"}`}>
+            {rp(baris.selisih[i])}
+          </TableCell>
+        </Fragment>
       ))}
-      <TableCell className={`text-right text-xs font-semibold tabular-nums ${grand ? "text-white" : "text-slate-900"}`}>
-        {rp(total)}
+      <TableCell className={`whitespace-nowrap text-right text-xs font-semibold tabular-nums ${grand ? "text-white" : "text-slate-900"}`}>
+        {rp(baris.total)}
+      </TableCell>
+      <TableCell className={`whitespace-nowrap text-right text-xs font-semibold tabular-nums ${grand ? "text-white" : "text-slate-900"}`}>
+        {rp(baris.realisasiTotal)}
+      </TableCell>
+      <TableCell className={`whitespace-nowrap text-right text-xs font-semibold tabular-nums ${grand ? "text-white" : "text-slate-900"}`}>
+        {rp(baris.selisihTotal)}
       </TableCell>
     </TableRow>
   );

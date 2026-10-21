@@ -29,25 +29,63 @@ export async function PUT(req: NextRequest, { params }: Params) {
     const exists = await prisma.aset.findUnique({ where: { id } });
     if (!exists) return errorResponse("Aset tidak ditemukan", 404);
 
-    const updated = await prisma.aset.update({
-      where: { id },
-      data: {
-        ...(parsed.namaAset !== undefined ? { namaAset: parsed.namaAset } : {}),
-        ...(parsed.jumlah !== undefined ? { jumlah: parsed.jumlah } : {}),
-        ...(parsed.kategori !== undefined ? { kategori: parsed.kategori } : {}),
-        ...(parsed.kondisi !== undefined ? { kondisi: parsed.kondisi } : {}),
-        ...(parsed.status !== undefined ? { status: parsed.status } : {}),
-        ...(parsed.nilaiAset !== undefined ? { nilaiAset: parsed.nilaiAset as unknown as Prisma.AsetUpdateInput["nilaiAset"] } : {}),
-        ...(parsed.tanggalPerolehan !== undefined ? { tanggalPerolehan: parsed.tanggalPerolehan } : {}),
-        ...(parsed.deskripsi !== undefined ? { deskripsi: parsed.deskripsi } : {}),
-        ...(parsed.tags !== undefined ? { tags: parsed.tags } : {}),
-        ...(parsed.metodeSusut !== undefined ? { metodeSusut: parsed.metodeSusut } : {}),
-        ...(parsed.masaManfaatBulan !== undefined ? { masaManfaatBulan: parsed.masaManfaatBulan } : {}),
-        ...(parsed.nilaiResidu !== undefined ? { nilaiResidu: parsed.nilaiResidu as unknown as Prisma.AsetUpdateInput["nilaiResidu"] } : {}),
-        ...(parsed.akunBebanSusut !== undefined ? { akunBebanSusut: parsed.akunBebanSusut } : {}),
-        ...(parsed.akunAkumulasi !== undefined ? { akunAkumulasi: parsed.akunAkumulasi } : {}),
-        ...(parsed.tanggalMulaiSusut !== undefined ? { tanggalMulaiSusut: parsed.tanggalMulaiSusut } : {}),
-      },
+    const biayaBaru = parsed.biayaAkuisisi;
+    const updated = await prisma.$transaction(async (tx) => {
+      const aset = await tx.aset.update({
+        where: { id },
+        data: {
+          ...(parsed.namaAset !== undefined ? { namaAset: parsed.namaAset } : {}),
+          ...(parsed.jumlah !== undefined ? { jumlah: parsed.jumlah } : {}),
+          ...(parsed.kategori !== undefined ? { kategori: parsed.kategori } : {}),
+          ...(parsed.kondisi !== undefined ? { kondisi: parsed.kondisi } : {}),
+          ...(parsed.status !== undefined ? { status: parsed.status } : {}),
+          ...(parsed.nilaiAset !== undefined ? { nilaiAset: parsed.nilaiAset as unknown as Prisma.AsetUpdateInput["nilaiAset"] } : {}),
+          ...(parsed.tanggalPerolehan !== undefined ? { tanggalPerolehan: parsed.tanggalPerolehan } : {}),
+          ...(parsed.deskripsi !== undefined ? { deskripsi: parsed.deskripsi } : {}),
+          ...(parsed.tags !== undefined ? { tags: parsed.tags } : {}),
+          ...(parsed.metodeSusut !== undefined ? { metodeSusut: parsed.metodeSusut } : {}),
+          ...(parsed.masaManfaatBulan !== undefined ? { masaManfaatBulan: parsed.masaManfaatBulan } : {}),
+          ...(parsed.nilaiResidu !== undefined ? { nilaiResidu: parsed.nilaiResidu as unknown as Prisma.AsetUpdateInput["nilaiResidu"] } : {}),
+          ...(parsed.akunBebanSusut !== undefined ? { akunBebanSusut: parsed.akunBebanSusut } : {}),
+          ...(parsed.akunAkumulasi !== undefined ? { akunAkumulasi: parsed.akunAkumulasi } : {}),
+          ...(parsed.tanggalMulaiSusut !== undefined ? { tanggalMulaiSusut: parsed.tanggalMulaiSusut } : {}),
+          ...(biayaBaru !== undefined
+            ? {
+                biayaAkuisisi: biayaBaru as unknown as Prisma.AsetUpdateInput["biayaAkuisisi"],
+                nilaiAset: biayaBaru as unknown as Prisma.AsetUpdateInput["nilaiAset"],
+              }
+            : {}),
+        },
+      });
+
+      // Jurnal akuisisi ikut disesuaikan agar nilai aset dan catatan kas/utang tetap sama.
+      if (biayaBaru !== undefined) {
+        if (exists.transaksiKasId) {
+          await tx.transaksiKas.updateMany({
+            where: { id: exists.transaksiKasId },
+            data: { jumlah: biayaBaru },
+          });
+        }
+        if (exists.tagihanId) {
+          const tagihan = await tx.tagihan.findUnique({ where: { id: exists.tagihanId } });
+          if (tagihan) {
+            const pembayaran = await tx.transaksiKas.aggregate({
+              where: { tagihanId: tagihan.id },
+              _sum: { jumlah: true },
+            });
+            const sudahDibayar = Number(pembayaran._sum.jumlah ?? 0);
+            const sisaBaru = Math.max(Math.round((biayaBaru - sudahDibayar) * 100) / 100, 0);
+            const statusBaru: "BELUM_LUNAS" | "LUNAS_SEBAGIAN" | "LUNAS" =
+              sudahDibayar <= 0.005 ? "BELUM_LUNAS" : sisaBaru <= 0.005 ? "LUNAS" : "LUNAS_SEBAGIAN";
+            await tx.tagihan.update({
+              where: { id: tagihan.id },
+              data: { jumlah: biayaBaru, sisa: sisaBaru, status: statusBaru },
+            });
+          }
+        }
+      }
+
+      return aset;
     });
     return successResponse(updated, "Aset diupdate");
   } catch (e) {

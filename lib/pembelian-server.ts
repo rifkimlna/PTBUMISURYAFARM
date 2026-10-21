@@ -6,6 +6,7 @@ const PREFIX_BY_TIPE: Record<TipeDokumenBeli, string> = {
   PERMINTAAN: "PR",
   PENAWARAN: "QTN-B",
   PESANAN: "PO",
+  TUKAR_FAKTUR: "TF-B",
 };
 
 function randomSuffix(length = 4) {
@@ -34,7 +35,10 @@ export async function generateNoDokumenBeli(tipe: TipeDokumenBeli, tanggal: Date
   return `${prefix}-${ymd}-${Date.now().toString(36).toUpperCase().slice(-6)}`;
 }
 
-// Jumlah baris = qty * harga * (1 - diskon%/100), dibulatkan 2 desimal.
+// Jumlah baris = qty * harga * (1 - diskon%/100), hasil bilangan bulat rupiah.
 export function hitungJumlahBarisBeli(kuantitas: number, harga: number, diskonPersen: number): number {
-  return Math.round(kuantitas * harga * (1 - diskonPersen / 100) * 100) / 100;
+  const bruto = kuantitas * harga;
+  if (diskonPersen === 0) return bruto;
+  const discAmount = Math.round((bruto * diskonPersen) / 100);
+  return bruto - discAmount;
 }

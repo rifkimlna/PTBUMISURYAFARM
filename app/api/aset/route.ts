@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuthAndRole, getSessionFromRequest } from "@/lib/auth";
 import { createAsetSchema } from "@/lib/validations/keuanganValidation";
-import { SUMBER_DANA_BY_KODE_AKUN } from "@/lib/aset";
+import { SUMBER_DANA_BY_KODE_AKUN, generateKodeAset } from "@/lib/aset";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 import { ZodError } from "zod";
 
@@ -22,8 +22,10 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const parsed = createAsetSchema.parse(body);
-    const exists = await prisma.aset.findUnique({ where: { id: parsed.id } });
-    if (exists) return errorResponse(`ID aset ${parsed.id} sudah ada`, 409);
+    // Nomor aset otomatis bila form tidak mengirimkannya (AST-001, AST-002, ...).
+    const kodeAset = parsed.id?.trim().toUpperCase() ?? (await generateKodeAset(prisma));
+    const exists = await prisma.aset.findUnique({ where: { id: kodeAset } });
+    if (exists) return errorResponse(`ID aset ${kodeAset} sudah ada`, 409);
 
     // Validasi akun dari COA database (tanpa COA baru).
     const [akunAset, akunKredit] = await Promise.all([
@@ -81,7 +83,7 @@ export async function POST(req: NextRequest) {
     const result = await prisma.$transaction(async (tx) => {
       const aset = await tx.aset.create({
         data: {
-          id: parsed.id,
+          id: kodeAset,
           namaAset: parsed.namaAset,
           jumlah: parsed.jumlah ?? 1,
           kategori: parsed.kategori,
@@ -118,7 +120,7 @@ export async function POST(req: NextRequest) {
             kodeAkun: akunAset.kode,
             sumberDana,
             jumlah: biaya as never,
-            keterangan: `Akuisisi aset ${parsed.namaAset} (${parsed.id})`,
+            keterangan: `Akuisisi aset ${parsed.namaAset} (${kodeAset})`,
             tanggal: tanggalAkuisisi,
             adminId: adminId!,
           },
@@ -130,7 +132,7 @@ export async function POST(req: NextRequest) {
           data: {
             tipe: "HUTANG",
             pihak: (parsed.kreditur as string).trim(),
-            keterangan: `Akuisisi aset ${parsed.namaAset} (${parsed.id})`,
+            keterangan: `Akuisisi aset ${parsed.namaAset} (${kodeAset})`,
             jumlah: biaya as never,
             sisa: biaya as never,
             tanggal: tanggalAkuisisi,

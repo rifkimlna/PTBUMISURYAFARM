@@ -125,7 +125,6 @@ const BUAT_ITEMS = [
 const JENIS_LABEL: Record<string, string> = {
   HASIL_KEBUN: "Hasil Kebun",
   TERNAK: "Ternak",
-  IKAN: "Ikan",
   LAINNYA: "Lainnya",
 };
 
@@ -150,7 +149,8 @@ function formatDate(value: string | null) {
   if (!value) return "—";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+  // Kunci ke WIB agar konsisten dengan halaman detail (server bisa UTC).
+  return d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Jakarta" });
 }
 
 // No. Invoice dari database; baris lama (null) tampil sebagai referensi ID singkat.
@@ -487,7 +487,10 @@ export function PenjualanContent({
   const [paymentTargetId, setPaymentTargetId] = useState<string | null>(null);
   const [paymentTargetLabel, setPaymentTargetLabel] = useState("");
   const [paymentOpen, setPaymentOpen] = useState(false);
-  const todayInputLocal = () => new Date(new Date().toDateString()).toISOString().slice(0, 10);
+  const todayInputLocal = () => {
+    const now = new Date();
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  };
   const [paymentForm, setPaymentForm] = useState({ jumlahBayar: "", sumberDana: "KAS" as "KAS"|"BANK"|"TABUNGAN", tanggal: todayInputLocal(), keterangan: "" });
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [paymentError, setPaymentError] = useState("");
@@ -666,10 +669,11 @@ export function PenjualanContent({
     }
   };
 
-  // Union: baris tagihan + baris dokumen proforma/tukar faktur (yang tak punya piutang sendiri).
+  // Union: baris tagihan + baris dokumen proforma/tukar faktur (yang tak punya piutang sendiri)
+  // + penagihan tanpa piutang (agar terlihat dan bisa dikelola/dihapus, bukan yatim).
   const semuaBaris = useMemo<PenagihanRow[]>(() => {
     const docRows: PenagihanRow[] = docs
-      .filter((d) => d.tipe === "PROFORMA" || d.tipe === "TUKAR_FAKTUR")
+      .filter((d) => d.tipe === "PROFORMA" || d.tipe === "TUKAR_FAKTUR" || d.tipe === "PENAGIHAN")
       .map((d) => ({
         kind: "dokumen" as const,
         id: d.id,
@@ -739,8 +743,9 @@ export function PenjualanContent({
   }, [kirim, kirimStatus, kirimSearch]);
 
   const hapusPenagihan = async (row: PenagihanRow) => {
+    const ikutDokumen = row.docId ? " Dokumen penjualan terkait ikut terhapus." : "";
     if (
-      !window.confirm(`Hapus penagihan ${displayInvoice(row)} untuk ${row.pihak} sebesar Rp ${formatRupiah(row.jumlah)}?`)
+      !window.confirm(`Hapus penagihan ${displayInvoice(row)} untuk ${row.pihak} sebesar Rp ${formatRupiah(row.jumlah)}?${ikutDokumen}`)
     ) {
       return;
     }
@@ -1003,7 +1008,6 @@ export function PenjualanContent({
                   <option value="">—</option>
                   <option value="HASIL_KEBUN">Hasil Kebun</option>
                   <option value="TERNAK">Ternak</option>
-                  <option value="IKAN">Ikan</option>
                   <option value="LAINNYA">Lainnya</option>
                 </Select>
               </label>
@@ -1176,10 +1180,18 @@ export function PenjualanContent({
                   )}
                 </div>
               </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={() => setDetailRow(null)}>Tutup</Button>
+              <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+                <Button variant="outline" onClick={() => setDetailRow(null)} className="w-full sm:w-auto">Tutup</Button>
+                {detailData.dokumenId && (
+                  <Link
+                    href={`/keuangan/penjualan/proforma/baru?dari=${encodeURIComponent(detailData.dokumenId)}`}
+                    className={cn(buttonVariants({ variant: "outline" }), "w-full sm:w-auto")}
+                  >
+                    Buat Proforma
+                  </Link>
+                )}
                 {detailData.status !== "LUNAS" && detailData.sisa > 0 && (
-                  <Button onClick={() => { setPaymentOpen(true); setPaymentForm({ jumlahBayar: "", sumberDana: "KAS", tanggal: todayInputLocal(), keterangan: "" }); }}>Terima Pembayaran</Button>
+                  <Button onClick={() => { setPaymentOpen(true); setPaymentForm({ jumlahBayar: "", sumberDana: "KAS", tanggal: todayInputLocal(), keterangan: "" }); }} className="w-full sm:w-auto">Terima Pembayaran</Button>
                 )}
               </div>
             </div>
@@ -1369,18 +1381,26 @@ export function PenjualanContent({
                   Belum menjadi penagihan — belum ada piutang & pembayaran. Buat penagihan dulu untuk membayar.
                 </p>
               )}
-              <div className="flex flex-wrap justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={() => { setDokDetailRow(null); setDokDetailData(null); setDokTagihanData(null); }}>Tutup</Button>
+              <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+                <Button variant="outline" onClick={() => { setDokDetailRow(null); setDokDetailData(null); setDokTagihanData(null); }} className="w-full sm:w-auto">Tutup</Button>
+                {dokDetailRow && dokDetailRow.tipe === "PESANAN" && (
+                  <Link
+                    href={`/keuangan/penjualan/proforma/baru?dari=${encodeURIComponent(dokDetailRow.id)}`}
+                    className={cn(buttonVariants({ variant: "outline" }), "w-full sm:w-auto")}
+                  >
+                    Buat Proforma
+                  </Link>
+                )}
                 {dokDetailRow && (
                   <Link
                     href={`/keuangan/penjualan/${SLUG_BY_TIPE[dokDetailRow.tipe] ?? dokDetailRow.tipe.toLowerCase()}/${dokDetailRow.id}`}
-                    className={cn(buttonVariants({ variant: "outline" }))}
+                    className={cn(buttonVariants({ variant: "outline" }), "w-full sm:w-auto")}
                   >
                     Lihat halaman
                   </Link>
                 )}
                 {dokTagihanData && dokTagihanData.status !== "LUNAS" && Number(dokTagihanData.sisa) > 0 && (
-                  <Button onClick={() => { setPaymentTargetId(dokTagihanData.id); setPaymentTargetLabel(`${dokTagihanData.noInvoice ?? dokDetailRow?.noDokumen} — ${dokDetailRow?.pelanggan}`); setPaymentForm({ jumlahBayar: "", sumberDana: "KAS", tanggal: todayInputLocal(), keterangan: "" }); setPaymentError(""); setPaymentOpen(true); }}>Terima Pembayaran</Button>
+                  <Button onClick={() => { setPaymentTargetId(dokTagihanData.id); setPaymentTargetLabel(`${dokTagihanData.noInvoice ?? dokDetailRow?.noDokumen} — ${dokDetailRow?.pelanggan}`); setPaymentForm({ jumlahBayar: "", sumberDana: "KAS", tanggal: todayInputLocal(), keterangan: "" }); setPaymentError(""); setPaymentOpen(true); }} className="w-full sm:w-auto">Terima Pembayaran</Button>
                 )}
               </div>
             </div>
