@@ -36,8 +36,11 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
     // Normalize empty strings to null for nullable fields, and Decimal handling
     const data: any = { ...parsed };
-    for (const k of ["namaPohon", "jenis", "koordinat", "pemupukan", "pengobatan"] as const) {
+    for (const k of ["namaPohon", "koordinat", "pemupukan", "pengobatan"] as const) {
       if ((data as any)[k] === "") (data as any)[k] = null;
+    }
+    if (parsed.tinggiCm !== undefined || parsed.lingkarBatangCm !== undefined || parsed.phTanah !== undefined) {
+      data.diukurPada = new Date();
     }
     // Parse koordinat text into numeric lat/lng
     if (data.koordinat && typeof data.koordinat === "string") {

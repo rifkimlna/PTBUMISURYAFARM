@@ -18,12 +18,15 @@ export async function GET(req: NextRequest, { params }: Params) {
       id: true,
       namaPohon: true,
       varietas: true,
-      jenis: true,
       lokasiBlok: true,
       koordinat: true,
       hasilPanen: true,
       pemupukan: true,
       pengobatan: true,
+      tinggiCm: true,
+      lingkarBatangCm: true,
+      phTanah: true,
+      diukurPada: true,
       status: true,
       tanggalTanam: true,
       _count: { select: { riwayat: true } },
@@ -50,6 +53,12 @@ const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_PERTANIAN", "P
     if (parsed.hasilPanen !== undefined) data.hasilPanen = parsed.hasilPanen as any;
     if (parsed.pemupukan !== undefined) data.pemupukan = (parsed.pemupukan as string) === "" ? null : parsed.pemupukan;
     if (parsed.pengobatan !== undefined) data.pengobatan = (parsed.pengobatan as string) === "" ? null : parsed.pengobatan;
+    if (parsed.tinggiCm !== undefined) data.tinggiCm = parsed.tinggiCm as any;
+    if (parsed.lingkarBatangCm !== undefined) data.lingkarBatangCm = parsed.lingkarBatangCm as any;
+    if (parsed.phTanah !== undefined) data.phTanah = parsed.phTanah as any;
+    if (parsed.tinggiCm !== undefined || parsed.lingkarBatangCm !== undefined || parsed.phTanah !== undefined) {
+      data.diukurPada = new Date();
+    }
     if (parsed.status !== undefined) data.status = parsed.status;
 
     const updated = await prisma.pohon.update({ where: { id }, data });

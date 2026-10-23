@@ -2,12 +2,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Trees, Wheat, Map, CalendarClock, FileText, QrCode, ClipboardList, ScanLine, LogOut, Leaf } from "lucide-react";
+import { LayoutDashboard, Trees, Wheat, Sprout, Map, CalendarClock, FileText, QrCode, ClipboardList, ScanLine, LogOut, Leaf } from "lucide-react";
 
 const perkebunanMenu = [
   { label: "Dashboard", href: "/perkebunan", icon: LayoutDashboard },
   { label: "Data Pohon", href: "/perkebunan/pohon", icon: Trees },
   { label: "Panen", href: "/perkebunan/panen", icon: Wheat },
+  { label: "Bibit Dijual", href: "/perkebunan/bibit", icon: Sprout },
   { label: "Blok", href: "/perkebunan/blok", icon: Map },
   { label: "Jadwal", href: "/perkebunan/jadwal", icon: CalendarClock },
   { label: "Laporan", href: "/perkebunan/laporan", icon: FileText },

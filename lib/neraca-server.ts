@@ -1,27 +1,36 @@
 // Service Laporan Neraca PT Bumi Surya Farm (KHUSUS modul Laporan Neraca).
 // JANGAN diimpor dari Client Component — hanya Server Component & API route.
 //
-// Sumber data (semuanya data aktual database, tanpa dummy):
+// Sumber data (semuanya data aktual database, tanpa dummy, tanpa penyeimbang otomatis):
 // - Kas/Bank/Tabungan (1101/1103/1104): TransaksiKas s/d tanggal laporan,
 //   transfer-aware (TRANSFER keluar mengurangi asal, menambah tujuan).
 // - Piutang (1102): sisa Tagihan PIUTANG yang belum lunas s/d tanggal laporan.
 // - Persediaan (1105/1106/1107): stok berjalan (stokAwal + MASUK - KELUAR
 //   dari RiwayatStok s/d tanggal laporan) x harga satuan.
+//   CATATAN: nilai persediaan dihitung dari stok fisik opname × hargaSatuan
+//   (bukan dari jurnal pembelian). Sumber dan metode penilaian perlu
+//   diverifikasi lebih lanjut — tidak ada jurnal koreksi yang dibuat otomatis.
 // - Aset Tetap (1201-1207): master Aset yang belum dilepas/dijual dan tanggal
 //   perolehannya <= tanggal laporan (biayaAkuisisi ?? nilaiAset).
 // - Penyusutan: akumulasi informatif via hitungSusut() s/d tanggal laporan
-//   (belum dijurnal otomatis — akun akumulasi memang belum ada di COA).
+//   (belum dijurnal otomatis — akun akumulasi belum ada di COA).
 // - Utang Usaha (2101): sisa Tagihan HUTANG yang belum lunas s/d tanggal laporan.
 //   Akun utang lain (2102-2104) belum punya sumber data -> disajikan Rp 0.
 // - Modal: setoran pemilik dari TransaksiKas berkode akun 31xx s/d tanggal
 //   laporan (PEMASUKAN = tambah, PENGELUARAN = kurang; TRANSFER dikecualikan).
-//     * 3104 "Laba Ditahan" = laba basis kas (PEMASUKAN - PENGELUARAN
-//       non-transfer dan non-modal 31xx, konsisten dengan Laba Rugi);
-//     * selisih penyeimbang (Total Aktiva - Total Kewajiban - Laba - Modal
-//       tercatat) disajikan sebagai "Modal Disetor (implisit)" agar persamaan
-//       Total Aktiva = Total Kewajiban dan Modal selalu terpenuhi; nilainya
-//       menuju Rp 0 bila seluruh setoran sudah dicatat via Setor Modal.
-//   Ketiga komponen modal diberi catatan penjelasan di laporan.
+//   3104 "Laba Ditahan" = saldo laba yang telah ditahan dari periode sebelumnya.
+// - Laba Periode Berjalan: dihitung dari TransaksiKas dalam rentang periode
+//   [start, end] (akrual sederhana berdasarkan kode akun):
+//     Pendapatan  = PEMASUKAN, kodeAkun diawali "4", kecuali "4104"
+//                   (4104 = Penerimaan Piutang, bukan pendapatan)
+//     HPP         = PENGELUARAN, kodeAkun diawali "52" (Beban Produksi)
+//     Beban       = PENGELUARAN, kodeAkun diawali "5", kecuali "52.." dan
+//                   kecuali "5501" (5501 = Pelunasan Hutang, bukan beban)
+//     Laba Periode = Pendapatan − HPP − Beban
+//
+// TIDAK ada logika modal penyeimbang otomatis. Jika Total Aktiva ≠ Total
+// Kewajiban + Modal, selisih ditampilkan secara jujur di kolom selisih dan
+// catatan, tidak dipaksa seimbang.
 
 import { prisma } from "@/lib/prisma";
 import { hitungSusut } from "@/lib/aset";
@@ -36,19 +45,16 @@ export type { NeracaBaris, NeracaKelompok, NeracaPeriode, NeracaSnapshot } from 
 function startOfDay(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
-
 function endOfDay(d: Date) {
   const x = startOfDay(d);
   x.setHours(23, 59, 59, 999);
   return x;
 }
-
 function addDays(d: Date, n: number) {
   const x = new Date(d);
   x.setDate(x.getDate() + n);
   return x;
 }
-
 function fmtTgl(d: Date) {
   return d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
 }
@@ -88,7 +94,6 @@ export function resolveNeracaRange(
     }
     case "bulan-ini": {
       const s = new Date(now.getFullYear(), now.getMonth(), 1);
-      const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
       return { start: s, end: endOfDay(now), label: `${fmtTgl(s)} – ${fmtTgl(now)}` };
     }
     case "bulan-lalu": {
@@ -99,7 +104,6 @@ export function resolveNeracaRange(
     case "kuartal-ini": {
       const q = Math.floor(now.getMonth() / 3);
       const s = new Date(now.getFullYear(), q * 3, 1);
-      const last = new Date(s.getFullYear(), s.getMonth() + 3, 0);
       return { start: s, end: endOfDay(now), label: `${fmtTgl(s)} – ${fmtTgl(now)}` };
     }
     case "kuartal-lalu": {
@@ -192,6 +196,33 @@ const NAMA_AKUN_FALLBACK: Record<string, string> = {
   "3104": "Laba Ditahan (Akumulasi)",
 };
 
+// ---------- Helper ----------
+
+const num = (v: unknown) => Math.round(Number(v ?? 0));
+
+/** Apakah kode akun merupakan akun pendapatan (kelompok Pendapatan, 4xxx). */
+function isPendapatan(kodeAkun: string | null | undefined): boolean {
+  if (!kodeAkun) return false;
+  return kodeAkun.startsWith("4") && kodeAkun !== "4104"; // 4104 = Penerimaan Piutang, bukan pendapatan
+}
+
+/** Apakah kode akun merupakan akun HPP (golongan Beban Produksi, 52xx). */
+function isHpp(kodeAkun: string | null | undefined, akunDb: Map<string, { kode: string; nama: string; kelompok: string; golongan: string }>): boolean {
+  if (!kodeAkun) return false;
+  if (!kodeAkun.startsWith("52")) return false;
+  const akun = akunDb.get(kodeAkun);
+  return akun?.golongan === "Beban Produksi";
+}
+
+/** Apakah kode akun merupakan akun beban non-HPP (5xxx, bukan 52xx, bukan 5501). */
+function isBebanNonHpp(kodeAkun: string | null | undefined): boolean {
+  if (!kodeAkun) return false;
+  if (!kodeAkun.startsWith("5")) return false;
+  if (kodeAkun.startsWith("52")) return false; // HPP, bukan beban umum
+  if (kodeAkun === "5501") return false; // Pelunasan Hutang, bukan beban
+  return true;
+}
+
 // ---------- Perhitungan snapshot ----------
 
 export async function getNeracaSnapshot(
@@ -255,7 +286,7 @@ export async function getNeracaSnapshot(
       }),
       prisma.akunCOA.findMany({
         where: { isActive: true },
-        select: { kode: true, nama: true, kelompok: true },
+        select: { kode: true, nama: true, kelompok: true, golongan: true },
       }),
       // Mutasi modal tercatat (setoran via Setor Modal) s/d tanggal laporan.
       prisma.transaksiKas.groupBy({
@@ -267,8 +298,42 @@ export async function getNeracaSnapshot(
 
   const namaAkun = (kode: string) =>
     akunDb.find((a) => a.kode === kode)?.nama ?? NAMA_AKUN_FALLBACK[kode] ?? kode;
+  const akunMap = new Map(akunDb.map((a) => [a.kode, a]));
 
-  const num = (v: unknown) => Math.round(Number(v ?? 0));
+  // ---------- Laba Periode Berjalan (akrual sederhana dari TransaksiKas dalam [start, end]) ----------
+  const periodeTransaksi = await prisma.transaksiKas.findMany({
+    where: {
+      tanggal: { gte: start, lte: asOf },
+    },
+    select: { tipe: true, kodeAkun: true, jumlah: true },
+  });
+
+  let totalPendapatan = 0;
+  let totalHpp = 0;
+  let totalBeban = 0;
+  for (const t of periodeTransaksi) {
+    const jumlah = num(t.jumlah);
+    if (t.tipe === "PEMASUKAN" && isPendapatan(t.kodeAkun)) {
+      totalPendapatan += jumlah;
+    } else if (t.tipe === "PENGELUARAN") {
+      if (isHpp(t.kodeAkun, akunMap)) {
+        totalHpp += jumlah;
+      } else if (isBebanNonHpp(t.kodeAkun)) {
+        totalBeban += jumlah;
+      }
+    }
+  }
+  const labaPeriode = totalPendapatan - totalHpp - totalBeban;
+
+  // ---------- Laba Sebelum Periode (dari akun 3104 Laba Ditahan) ----------
+  const labaDitahanRow = modal31Rows.find((r) => r.kodeAkun === "3104");
+  const labaDitahanMasuk = num(
+    labaDitahanRow?.tipe === "PEMASUKAN" ? labaDitahanRow._sum.jumlah : 0
+  );
+  const labaDitahanKeluar = num(
+    labaDitahanRow?.tipe === "PENGELUARAN" ? labaDitahanRow._sum.jumlah : 0
+  );
+  const labaSebelumPeriode = Math.max(0, labaDitahanMasuk - labaDitahanKeluar);
 
   // --- Kas & setara (transfer-aware, sama dengan getSaldoPerSumber + batas asOf) ---
   const saldoSumber = (sumber: string) => {
@@ -288,27 +353,6 @@ export async function getNeracaSnapshot(
     return masuk - keluar - trfOut + trfIn;
   };
 
-  // --- Laba basis kas (konsisten dengan seksi laba-rugi dashboard).
-  // Setoran/penarikan modal 31xx dikecualikan — bukan laba.
-  let pemasukan = 0;
-  let pengeluaran = 0;
-  for (const r of kasRows) {
-    if (r.tipe === "PEMASUKAN") pemasukan += num(r._sum.jumlah);
-    else if (r.tipe === "PENGELUARAN") pengeluaran += num(r._sum.jumlah);
-  }
-  let modalMasuk = 0;
-  let modalKeluar = 0;
-  const netModal = (kode: string) => {
-    const masuk = num(modal31Rows.find((r) => r.kodeAkun === kode && r.tipe === "PEMASUKAN")?._sum.jumlah);
-    const keluar = num(modal31Rows.find((r) => r.kodeAkun === kode && r.tipe === "PENGELUARAN")?._sum.jumlah);
-    return masuk - keluar;
-  };
-  for (const r of modal31Rows) {
-    if (r.tipe === "PEMASUKAN") modalMasuk += num(r._sum.jumlah);
-    else if (r.tipe === "PENGELUARAN") modalKeluar += num(r._sum.jumlah);
-  }
-  const labaBasisKas = pemasukan - modalMasuk - (pengeluaran - modalKeluar);
-
   // --- Persediaan: agregasi per kode akun COA ---
   const stokByBarang = new Map<string, number>();
   for (const r of stokRows) {
@@ -325,7 +369,6 @@ export async function getNeracaSnapshot(
     const harga = Number(b.hargaSatuan ?? b.hargaBeli ?? 0);
     const nilai = Math.round(qty * harga);
     if (nilai === 0) continue;
-    // Resolve kode persediaan: tersimpan -> database (tahan penomoran ulang) -> statis.
     const mappingPersediaan = getCOAMappingByKategori(b.kategori as never);
     const kodeDinamis = mappingPersediaan
       ? akunDb.find((a) => a.nama.trim().toLowerCase() === mappingPersediaan.namaAkunPersediaan.trim().toLowerCase())?.kode
@@ -410,11 +453,9 @@ export async function getNeracaSnapshot(
 
   const totalAktiva = aktivaLancar.total + aktivaTetap.total - penyusutan.total;
 
-  // Resolve kode sistem dari NAMA akun (tahan terhadap penomoran ulang COA).
+  // --- Kewajiban ---
   const kodeUtangUsaha =
     akunDb.find((a) => a.nama.trim().toLowerCase() === "utang usaha")?.kode ?? "2101";
-  const kodeLaba =
-    akunDb.find((a) => a.nama.trim().toLowerCase().includes("laba ditahan"))?.kode ?? "3104";
   const setUtang = new Set(["2101", "2102", "2103", "2104"]);
   for (const a of akunDb) {
     if ((a as { kelompok?: string }).kelompok === "Kewajiban") setUtang.add(a.kode);
@@ -439,29 +480,34 @@ export async function getNeracaSnapshot(
   for (const r of modal31Rows) {
     if (r.kodeAkun) kodeModalSet.add(r.kodeAkun);
   }
+  const netModal = (kode: string) => {
+    const masuk = num(modal31Rows.find((r) => r.kodeAkun === kode && r.tipe === "PEMASUKAN")?._sum.jumlah);
+    const keluar = num(modal31Rows.find((r) => r.kodeAkun === kode && r.tipe === "PENGELUARAN")?._sum.jumlah);
+    return masuk - keluar;
+  };
   const barisModalTercatat: NeracaBaris[] = [...kodeModalSet]
     .sort()
-    .filter((kode) => kode !== kodeLaba)
+    .filter((kode) => kode !== "3104")
     .map((kode) => ({ kode, nama: namaAkun(kode), nilai: netModal(kode) }));
   const modalSetorTercatat = barisModalTercatat.reduce((s, b) => s + b.nilai, 0);
 
-  const modalImplisit = totalAktiva - totalKewajiban - labaBasisKas - modalSetorTercatat;
+  // Modal = setoran tercetak + laba sebelum periode (3104) + laba periode berjalan
+  const totalModal = modalSetorTercatat + labaSebelumPeriode + labaPeriode;
+
   const barisModal: NeracaBaris[] = [
     ...barisModalTercatat,
-    { kode: kodeLaba, nama: `${namaAkun(kodeLaba)} (basis kas)`, nilai: labaBasisKas },
-    {
-      kode: "3101/3102",
-      nama: "Modal Disetor (implisit — penyeimbang)",
-      nilai: modalImplisit,
-    },
+    { kode: "3104", nama: `${namaAkun("3104")}`, nilai: labaSebelumPeriode },
+    { kode: "LABPERI", nama: "Laba Periode Berjalan", nilai: labaPeriode > 0 ? labaPeriode : 0 },
   ];
   const modal: NeracaKelompok = {
     judul: "Modal Pemilik",
     baris: barisModal,
-    total: barisModal.reduce((s, b) => s + b.nilai, 0),
+    total: totalModal,
   };
-  const totalModal = modal.total;
   const totalKewajibanModal = totalKewajiban + totalModal;
+
+  // --- Selisih (tidak ada penyeimbang otomatis) ---
+  const selisih = totalAktiva - totalKewajibanModal;
 
   const catatan: string[] = [];
   if (barisTetap.length === 0)
@@ -480,10 +526,22 @@ export async function getNeracaSnapshot(
     "Akun 2102–2104 disajikan Rp 0 karena belum ada sumber data (utang gaji/pajak/lain-lain belum dicatat terpisah)."
   );
   catatan.push(
-    modalSetorTercatat === 0
-      ? "Belum ada setoran modal 31xx yang tercatat — modal disajikan sebagai angka penyeimbang; catat via Kas & Bank → Setor Modal. 3104 memakai laba basis kas."
-      : "Modal tercatat berasal dari TransaksiKas berkode akun 31xx (via Setor Modal); sisanya penyeimbang implisit. 3104 memakai laba basis kas."
+    "Nilai persediaan dihitung dari stok fisik (stokAwal + MASUK − KELUAR) × hargaSatuan. "
+    + "Sumber dan metode penilaian perlu diverifikasi — tidak ada jurnal koreksi otomatis."
   );
+  catatan.push(
+    "Modal berasal dari TransaksiKas kode akun 31xx (Setor Modal) ditambah laba periode berjalan. "
+    + "Tidak ada modal penyeimbang otomatis."
+  );
+  if (Math.abs(selisih) > 0) {
+    catatan.push(
+      `PERINGATAN: Neraca tidak seimbang. Selisih: Rp ${Math.abs(selisih)} `
+      + `(Total Aktiva Rp ${totalAktiva} ≠ Total Kewajiban + Modal Rp ${totalKewajibanModal}). `
+      + "Periksa klasifikasi transaksi input atau jurnal yang belum lengkap."
+    );
+  } else {
+    catatan.push("Neraca seimbang: Total Aktiva = Total Kewajiban dan Modal.");
+  }
 
   return {
     periode,
@@ -499,8 +557,9 @@ export async function getNeracaSnapshot(
     modal,
     totalModal,
     totalKewajibanModal,
-    labaBasisKas,
-    modalImplisit,
+    selisih,
+    labaPeriode,
+    labaSebelumPeriode,
     catatan,
   };
 }

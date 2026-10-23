@@ -155,7 +155,7 @@ function TotalRow({ label, value, strong = false }: { label: string; value: numb
 }
 
 function SnapshotView({ s }: { s: NeracaSnapshot }) {
-  const seimbang = Math.round(s.totalAktiva) === Math.round(s.totalKewajibanModal);
+  const seimbang = Math.round(s.selisih) === 0;
   return (
     <div className="space-y-4">
       <div className="flex flex-col items-center gap-1 border-b border-slate-100 pb-4 text-center">
@@ -184,6 +184,14 @@ function SnapshotView({ s }: { s: NeracaSnapshot }) {
       <KelompokCard kelompok={s.modal} />
       <TotalRow label="Total Modal Pemilik" value={s.totalModal} />
       <TotalRow label="Total Kewajiban dan Modal" value={s.totalKewajibanModal} strong />
+
+      {Math.round(s.selisih) !== 0 && (
+        <TotalRow
+          label="Selisih (Aktiva − Kewajiban − Modal)"
+          value={s.selisih}
+          strong
+        />
+      )}
 
       {s.catatan.length > 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">

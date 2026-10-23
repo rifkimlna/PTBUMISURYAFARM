@@ -8,48 +8,69 @@ import { PohonTable } from "@/components/admin/pohon-table";
 import { StatusDonut } from "@/components/admin/status-donut";
 import { BarHasilBlok } from "@/components/admin/bar-hasil-blok";
 import { PanenChart } from "@/components/admin/panen-chart";
+import { DbErrorBanner } from "@/components/admin/db-error-banner";
 import Link from "next/link";
 
 export default async function PertanianDashboard() {
   const tujuhHari = new Date();
   tujuhHari.setDate(tujuhHari.getDate() + 7);
-  const [total, sehat, perhatian, sakit, tanpaGeotag, pohon, panenTotal, pohonPanen, jadwalMendesak, antrean] = await Promise.all([
-    prisma.pohon.count(),
-    prisma.pohon.count({ where: { status: "SEHAT" } }),
-    prisma.pohon.count({ where: { status: "PERLU_PERHATIAN" } }),
-    prisma.pohon.count({ where: { status: "SAKIT" } }),
-    prisma.pohon.count({ where: { fotoGeotagUrl: null } }),
-    prisma.pohon.findMany({ orderBy: { createdAt: "desc" }, take: 20, include: { _count: { select: { riwayat: true } } } }),
-    // Sumber tunggal: tabel Panen. Pohon.hasilPanen hanya snapshot, tidak dipakai agregat.
-    prisma.panen.aggregate({ _sum: { jumlahKg: true }, _count: { _all: true } }),
-    prisma.panen.groupBy({ by: ["pohonId"] }),
-    prisma.jadwalPerawatan.count({ where: { status: "RENCANA", tanggalRencana: { lte: tujuhHari } } }),
-    prisma.pohon.findMany({
-      where: { status: { in: ["SAKIT", "PERLU_PERHATIAN"] } },
-      orderBy: { updatedAt: "desc" },
-      take: 10,
-      select: { id: true, lokasiBlok: true, status: true, varietas: true },
-    }),
-  ]);
+  // DB bisa tidak terjangkau (mis. DATABASE_URL belum diisi di Vercel).
+  // Jangan lempar — tampilkan dashboard kosong + peringatan, bukan 500.
+  let total = 0;
+  let sehat = 0;
+  let perhatian = 0;
+  let sakit = 0;
+  let tanpaGeotag = 0;
+  let pohon: any[] = [];
+  let panenTotal: { _sum: { jumlahKg: unknown }; _count: { _all: number } } = { _sum: { jumlahKg: 0 }, _count: { _all: 0 } };
+  let pohonPanen: { pohonId: string }[] = [];
+  let jadwalMendesak = 0;
+  let antrean: { id: string; lokasiBlok: string; status: string; varietas: string }[] = [];
+  let dbError: string | null = null;
+  try {
+    [total, sehat, perhatian, sakit, tanpaGeotag, pohon, panenTotal, pohonPanen, jadwalMendesak, antrean] = await Promise.all([
+      prisma.pohon.count(),
+      prisma.pohon.count({ where: { status: "SEHAT" } }),
+      prisma.pohon.count({ where: { status: "PERLU_PERHATIAN" } }),
+      prisma.pohon.count({ where: { status: "SAKIT" } }),
+      prisma.pohon.count({ where: { fotoGeotagUrl: null } }),
+      prisma.pohon.findMany({ orderBy: { createdAt: "desc" }, take: 20, include: { _count: { select: { riwayat: true } } } }),
+      // Sumber tunggal: tabel Panen. Pohon.hasilPanen hanya snapshot, tidak dipakai agregat.
+      prisma.panen.aggregate({ _sum: { jumlahKg: true }, _count: { _all: true } }),
+      prisma.panen.groupBy({ by: ["pohonId"] }),
+      prisma.jadwalPerawatan.count({ where: { status: "RENCANA", tanggalRencana: { lte: tujuhHari } } }),
+      prisma.pohon.findMany({
+        where: { status: { in: ["SAKIT", "PERLU_PERHATIAN"] } },
+        orderBy: { updatedAt: "desc" },
+        take: 10,
+        select: { id: true, lokasiBlok: true, status: true, varietas: true },
+      }),
+    ]);
+  } catch (e) {
+    console.error("[perkebunan] database tidak terjangkau:", e instanceof Error ? e.message : e);
+    dbError = "Database tidak terhubung. Cek DATABASE_URL di Vercel (Project Settings → Environment Variables) lalu redeploy.";
+  }
   const sudahPanen = pohonPanen.length;
   const displayKg = Number(panenTotal._sum.jumlahKg ?? 0);
   const rataKg = total ? displayKg / total : 0;
 
   return (
     <div className="space-y-6 sm:space-y-8 min-w-0">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 sm:gap-4">
-        <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900">
+      <div className="flex flex-row items-center justify-between gap-2 sm:gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-base sm:text-2xl font-semibold tracking-tight text-slate-900 truncate">
             Perkebunan
           </h1>
-          <p className="mt-1 text-sm text-slate-400">Ringkasan kebun</p>
+          <p className="mt-0.5 sm:mt-1 text-[11px] sm:text-sm text-slate-400">Ringkasan kebun</p>
         </div>
-        <Link href="/perkebunan/scan" className="shrink-0">
-          <Button className="rounded-full px-5 w-full sm:w-auto cursor-pointer">
+        <Link href="/perkebunan/scan" className="shrink-0 ml-auto">
+          <Button size="sm" className="rounded-full bg-green-700 hover:bg-green-800 h-9 px-3.5 text-xs sm:h-10 sm:px-5 sm:text-sm cursor-pointer shadow-sm">
             <ScanLine className="h-3.5 w-3.5" /> Scan
           </Button>
         </Link>
       </div>
+
+      {dbError && <DbErrorBanner />}
 
       {tanpaGeotag > 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 sm:px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -119,7 +140,7 @@ export default async function PertanianDashboard() {
         <BarHasilBlok groupBy="blok" />
       </div>
       <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2">
-        <BarHasilBlok groupBy="jenis" />
+        <BarHasilBlok groupBy="varietas" />
         <PanenChart />
       </div>
 
@@ -133,13 +154,16 @@ export default async function PertanianDashboard() {
             id: p.id,
             namaPohon: p.namaPohon,
             varietas: p.varietas,
-            jenis: p.jenis,
             lokasiBlok: p.lokasiBlok,
             tanggalTanam: p.tanggalTanam.toISOString(),
             koordinat: p.koordinat,
             hasilPanen: p.hasilPanen?.toString?.() ?? p.hasilPanen,
             pemupukan: p.pemupukan,
             pengobatan: p.pengobatan,
+            tinggiCm: p.tinggiCm ?? null,
+            lingkarBatangCm: p.lingkarBatangCm?.toString?.() ?? null,
+            phTanah: p.phTanah?.toString?.() ?? null,
+            diukurPada: p.diukurPada?.toISOString?.() ?? null,
             status: p.status as string,
             fotoGeotagUrl: p.fotoGeotagUrl,
             latitude: p.latitude,

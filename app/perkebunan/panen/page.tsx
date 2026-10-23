@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import Link from "next/link";
 import { TambahPanenForm, HapusPanenButton } from "./actions";
+import { DbErrorBanner } from "@/components/admin/db-error-banner";
 
 const PAGE_SIZE = 20;
 
@@ -44,21 +45,31 @@ export default async function PanenPage({ searchParams }: { searchParams: Promis
     ];
   }
 
-  const [total, rows, agg, blokRows] = await Promise.all([
-    prisma.panen.count({ where }),
-    prisma.panen.findMany({
-      where,
-      orderBy: { tanggalPanen: "desc" },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
-      include: {
-        pohon: { select: { id: true, lokasiBlok: true } },
-        petugas: { select: { nama: true } },
-      },
-    }),
-    prisma.panen.aggregate({ where, _sum: { jumlahKg: true } }),
-    prisma.pohon.findMany({ select: { lokasiBlok: true }, distinct: ["lokasiBlok"], orderBy: { lokasiBlok: "asc" } }),
-  ]);
+  let total = 0;
+  let rows: any[] = [];
+  let agg: { _sum: { jumlahKg: unknown } } = { _sum: { jumlahKg: 0 } };
+  let blokRows: { lokasiBlok: string }[] = [];
+  let dbError = false;
+  try {
+    [total, rows, agg, blokRows] = await Promise.all([
+      prisma.panen.count({ where }),
+      prisma.panen.findMany({
+        where,
+        orderBy: { tanggalPanen: "desc" },
+        skip: (page - 1) * PAGE_SIZE,
+        take: PAGE_SIZE,
+        include: {
+          pohon: { select: { id: true, lokasiBlok: true } },
+          petugas: { select: { nama: true } },
+        },
+      }),
+      prisma.panen.aggregate({ where, _sum: { jumlahKg: true } }),
+      prisma.pohon.findMany({ select: { lokasiBlok: true }, distinct: ["lokasiBlok"], orderBy: { lokasiBlok: "asc" } }),
+    ]);
+  } catch (e) {
+    console.error("[perkebunan/panen] database tidak terjangkau:", e instanceof Error ? e.message : e);
+    dbError = true;
+  }
 
   const totalPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const cur = Math.min(page, totalPage);
@@ -66,12 +77,17 @@ export default async function PanenPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="space-y-4 sm:space-y-6 min-w-0">
-      <div className="min-w-0">
-        <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-slate-900">Panen</h1>
-        <p className="text-xs sm:text-sm text-slate-500">{total} catatan • {totalKg.toLocaleString("id-ID", { maximumFractionDigits: 1 })} KG</p>
+      <div className="flex flex-row items-center justify-between gap-2 sm:gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-base sm:text-xl font-semibold tracking-tight text-slate-900 truncate">Panen</h1>
+          <p className="text-[11px] sm:text-sm text-slate-500 truncate">{total} catatan • {totalKg.toLocaleString("id-ID", { maximumFractionDigits: 1 })} KG</p>
+        </div>
+        <div className="shrink-0 ml-auto">
+          <TambahPanenForm />
+        </div>
       </div>
 
-      <TambahPanenForm />
+      {dbError && <DbErrorBanner />}
 
       <form method="get" action="/perkebunan/panen" className="flex flex-col sm:flex-row gap-2">
         <Input type="month" name="bulan" defaultValue={bulan === "semua" ? "" : bulan} className="h-11 rounded-full bg-white sm:max-w-[200px]" />

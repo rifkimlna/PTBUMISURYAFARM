@@ -25,13 +25,27 @@ export default function AdminHubLayout({ children }: { children: React.ReactNode
         if (user.role === "ADMIN_PERTANIAN") router.push("/perkebunan");
         else if (user.role === "ADMIN_KEUANGAN") router.push("/keuangan");
         else if (user.role === "PETUGAS_LAPANGAN") router.push("/petugas/scan");
+        else router.push("/login");
       }
+      // Revalidasi background: abaikan DB-down, hanya 401 yang logout
+      fetch("/api/auth/me")
+        .then(async (r) => {
+          const j = await r.json().catch(() => null);
+          if (j?.success) {
+            setUser(j.data.user);
+            localStorage.setItem("user", JSON.stringify(j.data.user));
+          } else if (r.status === 401 || r.status === 404) {
+            router.push("/login");
+          }
+          // 503 / dbDown: diamkan, sesi lokal tetap dipakai
+        })
+        .catch(() => {});
       return;
     }
     fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((j) => {
-        if (j.success) {
+      .then(async (r) => {
+        const j = await r.json().catch(() => null);
+        if (j?.success) {
           setUser(j.data.user);
           localStorage.setItem("user", JSON.stringify(j.data.user));
           const role = j.data.user.role;
@@ -39,7 +53,13 @@ export default function AdminHubLayout({ children }: { children: React.ReactNode
             if (role === "ADMIN_PERTANIAN") router.push("/perkebunan");
             else if (role === "ADMIN_KEUANGAN") router.push("/keuangan");
             else if (role === "PETUGAS_LAPANGAN") router.push("/petugas/scan");
+            else router.push("/login");
           }
+        } else if (r.status === 503) {
+          // DB down tanpa sesi lokal: jangan loop, tampilkan hub dengan peringatan.
+          // User bisa login ulang setelah DB pulih; bila sudah punya cookie valid,
+          // /api/auth/me akan success+dbDown setelah DB pulih sebagian.
+          setUser(null);
         } else router.push("/login");
       })
       .catch(() => router.push("/login"));

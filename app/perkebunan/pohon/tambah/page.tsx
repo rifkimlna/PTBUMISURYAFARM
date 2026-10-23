@@ -17,13 +17,15 @@ export default function TambahPohonPage() {
     id: "",
     namaPohon: "",
     varietas: "",
-    jenis: "",
     lokasiBlok: "",
     tanggalTanam: "",
     koordinat: "",
     hasilPanen: "",
     pemupukan: "",
     pengobatan: "",
+    tinggiCm: "",
+    lingkarBatangCm: "",
+    phTanah: "",
     status: "SEHAT",
   });
   const [foto, setFoto] = useState<File | null>(null);
@@ -114,7 +116,6 @@ export default function TambahPohonPage() {
       fd.set("id", form.id.toUpperCase());
       if (form.namaPohon) fd.set("namaPohon", form.namaPohon);
       fd.set("varietas", form.varietas);
-      if (form.jenis) fd.set("jenis", form.jenis);
       fd.set("lokasiBlok", form.lokasiBlok);
       fd.set("tanggalTanam", form.tanggalTanam);
       fd.set("koordinat", form.koordinat);
@@ -123,6 +124,9 @@ export default function TambahPohonPage() {
       if (form.hasilPanen) fd.set("hasilPanen", form.hasilPanen);
       if (form.pemupukan) fd.set("pemupukan", form.pemupukan);
       if (form.pengobatan) fd.set("pengobatan", form.pengobatan);
+      if (form.tinggiCm) fd.set("tinggiCm", form.tinggiCm);
+      if (form.lingkarBatangCm) fd.set("lingkarBatangCm", form.lingkarBatangCm);
+      if (form.phTanah) fd.set("phTanah", form.phTanah);
       fd.set("status", form.status);
       fd.set("foto", stamped);
       fd.set("source", source);
@@ -176,18 +180,23 @@ export default function TambahPohonPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="namaPohon">Nama Pohon</Label>
-                <Input id="namaPohon" value={form.namaPohon} onChange={(e) => onChange("namaPohon", e.target.value)} placeholder="Pohon Sawit 003" />
+                <Input id="namaPohon" value={form.namaPohon} onChange={(e) => onChange("namaPohon", e.target.value)} placeholder="Pohon Durian 003" />
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 mt-4">
+            <div className="space-y-2 mt-4">
               <div className="space-y-2">
                 <Label htmlFor="varietas">Varietas *</Label>
-                <Input id="varietas" value={form.varietas} onChange={(e) => onChange("varietas", e.target.value)} placeholder="Sawit DxP" required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="jenis">Jenis</Label>
-                <Input id="jenis" value={form.jenis} onChange={(e) => onChange("jenis", e.target.value)} placeholder="Sawit / Durian / Karet" />
+                <Input id="varietas" value={form.varietas} onChange={(e) => onChange("varietas", e.target.value)} placeholder="Durian Montong / Alpukat Mentega / Jambu Kristal" required list="varietas-buah" />
+                <datalist id="varietas-buah">
+                  <option value="Durian Montong" />
+                  <option value="Durian Bawor" />
+                  <option value="Durian Musang King" />
+                  <option value="Alpukat Mentega" />
+                  <option value="Alpukat Kendil" />
+                  <option value="Jambu Kristal" />
+                  <option value="Jambu Madu Deli" />
+                </datalist>
               </div>
             </div>
 
@@ -217,10 +226,10 @@ export default function TambahPohonPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Foto Pohon (kamera HP) *</Label>
+                <Label>Foto Pohon *</Label>
                 <div className="rounded-xl border-2 border-dashed border-emerald-200 bg-white p-3">
-                  <Input type="file" accept="image/*" capture="environment" onChange={onFile} required className="bg-white" />
-                  <p className="mt-1 text-xs text-slate-500">Maks 5MB • JPG/PNG/WEBP</p>
+                  <Input type="file" accept="image/*" onChange={onFile} required className="bg-white" />
+                  <p className="mt-1 text-xs text-slate-500">Pilih dari kamera / galeri • Maks 5MB • JPG/PNG/WEBP • Wajib HTTPS untuk kamera</p>
                   {preview && <img src={preview} alt="preview" className="mt-3 h-56 w-full object-cover rounded-lg border" />}
                 </div>
               </div>
@@ -272,6 +281,25 @@ export default function TambahPohonPage() {
             </div>
 
             <div>
+              <div className="text-xs font-semibold tracking-widest text-slate-500 mb-3">DIMENSI & TANAH</div>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="tinggiCm">Tinggi (cm)</Label>
+                <Input id="tinggiCm" type="number" step="1" min="0" max="3000" inputMode="numeric" value={form.tinggiCm} onChange={(e) => onChange("tinggiCm", e.target.value)} placeholder="180" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lingkarBatangCm">Lingkar batang (cm)</Label>
+                <Input id="lingkarBatangCm" type="number" step="0.1" min="0" max="500" inputMode="decimal" value={form.lingkarBatangCm} onChange={(e) => onChange("lingkarBatangCm", e.target.value)} placeholder="45" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phTanah">pH tanah</Label>
+                <Input id="phTanah" type="number" step="0.1" min="0" max="14" inputMode="decimal" value={form.phTanah} onChange={(e) => onChange("phTanah", e.target.value)} placeholder="6.5" />
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">Ukur tinggi tanah→pucuk, lingkar 130cm dari tanah, pH pakai meter tusuk. Kategori Kecil (&lt;150) / Sedang / Besar (&gt;400) otomatis.</p>
+            </div>
+
+            <div>
               <div className="text-xs font-semibold tracking-widest text-slate-500 mb-3">HASIL & PERAWATAN</div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
@@ -299,7 +327,7 @@ export default function TambahPohonPage() {
             </div>
 
             <div className="sticky bottom-0 -mx-1 px-1 pb-1 pt-2 bg-white">
-            <Button type="submit" disabled={loading} className="w-full bg-green-700 hover:bg-green-800 h-12 text-base rounded-full">
+            <Button type="submit" disabled={loading} className="w-full bg-green-700 hover:bg-green-800 h-11 text-sm rounded-full cursor-pointer">
               {loading ? "Menyimpan..." : "Simpan"}
             </Button>
             </div>

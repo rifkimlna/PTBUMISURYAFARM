@@ -3,16 +3,56 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/prisma";
+import { hitungStokSaatIni, tentukanStatusStok } from "@/lib/persediaan";
+import { formatRupiah } from "@/lib/utils";
+import { BIBIT_CONTOH, fotoBibit, waPesanBibit, type KatalogBibit } from "@/lib/katalog-bibit";
+import { Sprout, MessageCircle, ArrowRight } from "lucide-react";
 
 
 export default async function LandingPage() {
   const stats = { pohon: 0, karyawan: 0, luas: "120 Ha", varietas: 4 };
+  let katalog: KatalogBibit[] = [];
+  let katalogContoh = false;
   try {
     // Karyawan kini dari master Kontak (tabel Karyawan hanya arsip baca).
     const [pohonCount, karyawanCount] = await Promise.all([prisma.pohon.count(), prisma.kontak.count({ where: { tipe: "KARYAWAN" } })]);
     stats.pohon = pohonCount;
     stats.karyawan = karyawanCount;
   } catch {}
+
+  try {
+    const [barang, agg] = await Promise.all([
+      prisma.persediaanBarang.findMany({ where: { kategori: "Bibit/Benih" }, orderBy: { createdAt: "desc" }, take: 8 }),
+      prisma.riwayatStok.groupBy({ by: ["barangId", "jenis"], _sum: { jumlah: true } }),
+    ]);
+    const map = new Map<string, { MASUK: number; KELUAR: number }>();
+    for (const a of agg) {
+      const entry = map.get(a.barangId) ?? { MASUK: 0, KELUAR: 0 };
+      entry[a.jenis] += a._sum.jumlah ?? 0;
+      map.set(a.barangId, entry);
+    }
+    katalog = barang.map((b) => {
+      const sums = map.get(b.id) ?? { MASUK: 0, KELUAR: 0 };
+      const stok = hitungStokSaatIni(b.stokAwal, [
+        { jenis: "MASUK", jumlah: sums.MASUK },
+        { jenis: "KELUAR", jumlah: sums.KELUAR },
+      ]);
+      return {
+        id: b.id,
+        nama: b.namaBarang,
+        harga: b.hargaJual == null ? Number(b.hargaSatuan) : Number(b.hargaJual),
+        satuan: b.satuan,
+        stok,
+        fotoUrl: b.fotoUrl,
+        keterangan: b.keterangan,
+        status: tentukanStatusStok(stok),
+      };
+    });
+  } catch {}
+  if (katalog.length === 0) {
+    katalog = BIBIT_CONTOH;
+    katalogContoh = true;
+  }
 
   return (
     <div className="bg-[#FCFCFD] overflow-x-hidden">
@@ -120,6 +160,65 @@ export default async function LandingPage() {
                 loading="lazy"
               />
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* KATALOG BIBIT - kotak-kotak, data asli gudang (fallback contoh bila kosong) */}
+      <section id="produk" className="scroll-mt-16 bg-[#FCFCFD]">
+        <div className="mx-auto max-w-[1280px] 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8 py-12 sm:py-16 md:py-20">
+          <div className="flex items-end justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[10px] sm:text-[11px] font-semibold tracking-[0.14em] text-green-700">KATALOG BIBIT • STOK TERKINI</div>
+              <h2 className="mt-2 text-[20px] sm:text-[22px] md:text-[26px] font-semibold tracking-[-0.02em] text-slate-900">
+                Bibit Unggul <span className="font-light">Siap Tanam</span>
+              </h2>
+              <p className="mt-2 text-[13px] sm:text-sm text-slate-500">Stok langsung dari gudang pembibitan — harga transparan, pesan via WhatsApp.</p>
+            </div>
+            <Link href="/#kontak" className="hidden sm:inline-flex shrink-0 items-center gap-1 text-xs font-medium text-green-800 hover:underline">
+              Butuh partai besar? <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+
+          {katalogContoh && (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+              Katalog contoh — stok asli menyusul. Admin dapat tambah bibit di <span className="font-semibold">Perkebunan → Bibit Dijual</span>.
+            </div>
+          )}
+
+          <div className="mt-6 sm:mt-8 grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
+            {katalog.map((b) => (
+              <div key={b.id} className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(16,24,40,0.04),0_8px_24px_rgba(16,24,40,0.04)]">
+                <Link href={b.id.startsWith("CONTOH") ? "/#produk" : `/bibit/${b.id}`} className="relative block aspect-[4/3] bg-slate-50 overflow-hidden">
+                  <img src={fotoBibit(b)} alt={b.nama} className="h-full w-full object-cover" loading="lazy" />
+                  <span className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${b.status === "Tersedia" ? "bg-green-700 text-white" : b.status === "Stok Menipis" ? "bg-amber-400 text-amber-950" : "bg-slate-900/70 text-white"}`}>
+                    {b.status}
+                  </span>
+                </Link>
+                <div className="p-3 sm:p-4">
+                  <Link href={b.id.startsWith("CONTOH") ? "/#produk" : `/bibit/${b.id}`} className="block truncate text-sm font-medium text-slate-900 hover:text-green-800">
+                    {b.nama}
+                  </Link>
+                  <div className="mt-1 text-sm font-semibold text-green-800">
+                    Rp {formatRupiah(b.harga)} <span className="text-xs font-normal text-slate-400">/{b.satuan}</span>
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500">
+                    <Sprout className="h-3 w-3" /> Stok: {b.stok} {b.satuan}
+                  </div>
+                  {b.status === "Habis" ? (
+                    <Button size="sm" disabled className="mt-3 w-full rounded-full h-9 text-xs">
+                      Stok Habis
+                    </Button>
+                  ) : (
+                    <a href={waPesanBibit(b.nama, b.id)} target="_blank" rel="noopener noreferrer" className="block mt-3">
+                      <Button size="sm" className="w-full rounded-full h-9 text-xs bg-green-700 hover:bg-green-800 cursor-pointer">
+                        <MessageCircle className="h-3.5 w-3.5" /> Pesan
+                      </Button>
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>

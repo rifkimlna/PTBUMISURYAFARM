@@ -112,9 +112,9 @@ export default function PetugasScanPage() {
       setError(`QR tidak valid: ${text.slice(0, 60)}`);
       return;
     }
-    setSuccess(`Terdeteksi ${id} — membuka form lapangan...`);
+    setSuccess(`Terdeteksi ${id} — membuka daftar blok...`);
     await stopScan();
-    // verify exists then redirect
+    // Ambil blok pohon ini, lalu buka SEMUA pohon di blok yang sama
     try {
       const token = localStorage.getItem("token") || "";
       const res = await fetch(`/api/pohon/${encodeURIComponent(id)}`, {
@@ -124,8 +124,14 @@ export default function PetugasScanPage() {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.message || "Pohon tidak ditemukan");
       }
+      const j = await res.json().catch(() => ({}));
+      const blok = j?.data?.lokasiBlok as string | undefined;
+      if (blok) {
+        router.push(`/petugas/blok/${encodeURIComponent(blok)}`);
+        return;
+      }
     } catch (e: any) {
-      // still redirect, let lapangan page show error
+      // fallback: buka form 1 pohon, halaman lapangan yang tampilkan error
     }
     router.push(`/petugas/pohon/${encodeURIComponent(id)}/lapangan`);
   };
@@ -143,7 +149,7 @@ export default function PetugasScanPage() {
     <div className="space-y-4 sm:space-y-6">
       <div className="text-center sm:text-left">
         <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900">Scan QR Pohon</h1>
-        <p className="mt-1 text-sm text-slate-500">Scan batang pohon → langsung update lapangan. Data global, admin ikut terupdate.</p>
+        <p className="mt-1 text-sm text-slate-500">Scan 1 pohon → semua pohon di blok yang sama langsung keluar. Ketuk untuk update.</p>
       </div>
 
       <Card className="border-slate-200 overflow-hidden">
@@ -151,7 +157,7 @@ export default function PetugasScanPage() {
           <CardTitle className="text-sm flex items-center gap-2">
             <Camera className="h-4 w-4 text-green-700" /> Kamera Scanner
           </CardTitle>
-          <CardDescription>Arahkan kamera ke QR di batang (PHN-BLK-XXX). Otomatis buka form lapangan.</CardDescription>
+          <CardDescription>Scan 1 QR di batang (PHN-BLK-XXX) → otomatis buka daftar semua pohon di blok itu.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div
