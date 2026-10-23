@@ -3,7 +3,9 @@ import { PenjualanContent } from "@/components/admin/penjualan-content";
 
 // Halaman utama modul Penjualan PT BST.
 // Sumber data:
-// - Tab Penagihan: Tagihan PIUTANG + DokumenPenjualan PROFORMA/TUKAR_FAKTUR.
+// - Tab Penagihan: Tagihan PIUTANG + DokumenPenjualan PROFORMA/TUKAR_FAKTUR
+//   + PENAGIHAN yang belum punya piutang (agar terlihat dan bisa dihapus,
+//   tidak menjadi dokumen yatim tak tersentuh).
 // - Tab Pesanan/Penawaran: DokumenPenjualan per tipe.
 // - Ringkasan pelunasan: TransaksiKas PEMASUKAN tertaut tagihan (tagihanId).
 // Alur: Penawaran -> Pesanan -> Pengiriman -> Proforma/Tukar Faktur -> Penagihan
@@ -60,9 +62,15 @@ export default async function PenjualanPage({
       take: 100,
       include: { admin: { select: { nama: true } } },
     }),
-    // Dokumen non-penagihan untuk tab Penagihan (proforma/tukar) + tab Pesanan/Penawaran
+    // Dokumen non-penagihan untuk tab Penagihan (proforma/tukar) + tab Pesanan/Penawaran,
+    // plus PENAGIHAN yang belum punya piutang agar terlihat dan bisa dikelola/dihapus.
     prisma.dokumenPenjualan.findMany({
-      where: { tipe: { in: ["PESANAN", "PENAWARAN", "PROFORMA", "TUKAR_FAKTUR"] } },
+      where: {
+        OR: [
+          { tipe: { in: ["PESANAN", "PENAWARAN", "PROFORMA", "TUKAR_FAKTUR"] } },
+          { tipe: "PENAGIHAN", tagihanId: null },
+        ],
+      },
       orderBy: { tanggal: "desc" },
       take: 100,
       include: { pelanggan: { select: { nama: true } }, _count: { select: { pengiriman: true } } },
@@ -94,6 +102,18 @@ export default async function PenjualanPage({
   for (const d of docByTagihan) {
     if (d.tagihanId) docMap[d.tagihanId] = { docId: d.id, tipe: d.tipe };
   }
+
+  // Total Tukar Faktur = jumlah sisa piutang yang dirujuk. Dokumen lama bisa
+  // tersimpan dengan total 0, jadi dihitung ulang saat tampil sebagai cadangan.
+  const tukarReferensiIds = docs.filter((d) => d.tipe === "TUKAR_FAKTUR").flatMap((d) => d.referensiIds);
+  const tukarTagihan =
+    tukarReferensiIds.length > 0
+      ? await prisma.tagihan.findMany({
+          where: { id: { in: tukarReferensiIds } },
+          select: { id: true, sisa: true },
+        })
+      : [];
+  const sisaRujukanMap = new Map(tukarTagihan.map((t) => [t.id, Number(t.sisa)]));
 
   // Himpunan id yang sudah dirujuk dokumen turunan (untuk status tampilan).
   const dirujukOlehPenagihan = new Set<string>();
@@ -157,7 +177,10 @@ export default async function PenjualanPage({
             tanggal: d.tanggal.toISOString(),
             jatuhTempo: d.jatuhTempo?.toISOString() ?? null,
             status,
-            total: Number(d.total),
+            total:
+              d.tipe === "TUKAR_FAKTUR"
+                ? d.referensiIds.reduce((s, id) => s + (sisaRujukanMap.get(id) ?? 0), 0)
+                : Number(d.total),
           };
         })}
         kirim={kirim.map((p) => {

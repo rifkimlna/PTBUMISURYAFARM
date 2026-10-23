@@ -1,13 +1,12 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, ChevronDown, Download, FileSpreadsheet, FileText } from "lucide-react";
+import { ChevronDown, Download, FileSpreadsheet, FileText } from "lucide-react";
 import { formatRupiah } from "@/lib/utils";
 import {
   BUKU_BESAR_PERIODE_LABEL,
@@ -16,9 +15,10 @@ import {
   type BukuBesarSnapshot,
 } from "@/lib/buku-besar-types";
 
-// Halaman utama = DAFTAR dokumen (tanpa nominal). Nominal + tombol unduh
-// hanya ada di tampilan DETAIL per dokumen. Seluruh angka memakai snapshot
-// dari API yang sama (logic perhitungan tidak diubah di sini).
+// Tampilan tunggal ala Daftar Pembelian: kartu filter di atas, isi laporan
+// langsung di bawahnya (tanpa daftar dokumen / tombol "Lihat Laporan").
+// Seluruh angka memakai snapshot dari API yang sama
+// (logic perhitungan tidak diubah di sini).
 
 type ApiData =
   | { mode: "single"; snapshot: BukuBesarSnapshot }
@@ -90,17 +90,6 @@ function rp(v: number) {
 }
 function fmtTgl(iso: string) {
   return new Date(iso).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
-}
-
-/** Judul dokumen: "Buku Besar — September 2026" bila satu bulan, else "Buku Besar — {label}". */
-function judulDokumen(s: BukuBesarSnapshot) {
-  const a = new Date(s.start);
-  const b = new Date(s.end);
-  if (a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()) {
-    const nama = a.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
-    return `Buku Besar — ${nama}`;
-  }
-  return `Buku Besar — ${s.label}`;
 }
 
 function AkunCard({ a }: { a: BukuBesarAkun }) {
@@ -240,33 +229,21 @@ function SnapshotView({ s }: { s: BukuBesarSnapshot }) {
   );
 }
 
-export function BukuBesarContent() {
-  return (
-    <Suspense fallback={<p className="py-10 text-center text-sm text-slate-400">Memuat Buku Besar...</p>}>
-      <BukuBesarIsi />
-    </Suspense>
-  );
+function draftAwal(): Draft {
+  const t = todayYMD();
+  const r = rentangUntuk("bulan-ini");
+  return { periode: "bulan-ini", dari: r?.dari ?? t, sampai: r?.sampai ?? t };
 }
 
-function BukuBesarIsi() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const t = todayYMD();
-  const [draft, setDraft] = useState<Draft>({ periode: "bulan-ini", dari: t, sampai: t });
-  const [applied, setApplied] = useState<Draft>({ periode: "bulan-ini", dari: t, sampai: t });
+export function BukuBesarContent() {
+  const [draft, setDraft] = useState<Draft>(draftAwal);
+  const [applied, setApplied] = useState<Draft>(draftAwal);
   const [data, setData] = useState<ApiData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filterError, setFilterError] = useState("");
   const [menuUnduh, setMenuUnduh] = useState(false);
   const [dl, setDl] = useState<"pdf" | "xlsx" | null>(null);
-
-  // Dokumen yang dibuka disinkron ke URL (?doc=i) agar tombol kembali —
-  // baik tombol di halaman maupun back browser — kembali ke daftar
-  // dokumen halaman ini, bukan ke dashboard laporan.
-  const docParam = searchParams.get("doc");
-  const docIndex = docParam !== null && /^\d+$/.test(docParam) ? Number(docParam) : null;
 
   const queryDaftar = useCallback(() => {
     const p = new URLSearchParams({ periode: applied.periode });
@@ -318,15 +295,17 @@ function BukuBesarIsi() {
     setDraft(next);
   };
 
-  const terapkan = () => {
-    if (draft.periode === "custom" && (!draft.dari || !draft.sampai)) {
+  const terapkanFilter = () => {
+    if (!draft.dari || !draft.sampai) {
       setFilterError("Isi tanggal awal dan tanggal akhir terlebih dahulu");
+      return;
+    }
+    if (new Date(draft.sampai) < new Date(draft.dari)) {
+      setFilterError("Tanggal akhir tidak boleh lebih awal dari tanggal awal");
       return;
     }
     setFilterError("");
     setApplied(draft);
-    // Kembali ke daftar dokumen halaman ini (bukan dashboard laporan).
-    if (docIndex !== null) router.push(pathname, { scroll: false });
   };
 
   const daftar: BukuBesarSnapshot[] =
@@ -335,31 +314,14 @@ function BukuBesarIsi() {
       : data?.mode === "single"
         ? [data.snapshot]
         : [];
-  const aktif = docIndex !== null ? (daftar[docIndex] ?? null) : null;
 
-  const bukaDokumen = (i: number) => {
-    router.push(`${pathname}?doc=${i}`, { scroll: false });
-  };
-
-  const kembaliKeDaftar = () => {
-    setMenuUnduh(false);
-    router.push(pathname, { scroll: false });
-  };
-
-  const download = async (s: BukuBesarSnapshot, fmt: "pdf" | "xlsx") => {
+  // Unduhan memakai query filter aktif yang sama dengan tampilan
+  // (mode bulanan mengunduh seluruh snapshot sekaligus).
+  const download = async (fmt: "pdf" | "xlsx") => {
     setDl(fmt);
     setMenuUnduh(false);
     try {
-      // Unduhan mengikuti periode dokumen yang dibuka (mode bulanan → custom bulan tsb).
-      let q = queryDaftar();
-      if (data?.mode === "monthly") {
-        const d = new Date(s.start);
-        const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-        const e = new Date(s.end);
-        const ymdE = `${e.getFullYear()}-${String(e.getMonth() + 1).padStart(2, "0")}-${String(e.getDate()).padStart(2, "0")}`;
-        q = new URLSearchParams({ periode: "custom", dari: ymd, sampai: ymdE }).toString();
-      }
-      const res = await fetch(`/api/keuangan/laporan/buku-besar?${q}&format=${fmt}`, {
+      const res = await fetch(`/api/keuangan/laporan/buku-besar?${queryDaftar()}&format=${fmt}`, {
         credentials: "include",
       });
       if (!res.ok) {
@@ -384,104 +346,37 @@ function BukuBesarIsi() {
     }
   };
 
-  // ------------------------- TAMPILAN DETAIL -------------------------
-  if (aktif) {
-    return (
-      <div className="space-y-5">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={kembaliKeDaftar}
-            className="w-fit cursor-pointer"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Kembali ke daftar
-          </Button>
-          <div className="relative">
-            <Button
-              type="button"
-              onClick={() => setMenuUnduh((v) => !v)}
-              aria-haspopup="menu"
-              aria-expanded={menuUnduh}
-              className="cursor-pointer bg-emerald-700 hover:bg-emerald-800"
-            >
-              <Download className="h-4 w-4" />
-              Download / Ekspor
-              <ChevronDown className="h-4 w-4" />
-            </Button>
-            {menuUnduh && (
-              <>
-                <button
-                  type="button"
-                  aria-label="Tutup menu unduhan"
-                  className="fixed inset-0 z-10 cursor-default"
-                  onClick={() => setMenuUnduh(false)}
-                />
-                <div
-                  role="menu"
-                  className="absolute right-0 z-20 mt-2 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg"
-                >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    disabled={dl !== null}
-                    onClick={() => download(aktif, "pdf")}
-                    className="flex w-full cursor-pointer items-center gap-2 px-4 py-2.5 text-left text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    <FileText className="h-4 w-4 text-slate-400" />
-                    {dl === "pdf" ? "Menyiapkan PDF..." : "Download PDF"}
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    disabled={dl !== null}
-                    onClick={() => download(aktif, "xlsx")}
-                    className="flex w-full cursor-pointer items-center gap-2 border-t border-slate-100 px-4 py-2.5 text-left text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    <FileSpreadsheet className="h-4 w-4 text-slate-400" />
-                    {dl === "xlsx" ? "Menyiapkan XLSX..." : "Download XLSX"}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {error && <p className="text-center text-sm text-red-600">{error}</p>}
-
-        <Card className="border-slate-200">
-          <CardContent className="p-5 sm:p-6">
-            <SnapshotView key={aktif.label} s={aktif} />
-          </CardContent>
-        </Card>
-
-        <p className="flex items-center gap-1.5 text-[11px] leading-relaxed text-slate-400">
-          <Download className="h-3.5 w-3.5 shrink-0" />
-          Detail, PDF, dan XLSX memakai sumber data Buku Besar yang sama sehingga angkanya identik.
-        </p>
-      </div>
-    );
-  }
-
-  // ------------------------- TAMPILAN DAFTAR -------------------------
+  // Tampilan tunggal ala Daftar Pembelian: filter di atas, isi laporan
+  // langsung di bawahnya (tanpa daftar dokumen / tombol "Lihat Laporan").
   return (
     <div className="space-y-5">
       <Card className="border-slate-200">
         <CardHeader className="border-b border-slate-100">
-          <CardTitle className="text-sm">Filter Periode</CardTitle>
+          <CardTitle className="text-sm">Filter Laporan</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 p-5">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <div className="sm:w-64">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div>
+              <label htmlFor="bukubesar-dari" className="mb-1.5 block text-xs font-medium text-slate-600">
+                Tanggal awal
+              </label>
+              <Input id="bukubesar-dari" type="date" value={draft.dari} onChange={(e) => gantiTanggal("dari", e.target.value)} className="h-10 text-sm" />
+            </div>
+            <div>
+              <label htmlFor="bukubesar-sampai" className="mb-1.5 block text-xs font-medium text-slate-600">
+                Tanggal akhir
+              </label>
+              <Input id="bukubesar-sampai" type="date" value={draft.sampai} onChange={(e) => gantiTanggal("sampai", e.target.value)} className="h-10 text-sm" />
+            </div>
+            <div>
               <label htmlFor="bukubesar-periode" className="mb-1.5 block text-xs font-medium text-slate-600">
-                Filter sesuai periode
+                Periode
               </label>
               <Select
                 id="bukubesar-periode"
                 value={draft.periode}
                 onChange={(e) => gantiPeriode(e.target.value as BukuBesarPeriode)}
-                aria-label="Filter sesuai periode"
+                aria-label="Periode"
               >
                 {PERIODE_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -491,67 +386,97 @@ function BukuBesarIsi() {
               </Select>
             </div>
             <div className="flex items-end gap-2">
-              <div>
-                <label htmlFor="bukubesar-dari" className="mb-1.5 block text-xs font-medium text-slate-600">
-                  Tanggal awal
-                </label>
-                <Input id="bukubesar-dari" type="date" value={draft.dari} onChange={(e) => gantiTanggal("dari", e.target.value)} className="h-10 text-sm" />
-              </div>
-              <span className="pb-3 text-slate-400">–</span>
-              <div>
-                <label htmlFor="bukubesar-sampai" className="mb-1.5 block text-xs font-medium text-slate-600">
-                  Tanggal akhir
-                </label>
-                <Input id="bukubesar-sampai" type="date" value={draft.sampai} onChange={(e) => gantiTanggal("sampai", e.target.value)} className="h-10 text-sm" />
+              <Button
+                type="button"
+                onClick={terapkanFilter}
+                className="w-full cursor-pointer bg-emerald-700 text-white hover:bg-emerald-800"
+              >
+                Filter
+              </Button>
+              <div className="relative">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setMenuUnduh((v) => !v)}
+                  aria-haspopup="menu"
+                  aria-expanded={menuUnduh}
+                  className="cursor-pointer"
+                >
+                  <Download className="h-4 w-4" />
+                  Ekspor
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+                {menuUnduh && (
+                  <>
+                    <button
+                      type="button"
+                      aria-label="Tutup menu unduhan"
+                      className="fixed inset-0 z-10 cursor-default"
+                      onClick={() => setMenuUnduh(false)}
+                    />
+                    <div
+                      role="menu"
+                      className="absolute right-0 z-20 mt-2 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg"
+                    >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={dl !== null}
+                        onClick={() => download("pdf")}
+                        className="flex w-full cursor-pointer items-center gap-2 px-4 py-2.5 text-left text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        <FileText className="h-4 w-4 text-slate-400" />
+                        {dl === "pdf" ? "Menyiapkan PDF..." : "Download PDF"}
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={dl !== null}
+                        onClick={() => download("xlsx")}
+                        className="flex w-full cursor-pointer items-center gap-2 border-t border-slate-100 px-4 py-2.5 text-left text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        <FileSpreadsheet className="h-4 w-4 text-slate-400" />
+                        {dl === "xlsx" ? "Menyiapkan XLSX..." : "Download XLSX"}
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
-            <Button
-              type="button"
-              onClick={terapkan}
-              className="cursor-pointer bg-emerald-700 text-white hover:bg-emerald-800 sm:w-auto"
-            >
-              Tampilkan
-            </Button>
           </div>
           {filterError && <p className="text-xs text-red-600">{filterError}</p>}
         </CardContent>
       </Card>
 
+      {error && <p className="text-center text-sm text-red-600">{error}</p>}
+
       {loading ? (
-        <p className="py-10 text-center text-sm text-slate-400">Memuat Buku Besar...</p>
-      ) : error ? (
-        <p className="py-10 text-center text-sm text-red-600">{error}</p>
+        <p className="py-10 text-center text-sm text-slate-400">Memuat laporan...</p>
       ) : daftar.length === 0 ? (
-        <p className="py-10 text-center text-sm text-slate-400">Tidak ada dokumen Buku Besar pada periode ini.</p>
+        <Card className="border-slate-200">
+          <CardContent className="p-5 sm:p-6">
+            <div className="py-10 text-center">
+              <p className="text-sm font-semibold text-slate-900">Tidak ada transaksi pada periode ini</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Silakan pilih tanggal atau periode lain, lalu klik tombol Filter.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          {daftar.map((s, i) => (
-            <Card key={s.label} className="border-slate-200">
-              <CardContent className="flex min-h-36 flex-col p-5">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50">
-                    <FileText className="h-4 w-4 text-emerald-700" />
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-slate-900">{judulDokumen(s)}</h3>
-                    <p className="mt-1 text-xs leading-relaxed text-slate-500">Periode: {s.label}</p>
-                  </div>
-                </div>
-                <div className="mt-auto pt-4">
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => bukaDokumen(i)}
-                    className="cursor-pointer bg-emerald-700 text-white hover:bg-emerald-800"
-                  >
-                    Lihat Laporan
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        daftar.map((s) => (
+          <Card key={s.label} className="border-slate-200">
+            <CardContent className="p-5 sm:p-6">
+              <SnapshotView key={s.label} s={s} />
+            </CardContent>
+          </Card>
+        ))
       )}
+
+      <p className="flex items-center gap-1.5 text-[11px] leading-relaxed text-slate-400">
+        <Download className="h-3.5 w-3.5 shrink-0" />
+        Tabel, PDF, dan XLSX memakai sumber data Buku Besar yang sama sehingga angkanya identik.
+      </p>
     </div>
   );
 }

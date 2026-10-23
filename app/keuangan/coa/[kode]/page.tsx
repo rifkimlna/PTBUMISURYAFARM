@@ -1,9 +1,8 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CoaDetail } from "@/components/admin/coa-detail";
-import { getAkunByKodeFromDB, SUMBER_DANA_KODE_MAP } from "@/lib/coa-server";
-import { prisma } from "@/lib/prisma";
-import type { Prisma } from "@/generated/prisma/client";
+import { getAkunByKodeFromDB } from "@/lib/coa-server";
+import { getTransaksiAkun } from "@/lib/coa-transaksi";
 
 interface PageProps {
   params: Promise<{ kode: string }>;
@@ -21,54 +20,30 @@ export default async function CoaDetailPage({ params }: PageProps) {
   const akun = await getAkunByKodeFromDB(kode);
   if (!akun) notFound();
 
-  // Untuk akun sumber dana (1101 Kas, 1103 Bank, 1104 Tabungan), filter by sumberDana
-  // TRANSFER tidak memiliki kode COA, jadi exclude dari detail COA
-  const isSumberDanaAkun = kode in SUMBER_DANA_KODE_MAP;
-  const where: Prisma.TransaksiKasWhereInput = isSumberDanaAkun
-    ? { sumberDana: SUMBER_DANA_KODE_MAP[kode], tipe: { in: ["PEMASUKAN", "PENGELUARAN"] } }
-    : { kodeAkun: kode };
-
-  // Fetch initial data (page 1, no date filter)
-  const [data, total, summary] = await Promise.all([
-    prisma.transaksiKas.findMany({
-      where,
-      take: 10,
-      orderBy: { tanggal: "desc" },
-      include: { admin: { select: { id: true, nama: true } }, _count: { select: { bukti: true } } },
-    }),
-    prisma.transaksiKas.count({ where }),
-    prisma.transaksiKas.groupBy({
-      by: ["tipe"],
-      where,
-      _sum: { jumlah: true },
-    }),
-  ]);
-
-  const totalMasuk = Number(summary.find((s) => s.tipe === "PEMASUKAN")?._sum.jumlah ?? 0);
-  const totalKeluar = Number(summary.find((s) => s.tipe === "PENGELUARAN")?._sum.jumlah ?? 0);
+  // Fetch initial data (page 1, no date filter) — satu sumber dengan API
+  // riwayatnya, sudah transfer-aware untuk akun Kas/Bank/Tabungan.
+  const { rows, total, summary } = await getTransaksiAkun(kode, { page: 1, limit: 10 });
 
   return (
     <div className="space-y-6 sm:space-y-8 min-w-0">
       <CoaDetail
         akun={akun}
-        initialData={data.map((d) => ({
+        initialData={rows.map((d) => ({
           id: d.id,
-          tanggal: d.tanggal.toISOString(),
-          tipe: d.tipe as "PEMASUKAN" | "PENGELUARAN",
+          tanggal: d.tanggal,
+          tipe: d.tipe as "PEMASUKAN" | "PENGELUARAN" | "TRANSFER",
           kategori: d.kategori,
           kodeAkun: d.kodeAkun,
           sumberDana: d.sumberDana,
-          jumlah: Number(d.jumlah),
+          sumberDanaTujuan: d.sumberDanaTujuan,
+          jumlah: d.jumlah,
           keterangan: d.keterangan,
-          admin: { nama: d.admin.nama },
-          buktiCount: d._count.bukti,
+          admin: { nama: d.adminNama },
+          buktiCount: d.buktiCount,
+          arah: d.arah,
         }))}
         initialTotal={total}
-        initialSummary={{
-          pemasukan: totalMasuk,
-          pengeluaran: totalKeluar,
-          saldo: totalMasuk - totalKeluar,
-        }}
+        initialSummary={summary}
       />
     </div>
   );

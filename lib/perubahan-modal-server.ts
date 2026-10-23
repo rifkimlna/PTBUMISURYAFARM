@@ -8,9 +8,11 @@
 //   Neraca & Arus Kas): PEMASUKAN = penambah (kredit), PENGELUARAN = pengurang
 //   (debit). Permulaan = kumulatif s/d sehari sebelum periode.
 // - 3104 "Laba Ditahan": permulaan = laba basis kas kumulatif sebelum periode
-//   (PEMASUKAN − PENGELUARAN non-transfer, konsisten dengan angka 3104 di
-//   Neraca); mutasi periode = pemasukan (kredit) vs pengeluaran (debit).
-//   Saldo Akhir = Permulaan + Kredit − Debit; Pergerakan = Kredit − Debit.
+//   (PEMASUKAN − PENGELUARAN non-transfer, non-modal 31xx; transaksi lama
+//   berkode kosong tetap dihitung — konsisten dengan angka 3104 di Neraca);
+//   mutasi periode = pemasukan (kredit) vs pengeluaran (debit) dengan aturan
+//   yang sama. Saldo Akhir = Permulaan + Kredit − Debit;
+//   Pergerakan = Kredit − Debit.
 // - Prive (3103) disajikan dengan rumus yang sama sehingga saldonya negatif
 //   (kontra-ekuitas) dan otomatis mengurangi Total.
 
@@ -146,15 +148,27 @@ export async function getPerubahanModalSnapshot(
       _sum: { jumlah: true },
     }),
     // Laba basis kas kumulatif sebelum periode (untuk permulaan 3104).
+    // Setoran/penarikan modal 31xx DIKECUALIKAN (bukan laba — sudah dicatat
+    // di baris 3101-3103); transaksi lama berkode kosong tetap dihitung,
+    // konsisten dengan angka 3104 (labaBasisKas) pada Neraca.
     prisma.transaksiKas.groupBy({
       by: ["tipe"],
-      where: { tipe: { in: ["PEMASUKAN", "PENGELUARAN"] }, tanggal: { lt: start } },
+      where: {
+        tipe: { in: ["PEMASUKAN", "PENGELUARAN"] },
+        tanggal: { lt: start },
+        OR: [{ kodeAkun: null }, { kodeAkun: { not: { startsWith: "31" } } }],
+      },
       _sum: { jumlah: true },
     }),
     // Pemasukan/pengeluaran dalam periode (untuk mutasi 3104).
+    // Setoran/penarikan modal 31xx DIKECUALIKAN (bukan laba).
     prisma.transaksiKas.groupBy({
       by: ["tipe"],
-      where: { tipe: { in: ["PEMASUKAN", "PENGELUARAN"] }, tanggal: { gte: start, lte: end } },
+      where: {
+        tipe: { in: ["PEMASUKAN", "PENGELUARAN"] },
+        tanggal: { gte: start, lte: end },
+        OR: [{ kodeAkun: null }, { kodeAkun: { not: { startsWith: "31" } } }],
+      },
       _sum: { jumlah: true },
     }),
   ]);
@@ -186,8 +200,12 @@ export async function getPerubahanModalSnapshot(
   const kreditLaba = kreditOf(labaPeriode);
   const debitLaba = debitOf(labaPeriode);
 
+  // Kode akun Laba Ditahan diselesaikan dari NAMA (tahan terhadap penomoran ulang COA).
+  const kodeLaba =
+    akunModal.find((a) => a.nama.trim().toLowerCase().includes("laba ditahan"))?.kode ?? "3104";
+
   const baris: PerubahanModalBaris[] = kodeList.map((kode) => {
-    if (kode === "3104") {
+    if (kode === kodeLaba) {
       const pergerakan = kreditLaba - debitLaba;
       return {
         kode,
@@ -213,7 +231,7 @@ export async function getPerubahanModalSnapshot(
   const totalSaldoAkhir = sum((b) => b.saldoAkhir);
   const totalPergerakan = totalKredit - totalDebit;
 
-  const adaSetoran = baris.some((b) => b.kode !== "3104" && (b.permulaan !== 0 || b.debit !== 0 || b.kredit !== 0));
+  const adaSetoran = baris.some((b) => b.kode !== kodeLaba && (b.permulaan !== 0 || b.debit !== 0 || b.kredit !== 0));
 
   const catatan: string[] = [];
   if (!adaSetoran) {
@@ -224,7 +242,7 @@ export async function getPerubahanModalSnapshot(
     catatan.push("Mutasi 3101–3103 berasal dari TransaksiKas berkode akun 31xx (TRANSFER antar kas dikecualikan).");
   }
   catatan.push(
-    "3104 Laba Ditahan memakai laba basis kas (PEMASUKAN − PENGELUARAN non-transfer), konsisten dengan angka 3104 pada Neraca."
+    "3104 Laba Ditahan memakai laba basis kas (PEMASUKAN − PENGELUARAN non-transfer dan non-modal 31xx), konsisten dengan angka 3104 pada Neraca."
   );
   catatan.push("Prive (3103) bersifat kontra-ekuitas: penarikan menambah kolom Debit dan mengurangi Total.");
   catatan.push("Saldo Akhir = Permulaan + Kredit − Debit; Pergerakan = Kredit − Debit.");

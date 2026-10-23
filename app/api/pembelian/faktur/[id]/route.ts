@@ -3,13 +3,17 @@ import { prisma } from "@/lib/prisma";
 import { requireAuthAndRole } from "@/lib/auth";
 import { baseFakturSchema } from "@/lib/validations/pembelianValidation";
 import { deleteBuktiFile } from "@/lib/storage";
+import { hapusFakturPembelianSumber } from "@/lib/hapus-rantai";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 import { z, ZodError } from "zod";
 
 type Params = { params: Promise<{ id: string }> };
 
 function hitungJumlah(kuantitas: number, harga: number, diskonPersen: number): number {
-  return Math.round(kuantitas * harga * (1 - diskonPersen / 100) * 100) / 100;
+  const bruto = kuantitas * harga;
+  if (diskonPersen === 0) return bruto;
+  const discAmount = Math.round((bruto * diskonPersen) / 100);
+  return bruto - discAmount;
 }
 
 // Edit memakai field yang sama dengan buat; nomor faktur & supplier dikunci.
@@ -107,6 +111,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
       if (!faktur) throw new Error("Faktur tidak ditemukan");
       if (parsed.items.length === 0) throw new Error("Tambahkan minimal 1 baris produk");
       if (!parsed.jatuhTempo) throw new Error("Tanggal jatuh tempo wajib diisi");
+      if (!parsed.syaratPembayaran?.trim()) throw new Error("Syarat pembayaran wajib dipilih");
 
       // Akun DEBIT tiap baris ditentukan otomatis (sama seperti saat buat):
       // produk master → persediaan (1105/1106/1107), selain itu → 5402.
@@ -153,7 +158,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
           jumlah: hitungJumlah(it.kuantitas, it.harga, it.diskonPersen ?? 0),
         });
       }
-      const newTotal = Math.round(items.reduce((s, it) => s + it.jumlah, 0) * 100) / 100;
+      const newTotal = Math.round(items.reduce((s, it) => s + it.jumlah, 0));
 
       let tagihanSync: { jumlah: number; sisa: number } | null = null;
       if (faktur.tagihanId) {
@@ -248,51 +253,18 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   if (auth instanceof Response) return auth;
   const { id } = await params;
 
-  const faktur = await prisma.fakturPembelian.findUnique({
-    where: { id },
-    select: { id: true, tagihanId: true, referensiIds: true },
-  });
-  if (!faktur) return errorResponse("Faktur tidak ditemukan", 404);
+  try {
+    const hasil = await prisma.$transaction((tx) => hapusFakturPembelianSumber(tx, id));
 
-  const lampiran = await prisma.fakturPembelianLampiran.findMany({
-    where: { fakturId: id },
-    select: { fileUrl: true },
-  });
-
-  if (faktur.tagihanId) {
-    const bayarCount = await prisma.transaksiKas.count({ where: { tagihanId: faktur.tagihanId } });
-    if (bayarCount > 0) {
-      return errorResponse("Faktur tidak bisa dihapus karena utangnya sudah ada pembayaran", 400);
+    for (const url of hasil.hapusUrls) {
+      await deleteBuktiFile(url);
     }
-    await prisma.tagihan.delete({ where: { id: faktur.tagihanId } });
+
+    return successResponse(null, "Faktur berhasil dihapus");
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Gagal hapus faktur";
+    if (msg.includes("tidak ditemukan")) return errorResponse(msg, 404);
+    if (msg.includes("sudah ada pembayaran")) return errorResponse(msg, 400);
+    return errorResponse(msg, 500);
   }
-
-  await prisma.fakturPembelian.delete({ where: { id } });
-
-  for (const l of lampiran) {
-    await deleteBuktiFile(l.fileUrl);
-  }
-
-  // Kembalikan dokumen asal ke Belum Ditagih bila sudah yatim.
-  if (faktur.referensiIds.length > 0) {
-    const asal = await prisma.dokumenPembelian.findMany({
-      where: { id: { in: faktur.referensiIds } },
-      select: { id: true, tipe: true },
-    });
-    for (const a of asal) {
-      const [masihDirujuk, fakturMerujuk, sisaKirim] = await Promise.all([
-        prisma.dokumenPembelian.count({ where: { referensiIds: { has: a.id } } }),
-        prisma.fakturPembelian.count({ where: { referensiIds: { has: a.id } } }),
-        a.tipe === "PESANAN" ? prisma.pengirimanPembelian.count({ where: { pesananId: a.id } }) : Promise.resolve(1),
-      ]);
-      if (masihDirujuk === 0 && fakturMerujuk === 0 && sisaKirim === 0) {
-        await prisma.dokumenPembelian.updateMany({
-          where: { id: a.id },
-          data: { status: "BELUM_DITAGIH" },
-        });
-      }
-    }
-  }
-
-  return successResponse(null, "Faktur berhasil dihapus");
 }

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionFromRequest } from "@/lib/auth";
 import { createDokumenBeliSchema } from "@/lib/validations/pembelianValidation";
 import { generateNoDokumenBeli, hitungJumlahBarisBeli } from "@/lib/pembelian-server";
+import { hubungkanProdukItem } from "@/lib/produk-master";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 import { ZodError } from "zod";
 
@@ -10,6 +11,8 @@ import { ZodError } from "zod";
 // PERMINTAAN/PENAWARAN/PESANAN: tanpa utang, tanpa Kas & Bank, tanpa COA.
 // Status awal BELUM_DITAGIH (mengikuti Mekari). Dokumen asal yang dirujuk
 // (permintaan->penawaran->pesanan) otomatis menjadi SELESAI.
+// TUKAR_FAKTUR: hanya merujuk faktur (Tagihan HUTANG) yang belum lunas,
+// tanpa utang/Kas baru, status awal TERBUKA.
 export async function POST(req: NextRequest) {
   const session = await getSessionFromRequest(req);
   let adminId: string | null = (session as { userId?: string } | null)?.userId || null;
@@ -30,7 +33,23 @@ export async function POST(req: NextRequest) {
         if (!supplier) throw new Error("Supplier tidak ditemukan");
       }
 
-      const items = parsed.items.map((it) => ({
+      // Validasi faktur rujukan untuk Tukar Faktur: harus utang yang belum lunas.
+      // Total tukar faktur = jumlah sisa utang yang dirujuk (bukan dari item kosong).
+      let totalRujukan = 0;
+      if (parsed.tipe === "TUKAR_FAKTUR") {
+        const rujukan = await tx.tagihan.findMany({
+          where: { id: { in: parsed.referensiIds } },
+          select: { id: true, tipe: true, status: true, sisa: true },
+        });
+        if (rujukan.length !== parsed.referensiIds.length) {
+          throw new Error("Sebagian faktur rujukan tidak ditemukan");
+        }
+        const invalid = rujukan.find((r) => r.tipe !== "HUTANG" || r.status === "LUNAS");
+        if (invalid) throw new Error("Rujukan harus berupa utang yang belum lunas");
+        totalRujukan = rujukan.reduce((s, r) => s + Number(r.sisa), 0);
+      }
+
+      const itemsInput = parsed.items.map((it) => ({
         produkId: it.produkId?.trim() || null,
         deskripsi: it.deskripsi.trim(),
         kuantitas: it.kuantitas,
@@ -38,14 +57,35 @@ export async function POST(req: NextRequest) {
         harga: it.harga,
         diskonPersen: it.diskonPersen ?? 0,
         kodeAkun: it.kodeAkun?.trim() || null,
+        // Produk dari modul Pembelian ditandai sebagai PEMBELIAN (dari supplier)
+        // agar muncul di halaman Produk tanpa duplikasi.
+        sumberProduk: "PEMBELIAN" as const,
+      }));
+      // Hubungkan setiap baris ke master Produk: produk yang sudah terdaftar
+      // dipakai ulang (tanpa duplikat); nama baru didaftarkan otomatis.
+      const itemsTerhubung = await hubungkanProdukItem(tx, itemsInput);
+      // Items terhubung urutannya selaras dengan itemsInput, jadi produkId diambil
+      // sesuai indeks agar kolom item (kuantitas/diskon/kodeAkun) tetap utuh.
+      const items = itemsInput.map((it, i) => ({
+        produkId: itemsTerhubung[i]?.produkId ?? null,
+        deskripsi: it.deskripsi,
+        kuantitas: it.kuantitas,
+        unit: it.unit,
+        harga: it.harga,
+        diskonPersen: it.diskonPersen,
+        kodeAkun: it.kodeAkun,
         jumlah: hitungJumlahBarisBeli(it.kuantitas, it.harga, it.diskonPersen ?? 0),
       }));
-      const subtotal = Math.round(items.reduce((s, it) => s + it.jumlah, 0) * 100) / 100;
+      const subtotal =
+        parsed.tipe === "TUKAR_FAKTUR"
+          ? Math.round(totalRujukan * 100) / 100
+          : Math.round(items.reduce((s, it) => s + it.jumlah, 0) * 100) / 100;
 
       const noDokumen = await generateNoDokumenBeli(parsed.tipe, tanggal);
 
       // Tandai dokumen asal selesai mengikuti rantai.
-      if (parsed.referensiIds.length > 0) {
+      // (Tukar Faktur merujuk Tagihan, bukan dokumen — tidak ada yang ditandai.)
+      if (parsed.tipe !== "TUKAR_FAKTUR" && parsed.referensiIds.length > 0) {
         await tx.dokumenPembelian.updateMany({
           where: { id: { in: parsed.referensiIds }, status: { not: "SELESAI" } },
           data: { status: "SELESAI" },
@@ -55,7 +95,7 @@ export async function POST(req: NextRequest) {
       const dokumen = await tx.dokumenPembelian.create({
         data: {
           tipe: parsed.tipe,
-          status: "BELUM_DITAGIH",
+          status: parsed.tipe === "TUKAR_FAKTUR" ? "TERBUKA" : "BELUM_DITAGIH",
           noDokumen,
           supplierId: parsed.supplierId || null,
           departemen: parsed.departemen?.trim() || null,

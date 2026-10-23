@@ -210,7 +210,7 @@ export function PenjualanPerProdukContent() {
                 onClick={terapkanFilter}
                 className="w-full cursor-pointer bg-emerald-700 text-white hover:bg-emerald-800"
               >
-                Tampilkan
+                Filter
               </Button>
               <div className="relative">
                 <Button
@@ -284,28 +284,28 @@ export function PenjualanPerProdukContent() {
             ) : baris.length === 0 ? (
               <div className="py-10 text-center">
                 <p className="text-sm font-semibold text-slate-900">Laporan akan muncul di sini</p>
-                <p className="mt-1 text-xs text-slate-500">Pilih tanggal atau periode, lalu klik tombol Tampilkan.</p>
+                <p className="mt-1 text-xs text-slate-500">Pilih tanggal atau periode, lalu klik tombol Filter.</p>
               </div>
             ) : (
               <div className="overflow-x-auto rounded-xl border border-slate-200">
-                <Table>
+                <Table className="min-w-[1120px]">
                   <TableHeader>
                     <TableRow className="bg-slate-100">
-                      <TableHead className="text-xs">Kode produk / SKU</TableHead>
-                      <TableHead className="text-xs">Nama produk</TableHead>
-                      <TableHead className="text-right text-xs">Qty penjualan</TableHead>
-                      <TableHead className="text-right text-xs">Qty retur</TableHead>
-                      <TableHead className="text-xs">Unit</TableHead>
-                      <TableHead className="text-right text-xs">Nilai penjualan</TableHead>
-                      <TableHead className="text-right text-xs">Nilai retur</TableHead>
-                      <TableHead className="text-right text-xs">Nilai penjualan rata-rata</TableHead>
+                      <TableHead className="min-w-[120px] whitespace-nowrap text-xs">Kode / SKU</TableHead>
+                      <TableHead className="min-w-[220px] whitespace-nowrap text-xs">Nama produk</TableHead>
+                      <TableHead className="min-w-[90px] whitespace-nowrap text-right text-xs">Qty jual</TableHead>
+                      <TableHead className="min-w-[90px] whitespace-nowrap text-right text-xs">Qty retur</TableHead>
+                      <TableHead className="min-w-[80px] whitespace-nowrap text-xs">Unit</TableHead>
+                      <TableHead className="min-w-[160px] whitespace-nowrap text-right text-xs">Nilai penjualan</TableHead>
+                      <TableHead className="min-w-[160px] whitespace-nowrap text-right text-xs">Nilai retur</TableHead>
+                      <TableHead className="min-w-[160px] whitespace-nowrap text-right text-xs">Harga rata-rata</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {baris.map((b) => (
-                      <TableRow key={b.id}>
-                        <TableCell className="text-xs">{b.kodeProduk}</TableCell>
-                        <TableCell className="text-xs">{b.namaProduk}</TableCell>
+                    {baris.map((b, i) => (
+                      <TableRow key={`${b.id}::${b.namaProduk}::${b.unit}::${i}`}>
+                        <TableCell className="whitespace-nowrap text-xs">{b.kodeProduk}</TableCell>
+                        <TableCell className="max-w-[320px] truncate whitespace-nowrap text-xs" title={b.namaProduk}>{b.namaProduk}</TableCell>
                         <TableCell className="whitespace-nowrap text-right text-xs tabular-nums text-slate-700">
                           {b.qtyPenjualan}
                         </TableCell>

@@ -12,7 +12,7 @@ import { formatRupiah } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import type { AkunCOA, KelompokCOA } from "@/lib/coa";
 
-type Tipe = "PEMASUKAN" | "PENGELUARAN";
+type Tipe = "PEMASUKAN" | "PENGELUARAN" | "TRANSFER";
 
 type TransaksiRow = {
   id: string;
@@ -21,10 +21,13 @@ type TransaksiRow = {
   kategori: string;
   kodeAkun?: string | null;
   sumberDana?: string | null;
+  sumberDanaTujuan?: string | null;
   jumlah: number;
   keterangan: string | null;
   admin: { nama: string };
   buktiCount?: number;
+  /** Arah relatif terhadap akun yang dilihat (untuk tanda + / -). */
+  arah?: "masuk" | "keluar";
 };
 
 type Summary = {
@@ -69,11 +72,26 @@ function formatDateInput(value: string) {
 }
 
 function getTipeBadge(tipe: Tipe) {
+  if (tipe === "TRANSFER") {
+    return <Badge variant="info" className="text-[11px]">Transfer</Badge>;
+  }
   return tipe === "PEMASUKAN" ? (
     <Badge variant="success" className="text-[11px]">Masuk</Badge>
   ) : (
     <Badge variant="destructive" className="text-[11px]">Keluar</Badge>
   );
+}
+
+function arahBaris(row: TransaksiRow): "masuk" | "keluar" {
+  if (row.arah) return row.arah;
+  return row.tipe === "PEMASUKAN" ? "masuk" : "keluar";
+}
+
+function labelSumberDanaRow(row: TransaksiRow): string {
+  if (row.sumberDanaTujuan) {
+    return `${labelSumberDana(row.sumberDana)} → ${labelSumberDana(row.sumberDanaTujuan)}`;
+  }
+  return labelSumberDana(row.sumberDana);
 }
 
 function labelSumberDana(key: string | null | undefined): string {
@@ -326,12 +344,12 @@ export function CoaDetail({ akun, initialData, initialTotal, initialSummary }: C
                       <TableCell
                         className={cn(
                           "text-sm font-medium tracking-tight text-right",
-                          row.tipe === "PEMASUKAN" ? "text-green-700" : "text-red-600"
+                          arahBaris(row) === "masuk" ? "text-green-700" : "text-red-600"
                         )}
                       >
-                        {row.tipe === "PEMASUKAN" ? "+" : "-"} Rp {formatRupiah(row.jumlah)}
+                        {arahBaris(row) === "masuk" ? "+" : "-"} Rp {formatRupiah(row.jumlah)}
                       </TableCell>
-                      <TableCell className="text-xs text-slate-500">{labelSumberDana(row.sumberDana)}</TableCell>
+                      <TableCell className="text-xs text-slate-500">{labelSumberDanaRow(row)}</TableCell>
                       <TableCell className="text-xs text-slate-500">{row.admin.nama}</TableCell>
                     </TableRow>
                   ))

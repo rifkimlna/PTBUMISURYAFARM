@@ -22,18 +22,19 @@ export async function GET(req: NextRequest) {
     map.set(a.barangId, entry);
   }
 
-  const data = barang.map((b) => {
-    const sums = map.get(b.id) ?? { MASUK: 0, KELUAR: 0 };
-    const stok = hitungStokSaatIni(b.stokAwal, [
-      { jenis: "MASUK", jumlah: sums.MASUK },
-      { jenis: "KELUAR", jumlah: sums.KELUAR },
-    ]);
-    const hargaSatuan = Number(b.hargaSatuan);
-    return {
-      id: b.id,
-      namaBarang: b.namaBarang,
-      kategori: b.kategori,
-      kodeAkunCOA: b.kodeAkunCOA,
+    const data = barang.map((b) => {
+      const sums = map.get(b.id) ?? { MASUK: 0, KELUAR: 0 };
+      const stok = hitungStokSaatIni(b.stokAwal, [
+        { jenis: "MASUK", jumlah: sums.MASUK },
+        { jenis: "KELUAR", jumlah: sums.KELUAR },
+      ]);
+      const hargaSatuan = Number(b.hargaSatuan);
+      return {
+        id: b.id,
+        namaBarang: b.namaBarang,
+        kategori: b.kategori,
+        sumberProduk: b.sumberProduk ?? null,
+        kodeAkunCOA: b.kodeAkunCOA,
       stokAwal: b.stokAwal,
       stok,
       satuan: b.satuan,
@@ -85,6 +86,7 @@ export async function POST(req: NextRequest) {
         id: kode,
         namaBarang: parsed.namaBarang,
         kategori: parsed.kategori,
+        sumberProduk: parsed.sumberProduk ?? null,
         stokAwal: parsed.stokAwal,
         satuan: parsed.satuan,
         hargaSatuan,
@@ -94,6 +96,8 @@ export async function POST(req: NextRequest) {
         tipeProduk: parsed.tipeProduk ?? "BARANG",
         hargaBeli: parsed.hargaBeli ?? null,
         hargaJual: parsed.hargaJual ?? null,
+        hargaRataRataManual: parsed.hargaRataRataManual ?? null,
+        hargaBeliTerakhirManual: parsed.hargaBeliTerakhirManual ?? null,
         batasMinimum: parsed.batasMinimum ?? 0,
       },
     });

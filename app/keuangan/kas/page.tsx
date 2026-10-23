@@ -9,10 +9,14 @@ import { getSaldoPerSumber } from "@/lib/keuangan-server";
 import { formatRupiah } from "@/lib/utils";
 
 export default async function KeuanganPage() {
-  // Periode "30 Hari Mendatang": hari ini s/d 30 hari ke depan.
+  // Periode "30 Hari Mendatang": BESOK s/d 30 hari ke depan (batas hari
+  // kalender, bukan jam). Transaksi bertanggal hari ini (termasuk yang
+  // stempelnya tengah hari) dihitung sudah terjadi, bukan masa depan.
   const now = new Date();
   const awalHariIni = new Date(now);
   awalHariIni.setHours(0, 0, 0, 0);
+  const awalBesok = new Date(awalHariIni);
+  awalBesok.setDate(awalBesok.getDate() + 1);
   const akhirPeriode = new Date(now);
   akhirPeriode.setDate(akhirPeriode.getDate() + 30);
   akhirPeriode.setHours(23, 59, 59, 999);
@@ -37,10 +41,10 @@ export default async function KeuanganPage() {
       prisma.transaksiKas.count(),
       // Saldo transfer-aware: TRANSFER keluar mengurangi asal, menambah tujuan (satu baris).
       getSaldoPerSumber(),
-      // Arus kas masa depan: HANYA transaksi bertanggal SETELAH saat ini.
-      // Transaksi yang sudah terjadi (termasuk yang bertanggal hari ini sebelumnya) dikecualikan.
+      // Arus kas masa depan: HANYA transaksi bertanggal BESOK atau setelahnya.
+      // Transaksi hari ini (sudah terjadi / sudah dibayar) dikecualikan.
       prisma.transaksiKas.groupBy({
-        where: { tanggal: { gt: now, lte: akhirPeriode }, ...bukanModal },
+        where: { tanggal: { gte: awalBesok, lte: akhirPeriode }, ...bukanModal },
         by: ["tipe"],
         _sum: { jumlah: true },
         _count: { id: true },
@@ -87,8 +91,6 @@ export default async function KeuanganPage() {
 
   const saldoKasDanBank = perSumber.KAS + perSumber.BANK;
 
-  const saldoKartuKredit = 0;
-
   return (
     <div className="space-y-8">
       <div className="flex items-end justify-between">
@@ -128,7 +130,6 @@ export default async function KeuanganPage() {
             KAS: perSumber.KAS,
             BANK: perSumber.BANK,
             TABUNGAN: perSumber.TABUNGAN,
-            KARTU_KREDIT: saldoKartuKredit,
           },
           saldoKasDanBank,
         }}

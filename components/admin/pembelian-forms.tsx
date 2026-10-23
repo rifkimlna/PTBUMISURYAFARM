@@ -262,11 +262,43 @@ export type ItemBaris = {
   diskon: string;
 };
 
+export type HutangTersedia = {
+  id: string;
+  noFaktur: string | null;
+  pihak: string;
+  keterangan: string | null;
+  tanggal: string;
+  jatuhTempo: string | null;
+  status: string;
+  jumlah: number;
+  sisa: number;
+};
+
+export type TukarFakturBeliInitial = {
+  id: string;
+  header: {
+    supplierId: string;
+    email: string;
+    alamat: string;
+    tanggal: string;
+    jatuhTempo: string;
+    syarat: string;
+    pesan: string;
+    memo: string;
+  };
+  lampiran: LampiranItem[];
+  referensiIds: string[];
+  supplierNama?: string;
+};
+
 export function hitungBaris(it: ItemBaris) {
   const qty = Number(it.kuantitas) || 0;
   const harga = Number(it.harga) || 0;
   const disk = Math.min(100, Math.max(0, Number(it.diskon) || 0));
-  return Math.round(qty * harga * (1 - disk / 100) * 100) / 100;
+  const bruto = qty * harga;
+  if (disk === 0) return bruto;
+  const discAmount = Math.round((bruto * disk) / 100);
+  return bruto - discAmount;
 }
 
 // ---------- Baris produk (akun COA ditentukan otomatis, bukan input user) ----------
@@ -531,7 +563,6 @@ export function FakturForm({ initial, title, subtitle, referensiIds, asalLabel }
   const bruto = items.reduce((s, it) => s + (Number(it.kuantitas) || 0) * (Number(it.harga) || 0), 0);
   const subtotal = items.reduce((s, it) => s + hitungBaris(it), 0);
   const pemotongan = Math.round((bruto - subtotal) * 100) / 100;
-
   const tambahLampiran = (baru: Lampiran[]) =>
     setLampiran((cur) => [...cur, ...baru.map((l) => ({ ...l, key: `new-${Date.now()}-${Math.random()}` }))]);
   const hapusLampiran = (key: string) =>
@@ -547,6 +578,7 @@ export function FakturForm({ initial, title, subtitle, referensiIds, asalLabel }
     setError("");
     try {
       if (!header.supplierId) throw new Error("Supplier wajib dipilih");
+      if (!header.syarat.trim()) throw new Error("Syarat pembayaran wajib dipilih");
       const payload = {
         ...(isEdit ? {} : { supplierId: header.supplierId }),
         ...(!isEdit && referensiIds && referensiIds.length > 0 ? { referensiIds } : {}),
@@ -555,7 +587,7 @@ export function FakturForm({ initial, title, subtitle, referensiIds, asalLabel }
         tanggal: header.tanggal || undefined,
         jatuhTempo: header.jatuhTempo || undefined,
         noRefSupplier: header.noRef.trim() || undefined,
-        syaratPembayaran: header.syarat.trim() || undefined,
+        syaratPembayaran: header.syarat.trim(),
         gudang: header.gudang.trim() || undefined,
         tag: header.tag.trim() || undefined,
         pesan: header.pesan.trim() || undefined,
@@ -646,13 +678,13 @@ export function FakturForm({ initial, title, subtitle, referensiIds, asalLabel }
             <Field label="Nomor referensi supplier">
               <Input value={header.noRef} onChange={(e) => set("noRef", e.target.value)} placeholder="No. invoice supplier" maxLength={50} />
             </Field>
-            <Field label="Syarat pembayaran">
+            <Field label="Syarat pembayaran *">
               <Select value={header.syarat} onChange={(e) => {
                 const s = e.target.value;
                 set("syarat", s);
                 const jt = jatuhTempoDari(header.tanggal, s);
                 if (jt) set("jatuhTempo", jt);
-              }}>
+              }} required>
                 <option value="">Pilih syarat</option>
                 {SYARAT_OPTIONS.map((s) => (
                   <option key={s} value={s}>
@@ -660,6 +692,9 @@ export function FakturForm({ initial, title, subtitle, referensiIds, asalLabel }
                   </option>
                 ))}
               </Select>
+              {!header.syarat.trim() && (
+                <p className="text-[11px] text-red-600">Syarat pembayaran wajib dipilih sebelum menyimpan.</p>
+              )}
             </Field>
             <Field label="Gudang">
               <Input value={header.gudang} onChange={(e) => set("gudang", e.target.value)} placeholder="Gudang tujuan barang" maxLength={100} />
@@ -707,7 +742,443 @@ export function FakturForm({ initial, title, subtitle, referensiIds, asalLabel }
         <Button type="button" variant="outline" onClick={() => router.push("/keuangan/pembelian?tab=faktur")} disabled={saving}>
           Batal
         </Button>
-        <Button type="submit" disabled={saving}>
+        <Button
+          type="submit"
+          disabled={saving || !header.syarat.trim()}
+          title={!header.syarat.trim() ? "Pilih syarat pembayaran terlebih dahulu" : undefined}
+        >
+          {saving ? "Menyimpan..." : "Simpan"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+// ---------- Form Tukar Faktur (pilih faktur pembelian berutang, tanpa rincian produk) ----------
+export function TukarFakturBeliForm({ initial }: { initial?: TukarFakturBeliInitial | null }) {
+  const router = useRouter();
+  const isEdit = Boolean(initial?.id);
+  const [supplierId, setSupplierId] = useState(initial?.header.supplierId ?? "");
+  const [supplierNama, setSupplierNama] = useState(initial?.supplierNama ?? "");
+  const [email, setEmail] = useState(initial?.header.email ?? "");
+  const [alamat, setAlamat] = useState(initial?.header.alamat ?? "");
+  const [tanggal, setTanggal] = useState(initial?.header.tanggal || todayInput());
+  const [jatuhTempo, setJatuhTempo] = useState(initial?.header.jatuhTempo ?? "");
+  const [syarat, setSyarat] = useState(initial?.header.syarat ?? "");
+  const [pesan, setPesan] = useState(initial?.header.pesan ?? "");
+  const [memo, setMemo] = useState(initial?.header.memo ?? "");
+  const [lampiran, setLampiran] = useState<LampiranItem[]>(initial?.lampiran ?? []);
+  const [hapusLampiranIds, setHapusLampiranIds] = useState<string[]>([]);
+  // Kata kunci dropdown faktur (nomor / supplier / keterangan) — independen dari SupplierField.
+  const [cari, setCari] = useState("");
+  const [daftar, setDaftar] = useState<HutangTersedia[]>([]);
+  const [memuat, setMemuat] = useState(true);
+  const [dipilih, setDipilih] = useState<string[]>(initial?.referensiIds ?? []);
+  const [dropdownBuka, setDropdownBuka] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  // Mode edit: tampilkan faktur yang sudah dirujuk (bisa jadi sudah lunas / tak lagi tersedia),
+  // lalu gabungkan dengan daftar utang tersedia agar dropdown tetap lengkap.
+  useEffect(() => {
+    let cancelled = false;
+    const muatAwal = async () => {
+      setMemuat(true);
+      try {
+        const [rujukan, tersedia] = await Promise.all([
+          initial?.referensiIds.length
+            ? Promise.all(
+                (initial?.referensiIds ?? []).map((id) =>
+                  fetch(`/api/tagihan/${encodeURIComponent(id)}`, { credentials: "include" })
+                    .then((res) => (res.ok ? res.json() : null))
+                    .then((result) => (result?.success ? result.data : null))
+                    .catch(() => null)
+                )
+              )
+            : Promise.resolve([]),
+          fetch("/api/pembelian/hutang-tersedia?q=", { credentials: "include" })
+            .then((res) => res.json().catch(() => null))
+            .then((result) => (result?.success && Array.isArray(result.data) ? result.data : []))
+            .catch(() => []),
+        ]);
+        if (cancelled) return;
+        const map = new Map<string, HutangTersedia>();
+        for (const r of (rujukan as Array<{
+          id: string;
+          pihak: string;
+          keterangan: string | null;
+          tanggal: string;
+          jatuhTempo: string | null;
+          status: string;
+          jumlah: number;
+          sisa: number;
+        }>).filter(Boolean)) {
+          map.set(r.id, {
+            id: r.id,
+            noFaktur: null,
+            pihak: r.pihak,
+            keterangan: r.keterangan,
+            tanggal: r.tanggal,
+            jatuhTempo: r.jatuhTempo,
+            status: r.status,
+            jumlah: Number(r.jumlah),
+            sisa: Number(r.sisa),
+          });
+        }
+        for (const d of tersedia as HutangTersedia[]) {
+          if (!map.has(d.id)) map.set(d.id, d);
+        }
+        setDaftar(Array.from(map.values()));
+      } finally {
+        if (!cancelled) setMemuat(false);
+      }
+    };
+    muatAwal();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Tutup dropdown saat klik di luar.
+  useEffect(() => {
+    if (!dropdownBuka) return;
+    const tutup = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setDropdownBuka(false);
+    };
+    document.addEventListener("mousedown", tutup);
+    return () => document.removeEventListener("mousedown", tutup);
+  }, [dropdownBuka]);
+
+  const muatHutang = async (keyword: string) => {
+    setMemuat(true);
+    try {
+      const res = await fetch(`/api/pembelian/hutang-tersedia?q=${encodeURIComponent(keyword)}`, {
+        credentials: "include",
+      });
+      const result = await res.json().catch(() => null);
+      const tersedia: HutangTersedia[] =
+        result?.success && Array.isArray(result.data) ? result.data : [];
+      // Pertahankan baris yang sudah dipilih (mis. mode edit) agar tidak hilang saat pencarian.
+      setDaftar((cur) => {
+        const map = new Map(tersedia.map((d) => [d.id, d]));
+        for (const d of cur) {
+          if (dipilih.includes(d.id) && !map.has(d.id)) map.set(d.id, d);
+        }
+        return Array.from(map.values());
+      });
+    } catch {
+      // Biarkan daftar lama (terutama yang sudah dipilih) tetap tampil.
+    } finally {
+      setMemuat(false);
+    }
+  };
+
+  // Pilihan supplier hanya mengisi header — TIDAK memicu muat ulang / reset faktur,
+  // agar faktur bisa dipilih dulu tanpa wajib cari supplier.
+  const pilihSupplier = (id: string, nama: string, pemail: string, palamat: string) => {
+    setSupplierId(id);
+    setSupplierNama(nama);
+    setEmail(pemail);
+    setAlamat(palamat);
+  };
+
+  // Filter lokal agar pencarian nomor faktur / nama / keterangan terasa instan.
+  const kataKunci = cari.trim().toLowerCase();
+  const daftarTampil = kataKunci
+    ? daftar.filter((d) =>
+        [d.noFaktur ?? "", d.pihak, d.keterangan ?? "", d.status]
+          .join(" ")
+          .toLowerCase()
+          .includes(kataKunci)
+      )
+    : daftar;
+
+  const toggle = (id: string) =>
+    setDipilih((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+
+  const totalDipilih = daftar.filter((d) => dipilih.includes(d.id)).reduce((s, d) => s + d.sisa, 0);
+  const syaratKosong = !syarat.trim();
+
+  const tambahLampiran = (baru: Lampiran[]) =>
+    setLampiran((cur) => [...cur, ...baru.map((l) => ({ ...l, key: `new-${Date.now()}-${Math.random()}` }))]);
+  const hapusLampiran = (key: string) =>
+    setLampiran((cur) => {
+      const target = cur.find((l) => l.key === key);
+      if (target?.id) setHapusLampiranIds((ids) => [...ids, target.id as string]);
+      return cur.filter((l) => l.key !== key);
+    });
+
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      if (!supplierId) throw new Error("Supplier wajib dipilih");
+      if (!syarat.trim()) throw new Error("Syarat pembayaran wajib dipilih");
+      if (dipilih.length === 0) throw new Error("Pilih minimal 1 faktur pembelian yang akan ditukar");
+      const payload = {
+        email: email.trim() || undefined,
+        alamat: alamat.trim() || undefined,
+        tanggal: tanggal || undefined,
+        jatuhTempo: jatuhTempo || undefined,
+        syaratPembayaran: syarat.trim(),
+        pesan: pesan.trim() || undefined,
+        memo: memo.trim() || undefined,
+        items: [],
+        referensiIds: dipilih,
+        ...(lampiran.filter((l) => !l.id).length > 0
+          ? { lampiran: lampiran.filter((l) => !l.id).map(({ fileName, fileUrl, fileType, fileSize }) => ({ fileName, fileUrl, fileType, fileSize })) }
+          : {}),
+      };
+      const url = isEdit && initial ? `/api/pembelian/dokumen/${encodeURIComponent(initial.id)}` : "/api/pembelian/dokumen";
+      const res = await fetch(url, {
+        method: isEdit ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          isEdit
+            ? { ...payload, hapusLampiranIds }
+            : { ...payload, tipe: "TUKAR_FAKTUR", supplierId }
+        ),
+      });
+      const result = await res.json().catch(() => ({ message: "Gagal menyimpan tukar faktur" }));
+      if (!res.ok) throw new Error(fieldError(result, "Gagal menyimpan tukar faktur"));
+      router.push("/keuangan/pembelian?tab=tukar-faktur");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal menyimpan tukar faktur");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit}>
+      <Card className="border-slate-200">
+        <CardHeader className="border-b border-slate-100">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base">{isEdit ? "Ubah Tukar Faktur Pembelian" : "Tukar Faktur Pembelian"}</CardTitle>
+              <p className="mt-1 text-xs text-slate-500">
+                Dibuat berdasarkan faktur pembelian yang sudah ada. Tidak membuat utang atau Kas & Bank baru.
+              </p>
+            </div>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-medium text-slate-500">
+              No. Tukar Faktur: otomatis (TF-B-...)
+            </span>
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-5 p-5 sm:p-6">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <SupplierField
+                value={supplierId}
+                disabled={isEdit}
+                onSelect={(id, p) => {
+                  if (isEdit) return;
+                  if (!p) {
+                    setSupplierId("");
+                    setSupplierNama("");
+                    setDipilih([]);
+                    return;
+                  }
+                  pilihSupplier(id, p.nama, p.email ?? "", p.alamat ?? "");
+                }}
+              />
+              {isEdit && (
+                <p className="mt-1.5 text-[11px] text-slate-400">Supplier dikunci agar rujukan faktur tetap konsisten.</p>
+              )}
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Email">
+              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email supplier" maxLength={100} />
+            </Field>
+            <Field label="Alamat penagihan">
+              <Input value={alamat} onChange={(e) => setAlamat(e.target.value)} placeholder="Alamat supplier" maxLength={1000} />
+            </Field>
+            <Field label="Tanggal transaksi *">
+              <Input type="date" value={tanggal} onChange={(e) => {
+                const tgl = e.target.value;
+                setTanggal(tgl);
+                if (syarat) {
+                  const jt = jatuhTempoDari(tgl, syarat);
+                  if (jt) setJatuhTempo(jt);
+                }
+              }} required />
+            </Field>
+            <Field label="Tanggal jatuh tempo">
+              <Input type="date" value={jatuhTempo} onChange={(e) => setJatuhTempo(e.target.value)} />
+            </Field>
+            <Field label="Syarat pembayaran *" className="sm:col-span-2">
+              <Select value={syarat} onChange={(e) => {
+                const s = e.target.value;
+                setSyarat(s);
+                const jt = jatuhTempoDari(tanggal, s);
+                if (jt) setJatuhTempo(jt);
+              }} required>
+                <option value="">Pilih syarat</option>
+                {SYARAT_OPTIONS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </Select>
+              {syaratKosong && (
+                <p className="text-[11px] text-red-600">Syarat pembayaran wajib dipilih sebelum menyimpan.</p>
+              )}
+            </Field>
+          </div>
+
+          <div className="rounded-xl border border-slate-200">
+            <div className="border-b border-slate-100 p-4">
+              <p className="text-xs font-medium text-slate-500">
+                Pilih faktur pembelian yang akan ditukar
+                {supplierNama ? ` — ${supplierNama}` : ""}
+              </p>
+              {/* Dropdown searchable ala Mekari: langsung berisi faktur tersedia (nomor, tempo, status). */}
+              <div ref={dropdownRef} className="relative mt-2">
+                <button
+                  type="button"
+                  onClick={() => setDropdownBuka((v) => !v)}
+                  className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-sm hover:bg-slate-50"
+                >
+                  <span className={dipilih.length ? "text-slate-900" : "text-slate-400"}>
+                    {dipilih.length ? `${dipilih.length} faktur dipilih` : "Pilih faktur..."}
+                  </span>
+                  <span className="text-xs text-slate-400">{dropdownBuka ? "▲" : "▼"}</span>
+                </button>
+                {dropdownBuka && (
+                  <div className="absolute z-20 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg">
+                    <div className="flex gap-2 border-b border-slate-100 p-2">
+                      <Input
+                        value={cari}
+                        onChange={(e) => setCari(e.target.value)}
+                        placeholder="Cari nomor faktur / supplier..."
+                        className="flex-1"
+                        autoFocus
+                      />
+                      <Button type="button" variant="outline" size="sm" onClick={() => muatHutang(cari)}>
+                        Cari
+                      </Button>
+                    </div>
+                    <div className="max-h-72 overflow-y-auto p-2">
+                      {memuat && <p className="py-4 text-center text-xs text-slate-400">Memuat faktur...</p>}
+                      {!memuat && daftarTampil.length === 0 && (
+                        <p className="py-4 text-center text-xs text-slate-400">Tidak ada utang yang tersedia</p>
+                      )}
+                      {daftarTampil.map((d) => {
+                        const checked = dipilih.includes(d.id);
+                        return (
+                          <label
+                            key={d.id}
+                            className={`flex cursor-pointer items-start gap-3 rounded-lg border p-2.5 transition-colors ${
+                              checked ? "border-green-600 bg-green-50/50" : "border-transparent hover:bg-slate-50"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggle(d.id)}
+                              className="mt-1 h-4 w-4 accent-green-700"
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-sm font-medium text-slate-900">
+                                {d.noFaktur ?? `…${d.id.slice(-6).toUpperCase()}`} — {d.pihak}
+                              </span>
+                              <span className="block truncate text-xs text-slate-500">
+                                Tempo:{" "}
+                                {d.jatuhTempo
+                                  ? new Date(d.jatuhTempo).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })
+                                  : "—"}{" "}
+                                · {d.status === "LUNAS_SEBAGIAN" ? "Lunas Sebagian" : "Belum Lunas"}
+                              </span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            {/* Tabel detail faktur terpilih: jumlah + sisa tagihan. */}
+            <div className="overflow-x-auto p-4">
+              {dipilih.length === 0 ? (
+                <p className="py-2 text-center text-xs text-slate-400">Belum ada faktur dipilih</p>
+              ) : (
+                <table className="w-full min-w-[560px] text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-slate-500">
+                      <th className="py-2 pr-2 font-medium">No. Faktur</th>
+                      <th className="py-2 pr-2 font-medium">Jatuh Tempo</th>
+                      <th className="py-2 pr-2 font-medium">Status</th>
+                      <th className="py-2 pr-2 text-right font-medium">Jumlah</th>
+                      <th className="py-2 pr-2 text-right font-medium">Sisa</th>
+                      <th className="py-2 font-medium" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {daftar
+                      .filter((d) => dipilih.includes(d.id))
+                      .map((d) => (
+                        <tr key={d.id} className="border-b border-slate-50 last:border-0">
+                          <td className="py-2 pr-2 font-medium text-slate-900">
+                            {d.noFaktur ?? `…${d.id.slice(-6).toUpperCase()}`}
+                            <span className="block truncate font-normal text-slate-500">{d.pihak}</span>
+                          </td>
+                          <td className="py-2 pr-2 text-slate-600">
+                            {d.jatuhTempo
+                              ? new Date(d.jatuhTempo).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })
+                              : "—"}
+                          </td>
+                          <td className="py-2 pr-2 text-slate-600">
+                            {d.status === "LUNAS_SEBAGIAN" ? "Lunas Sebagian" : "Belum Lunas"}
+                          </td>
+                          <td className="py-2 pr-2 text-right tabular-nums text-slate-700">Rp {formatRupiah(d.jumlah)}</td>
+                          <td className="py-2 pr-2 text-right font-medium tabular-nums text-slate-900">Rp {formatRupiah(d.sisa)}</td>
+                          <td className="py-2 text-right">
+                            <Button type="button" variant="outline" size="sm" onClick={() => toggle(d.id)}>
+                              Hapus
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            {dipilih.length > 0 && (
+              <div className="border-t border-slate-100 px-4 py-2.5 text-xs text-slate-600">
+                {dipilih.length} faktur dipilih · Total sisa Rp {formatRupiah(totalDipilih)}
+              </div>
+            )}
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Pesan">
+              <Textarea value={pesan} onChange={(e) => setPesan(e.target.value)} placeholder="Pesan untuk supplier (opsional)" />
+            </Field>
+            <Field label="Memo">
+              <Textarea value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Catatan internal (opsional)" />
+            </Field>
+            <div className="sm:col-span-2">
+              <LampiranUploader value={lampiran} onAdd={tambahLampiran} onRemove={hapusLampiran} />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      {error && <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+      <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button type="button" variant="outline" onClick={() => router.push("/keuangan/pembelian?tab=tukar-faktur")} disabled={saving}>
+          Batal
+        </Button>
+        <Button
+          type="submit"
+          disabled={saving || syaratKosong}
+          title={syaratKosong ? "Pilih syarat pembayaran terlebih dahulu" : undefined}
+        >
           {saving ? "Menyimpan..." : "Simpan"}
         </Button>
       </div>

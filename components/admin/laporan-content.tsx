@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 
-// Halaman Laporan PT BST — UI SAJA (tahap ini).
-// Daftar menu laporan statis (bukan data dummy): belum ada halaman detail,
-// API, maupun database laporan. Semua tombol nonaktif.
+// Halaman Laporan PT BST.
+// Daftar menu laporan statis (bukan data dummy). Laporan dengan href sudah
+// tersedia; laporan tanpa href masih tahap awal (tombol belum difungsikan).
 
 type Aksi = "lihat" | "ekspor";
 
@@ -26,8 +27,6 @@ const TABS: { key: string; label: string }[] = [
   { key: "pembelian", label: "Pembelian" },
   { key: "produk", label: "Produk" },
   { key: "aset", label: "Aset" },
-  { key: "bank", label: "Bank" },
-  { key: "pajak", label: "Pajak" },
   { key: "produksi", label: "Produksi" },
 ];
 
@@ -52,46 +51,30 @@ const LAPORAN: Record<string, Laporan[]> = {
     { judul: "Penjualan per Produk", deskripsi: "Ringkasan penjualan berdasarkan produk dalam periode tertentu.", aksi: "lihat", href: "/keuangan/laporan/penjualan-per-produk" },
     { judul: "Pengiriman Penjualan", deskripsi: "Daftar pengiriman barang kepada pelanggan.", aksi: "lihat", href: "/keuangan/laporan/pengiriman-penjualan" },
     { judul: "Penyelesaian Pesanan Penjualan", deskripsi: "Status pemenuhan setiap pesanan penjualan.", aksi: "lihat", href: "/keuangan/laporan/penyelesaian-pemesanan-penjualan" },
-    { judul: "Profitabilitas Produk", deskripsi: "Margin keuntungan pada setiap produk.", aksi: "lihat" },
+    { judul: "Profitabilitas Produk", deskripsi: "Margin keuntungan pada setiap produk.", aksi: "lihat", href: "/keuangan/laporan/profitabilitas-produk" },
     { judul: "Daftar Faktur Proforma", deskripsi: "Seluruh faktur proforma yang telah diterbitkan.", aksi: "lihat", href: "/keuangan/laporan/proforma-invoice" },
-    { judul: "Daftar Tukar Faktur", deskripsi: "Seluruh dokumen tukar faktur yang telah dibuat.", aksi: "ekspor" },
+    { judul: "Daftar Tukar Faktur", deskripsi: "Seluruh dokumen tukar faktur yang telah dibuat.", aksi: "lihat", href: "/keuangan/laporan/tukar-faktur" },
   ],
   pembelian: [
-    { judul: "Daftar Pembelian", deskripsi: "Seluruh transaksi pembelian dalam periode.", aksi: "ekspor" },
-    { judul: "Pembelian per Supplier", deskripsi: "Total pembelian yang dikelompokkan per supplier.", aksi: "lihat" },
-    { judul: "Utang Supplier", deskripsi: "Saldo utang pada setiap supplier.", aksi: "lihat" },
-    { judul: "Daftar Pengeluaran", deskripsi: "Seluruh pengeluaran kas dalam periode.", aksi: "ekspor" },
-    { judul: "Detail Pengeluaran", deskripsi: "Rincian setiap pengeluaran kas per transaksi.", aksi: "lihat" },
-    { judul: "Usia Utang", deskripsi: "Pengelompokan utang berdasarkan umur tagihan.", aksi: "lihat" },
-    { judul: "Pengiriman Pembelian", deskripsi: "Daftar penerimaan barang dari supplier.", aksi: "ekspor" },
-    { judul: "Pembelian per Produk", deskripsi: "Total pembelian yang dikelompokkan per produk.", aksi: "lihat" },
-    { judul: "Penyelesaian Pesanan Pembelian", deskripsi: "Status pemenuhan setiap pesanan pembelian.", aksi: "lihat" },
+    { judul: "Daftar Pembelian", deskripsi: "Seluruh transaksi pembelian dalam periode.", aksi: "lihat", href: "/keuangan/laporan/pembelian" },
+    { judul: "Pembelian per Supplier", deskripsi: "Total pembelian yang dikelompokkan per supplier.", aksi: "lihat", href: "/keuangan/laporan/pembelian-per-supplier" },
+    { judul: "Hutang Supplier", deskripsi: "Saldo hutang pada setiap supplier.", aksi: "lihat", href: "/keuangan/laporan/hutang-supplier" },
+    { judul: "Daftar Pengeluaran", deskripsi: "Seluruh pengeluaran kas dalam periode.", aksi: "lihat", href: "/keuangan/laporan/daftar-pengeluaran" },
+    { judul: "Detail Pengeluaran", deskripsi: "Rincian setiap pengeluaran kas per transaksi.", aksi: "lihat", href: "/keuangan/laporan/detail-pengeluaran" },
+    { judul: "Usia Hutang Pembelian", deskripsi: "Pengelompokan hutang pembelian berdasarkan umur jatuh tempo.", aksi: "lihat", href: "/keuangan/laporan/usia-hutang" },
+    { judul: "Pengiriman Pembelian", deskripsi: "Daftar penerimaan barang dari supplier.", aksi: "lihat", href: "/keuangan/laporan/pengiriman-pembelian" },
+    { judul: "Pembelian per Produk", deskripsi: "Total pembelian yang dikelompokkan per produk.", aksi: "lihat", href: "/keuangan/laporan/pembelian-per-produk" },
+    { judul: "Penyelesaian Pesanan Pembelian", deskripsi: "Status pemenuhan setiap pesanan pembelian.", aksi: "lihat", href: "/keuangan/laporan/penyelesaian-pembelian" },
   ],
   produk: [
-    { judul: "Tingkat Pemenuhan Pesanan", deskripsi: "Persentase pesanan yang terpenuhi dari persediaan.", aksi: "lihat" },
-    { judul: "Perputaran Persediaan Barang", deskripsi: "Kecepatan perputaran barang dalam periode.", aksi: "lihat" },
-    { judul: "Konversi Produk", deskripsi: "Riwayat konversi antar produk dan satuannya.", aksi: "lihat" },
-    { judul: "Ringkasan Persediaan Barang", deskripsi: "Gambaran stok dan nilai persediaan secara ringkas.", aksi: "lihat" },
-    { judul: "Kuantitas Stok Gudang", deskripsi: "Jumlah stok setiap produk per gudang.", aksi: "lihat" },
-    { judul: "Nilai Persediaan Barang", deskripsi: "Nilai persediaan setiap produk.", aksi: "lihat" },
-    { judul: "Nilai Stok Gudang", deskripsi: "Nilai stok yang tersimpan per gudang.", aksi: "lihat" },
-    { judul: "Detail Persediaan Barang", deskripsi: "Rincian mutasi setiap barang persediaan.", aksi: "lihat" },
-    { judul: "Pergerakan Barang Gudang", deskripsi: "Barang masuk dan keluar pada setiap gudang.", aksi: "lihat" },
-    { judul: "Kuantitas Produk dengan Nomor Seri", deskripsi: "Stok produk bernomor seri per nomornya.", aksi: "lihat" },
-    { judul: "Gudang Berisi Produk Bernomor Seri", deskripsi: "Sebaran produk bernomor seri pada setiap gudang.", aksi: "lihat" },
+    { judul: "Daftar Produk", deskripsi: "Data produk, kode, satuan, harga beli, harga jual, dan stok.", aksi: "lihat", href: "/keuangan/laporan/daftar-produk" },
+    { judul: "Mutasi Produk", deskripsi: "Riwayat stok masuk, stok keluar, dan penyesuaian stok.", aksi: "lihat", href: "/keuangan/laporan/mutasi-produk" },
+    { judul: "Ringkasan Stok Produk", deskripsi: "Total stok setiap produk tanpa pembagian gudang.", aksi: "lihat", href: "/keuangan/laporan/ringkasan-stok" },
   ],
   aset: [
-    { judul: "Ringkasan Aset Tetap", deskripsi: "Nilai dan kondisi aset tetap secara ringkas.", aksi: "lihat" },
-    { judul: "Detail Aset Tetap", deskripsi: "Rincian setiap aset tetap beserta penyusutannya.", aksi: "lihat" },
-    { judul: "Penjualan atau Pelepasan Aset", deskripsi: "Riwayat aset yang dijual atau dilepas.", aksi: "lihat" },
-  ],
-  bank: [
-    { judul: "Ringkasan Rekonsiliasi Bank", deskripsi: "Status rekonsiliasi setiap rekening bank.", aksi: "lihat" },
-    { judul: "Mutasi Rekening Koran", deskripsi: "Arus mutasi pada rekening koran bank.", aksi: "ekspor" },
-  ],
-  pajak: [
-    { judul: "Pajak Pemotongan", deskripsi: "Rekap pajak yang dipotong dari transaksi.", aksi: "lihat" },
-    { judul: "Pajak Penjualan", deskripsi: "Rekap pajak atas transaksi penjualan.", aksi: "lihat" },
+    { judul: "Ringkasan Aset Tetap", deskripsi: "Nilai dan kondisi aset tetap secara ringkas.", aksi: "lihat", href: "/keuangan/laporan/ringkasan-aset-tetap" },
+    { judul: "Detail Aset Tetap", deskripsi: "Rincian setiap aset tetap beserta penyusutannya.", aksi: "lihat", href: "/keuangan/laporan/detail-aset-tetap" },
+    { judul: "Penjualan atau Pelepasan Aset", deskripsi: "Riwayat aset yang dijual atau dilepas.", aksi: "lihat", href: "/keuangan/laporan/penjualan-pelepasan-aset" },
   ],
   produksi: [
     { judul: "Penyusunan Produksi", deskripsi: "Riwayat perakitan bahan menjadi produk jadi.", aksi: "lihat" },
@@ -100,9 +83,22 @@ const LAPORAN: Record<string, Laporan[]> = {
   ],
 };
 
-export function LaporanContent() {
-  const [tab, setTab] = useState("sekilas-bisnis");
+const TAB_KEYS = TABS.map((t) => t.key);
+
+export function LaporanContent({ initialTab }: { initialTab?: string }) {
+  const router = useRouter();
+  const [tab, setTab] = useState(
+    initialTab && TAB_KEYS.includes(initialTab) ? initialTab : "sekilas-bisnis"
+  );
   const [cari, setCari] = useState("");
+
+  // Simpan tab aktif di URL (?tab=) agar tombol kembali browser
+  // mengembalikan user ke tab yang terakhir diklik, bukan selalu
+  // ke "Sekilas Bisnis".
+  const gantiTab = (key: string) => {
+    setTab(key);
+    router.replace(`/keuangan/laporan?tab=${encodeURIComponent(key)}`, { scroll: false });
+  };
 
   const daftar = useMemo(() => {
     const semua = LAPORAN[tab] ?? [];
@@ -119,7 +115,7 @@ export function LaporanContent() {
             <button
               key={t.key}
               type="button"
-              onClick={() => setTab(t.key)}
+              onClick={() => gantiTab(t.key)}
               className={`whitespace-nowrap rounded-full px-4 py-1.5 transition-colors ${
                 tab === t.key ? "bg-slate-900 text-white" : "text-slate-500 hover:text-slate-900"
               }`}
@@ -180,7 +176,7 @@ export function LaporanContent() {
       )}
 
       <p className="text-[11px] leading-relaxed text-slate-400">
-        Laporan Neraca, Laba Rugi, Arus Kas, Perubahan Modal, Ringkasan Bisnis, Daftar Penjualan, Piutang Pelanggan, Pengiriman Penjualan, Penyelesaian Pesanan, Faktur Proforma, Penjualan per Pelanggan, Usia Piutang, dan Penjualan per Produk sudah tersedia — laporan lain tahap awal (tombol belum difungsikan dan belum ada halaman detail).
+        Laporan Neraca, Laba Rugi, Arus Kas, Perubahan Modal, Ringkasan Bisnis, Daftar Penjualan, Daftar Pembelian, Piutang Pelanggan, Hutang Supplier, Pengiriman Penjualan, Penyelesaian Pesanan, Faktur Proforma, Daftar Tukar Faktur, Penjualan per Pelanggan, Usia Piutang, Usia Hutang Pembelian, Penjualan per Produk, Pembelian per Produk, Profitabilitas Produk, Mutasi Produk, Ringkasan Stok Produk, dan Ringkasan Aset Tetap sudah tersedia — laporan lain tahap awal (tombol belum difungsikan dan belum ada halaman detail).
       </p>
     </div>
   );

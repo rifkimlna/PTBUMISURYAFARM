@@ -131,11 +131,11 @@ export async function POST(req: NextRequest) {
         resolvedSumberDanaTujuan = parsed.sumberDanaTujuan ?? null;
       } else {
         // Untuk PEMASUKAN/PENGELUARAN: tentukan kode akun dari kategori.
-        // Coba data statis dulu (cepat), lalu database agar akun baru
-        // dari Daftar Akun langsung tersimpan kodenya (tidak null).
+        // Database dulu (tahan penomoran ulang COA), lalu data statis agar
+        // akun baru dari Daftar Akun langsung tersimpan kodenya (tidak null).
         resolvedKodeAkun =
-          kodeAkunByNama(parsed.tipe as any, parsed.kategori) ??
-          (await getKodeAkunByNamaFromDB(parsed.kategori, parsed.tipe as any));
+          (await getKodeAkunByNamaFromDB(parsed.kategori, parsed.tipe as any)) ??
+          kodeAkunByNama(parsed.tipe as any, parsed.kategori);
       }
 
       const created = await tx.transaksiKas.create({

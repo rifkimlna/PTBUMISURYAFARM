@@ -50,7 +50,9 @@ export async function getPenjualanPerProdukSnapshot(
     include: { items: true },
   });
 
-  // Gruppir oleh produkId (snapshot id dari PersediaanBarang)
+  // Gruppir oleh produkId bila ada; bila item diketik manual tanpa
+  // memilih produk Persediaan (produkId null), grup berdasarkan teks
+  // deskripsi agar transaksi tetap muncul di laporan.
   const produkMap = new Map<string, {
     produkId: string;
     kodeProduk: string;
@@ -62,45 +64,53 @@ export async function getPenjualanPerProdukSnapshot(
     nilaiRetur: number;
   }>();
 
+  const kunciItem = (item: { produkId: string | null; deskripsi: string }) => {
+    const id = (item.produkId ?? "").trim();
+    if (id) return { key: `id:${id}`, produkId: id, kodeProduk: id };
+    const teks = (item.deskripsi ?? "").trim().toLowerCase();
+    if (!teks) return null;
+    return { key: `teks:${teks}`, produkId: "", kodeProduk: "—" };
+  };
+
+  const pastikanBaris = (
+    key: string,
+    produkId: string,
+    kodeProduk: string,
+    item: { deskripsi: string; unit: string }
+  ) => {
+    const existing = produkMap.get(key) ?? {
+      produkId,
+      kodeProduk,
+      namaProduk: item.deskripsi ?? "",
+      unit: item.unit ?? "",
+      qtyPenjualan: 0,
+      nilaiPenjualan: 0,
+      qtyRetur: 0,
+      nilaiRetur: 0,
+    };
+    produkMap.set(key, existing);
+    return existing;
+  };
+
   // Proses penjualan
   for (const doc of penjualanDocs) {
     for (const item of doc.items) {
-      const produkId = item.produkId ?? "";
-      if (produkId === "") continue; // skip if no product id
-      const existing = produkMap.get(produkId) ?? {
-        produkId,
-        kodeProduk: produkId, // assume produkId is the kodeProduk/SKU
-        namaProduk: item.deskripsi ?? "",
-        unit: item.unit ?? "",
-        qtyPenjualan: 0,
-        nilaiPenjualan: 0,
-        qtyRetur: 0,
-        nilaiRetur: 0,
-      };
+      const kunci = kunciItem(item);
+      if (!kunci) continue;
+      const existing = pastikanBaris(kunci.key, kunci.produkId, kunci.kodeProduk, item);
       existing.qtyPenjualan += Number(item.kuantitas ?? 0);
       existing.nilaiPenjualan += Number(item.jumlah ?? 0);
-      produkMap.set(produkId, existing);
     }
   }
 
   // Proses retur
   for (const doc of returDocs) {
     for (const item of doc.items) {
-      const produkId = item.produkId ?? "";
-      if (produkId === "") continue;
-      const existing = produkMap.get(produkId) ?? {
-        produkId,
-        kodeProduk: produkId,
-        namaProduk: item.deskripsi ?? "",
-        unit: item.unit ?? "",
-        qtyPenjualan: 0,
-        nilaiPenjualan: 0,
-        qtyRetur: 0,
-        nilaiRetur: 0,
-      };
+      const kunci = kunciItem(item);
+      if (!kunci) continue;
+      const existing = pastikanBaris(kunci.key, kunci.produkId, kunci.kodeProduk, item);
       existing.qtyRetur += Number(item.kuantitas ?? 0);
       existing.nilaiRetur += Number(item.jumlah ?? 0);
-      produkMap.set(produkId, existing);
     }
   }
 
@@ -109,10 +119,12 @@ export async function getPenjualanPerProdukSnapshot(
   let totalNilaiPenjualan = 0;
   let totalNilaiRetur = 0;
 
-  for (const p of produkMap.values()) {
+  for (const [key, p] of produkMap.entries()) {
     const hargaRataRata = p.qtyPenjualan > 0 ? p.nilaiPenjualan / p.qtyPenjualan : 0;
     baris.push({
-      id: p.produkId,
+      // Kunci grup unik (id:… / teks:…) agar key React tidak kembar
+      // untuk item manual yang produkId-nya kosong.
+      id: key,
       kodeProduk: p.kodeProduk,
       namaProduk: p.namaProduk,
       qtyPenjualan: p.qtyPenjualan,

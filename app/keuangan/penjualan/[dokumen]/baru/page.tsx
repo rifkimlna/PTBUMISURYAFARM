@@ -35,7 +35,8 @@ function toYMD(value: Date | null | undefined) {
 // Form baru mendukung prefill dari dokumen asal (?dari=<id>&mode=duplikat)
 // dan dari pengiriman (?dariPengiriman=<id>):
 // - Penawaran -> Pesanan / Penagihan (data pelanggan & produk terbawa, referensi tersimpan).
-// - Pesanan -> Penagihan (data terbawa, referensi tersimpan).
+// - Pesanan -> Penagihan / Proforma (data terbawa, referensi tersimpan).
+// - Penagihan -> Proforma (faktur sementara dari invoice, referensi tersimpan).
 // - Pengiriman -> Penagihan (data pelanggan & produk dari pesanan asal pengiriman,
 //   referensi = pesanan asal; tanpa piutang/Kas ganda).
 // - Duplikat: tipe sama, salinan dapat diedit sebelum disimpan (nomor baru saat simpan).
@@ -112,12 +113,12 @@ export default async function DokumenBaruPage({
       },
     });
     // Validasi alur yang diizinkan (tanpa memaksa seluruh tahapan):
-    // PENAWARAN -> PESANAN | PENAGIHAN (+duplikat), PESANAN -> PENAGIHAN (+duplikat),
-    // PENAGIHAN -> duplikat saja.
+    // PENAWARAN -> PESANAN | PENAGIHAN (+duplikat), PESANAN -> PENAGIHAN | PROFORMA (+duplikat),
+    // PENAGIHAN -> PROFORMA (faktur sementara dari invoice, ala Mekari) + duplikat.
     const allowed =
       (sumber?.tipe === "PENAWARAN" && (meta.tipe === "PESANAN" || meta.tipe === "PENAGIHAN" || (duplikat && meta.tipe === "PENAWARAN"))) ||
-      (sumber?.tipe === "PESANAN" && (meta.tipe === "PENAGIHAN" || (duplikat && meta.tipe === "PESANAN"))) ||
-      (sumber?.tipe === "PENAGIHAN" && duplikat && meta.tipe === "PENAGIHAN");
+      (sumber?.tipe === "PESANAN" && (meta.tipe === "PENAGIHAN" || (!duplikat && meta.tipe === "PROFORMA") || (duplikat && meta.tipe === "PESANAN"))) ||
+      (sumber?.tipe === "PENAGIHAN" && ((duplikat && meta.tipe === "PENAGIHAN") || (!duplikat && meta.tipe === "PROFORMA")));
     if (sumber && allowed) {
       asalLabel = `Dari ${sumber.noDokumen} (${sumber.pelanggan.nama})`;
       prefill = {

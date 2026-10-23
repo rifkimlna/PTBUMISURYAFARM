@@ -2,7 +2,8 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromRequest } from "@/lib/auth";
 import { createDokumenSchema } from "@/lib/validations/penjualanValidation";
-import { AKUN_PENDAPATAN_BY_JENIS, generateNoDokumen, hitungJumlahBaris } from "@/lib/penjualan-server";
+import { generateNoDokumen, hitungJumlahBaris, kodeAkunPendapatanUntukJenis } from "@/lib/penjualan-server";
+import { hubungkanProdukItem } from "@/lib/produk-master";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
 import { ZodError } from "zod";
 
@@ -29,21 +30,36 @@ export async function POST(req: NextRequest) {
       if (!pelanggan) throw new Error("Pelanggan tidak ditemukan");
 
       // Validasi faktur rujukan untuk Tukar Faktur: harus piutang yang belum lunas.
+      // Total tukar faktur = jumlah sisa piutang yang dirujuk (bukan dari item kosong).
+      let totalRujukan = 0;
       if (parsed.tipe === "TUKAR_FAKTUR") {
         const rujukan = await tx.tagihan.findMany({
           where: { id: { in: parsed.referensiIds } },
-          select: { id: true, tipe: true, status: true },
+          select: { id: true, tipe: true, status: true, sisa: true },
         });
         if (rujukan.length !== parsed.referensiIds.length) {
           throw new Error("Sebagian faktur rujukan tidak ditemukan");
         }
         const invalid = rujukan.find((r) => r.tipe !== "PIUTANG" || r.status === "LUNAS");
         if (invalid) throw new Error("Rujukan harus berupa piutang yang belum lunas");
+        totalRujukan = rujukan.reduce((s, r) => s + Number(r.sisa), 0);
       }
 
+      // Hubungkan setiap baris ke master Produk: produk yang sudah terdaftar
+      // dipakai ulang (abaikan besar/kecil & spasi tepi, tanpa duplikat); nama
+      // baru didaftarkan otomatis sebagai PENJUALAN (hasil sendiri) agar muncul
+      // di halaman Produk. Stok tidak berubah karena produk baru dibuat dengan
+      // stok 0 dan tanpa riwayat stok.
+      const itemsDenganSumber = parsed.items.map((it) => ({
+        ...it,
+        sumberProduk: "PENJUALAN" as const,
+      }));
+      const itemsTerhubung = await hubungkanProdukItem(tx, itemsDenganSumber);
       // Hitung ulang total di server dari baris item (otoritatif, bukan dari client).
-      const items = parsed.items.map((it) => ({
-        produkId: it.produkId?.trim() || null,
+      // Items terhubung urutannya selaras dengan itemsDenganSumber, jadi produkId
+      // diambil sesuai indeks agar kolom jenis item (kuantitas/diskon) tetap utuh.
+      const items = itemsDenganSumber.map((it, i) => ({
+        produkId: itemsTerhubung[i]?.produkId ?? null,
         deskripsi: it.deskripsi.trim(),
         kuantitas: it.kuantitas,
         unit: it.unit.trim(),
@@ -51,21 +67,26 @@ export async function POST(req: NextRequest) {
         diskonPersen: it.diskonPersen ?? 0,
         jumlah: hitungJumlahBaris(it.kuantitas, it.harga, it.diskonPersen ?? 0),
       }));
-      const subtotal = Math.round(items.reduce((s, it) => s + it.jumlah, 0) * 100) / 100;
+      const subtotal =
+        parsed.tipe === "TUKAR_FAKTUR"
+          ? Math.round(totalRujukan * 100) / 100
+          : Math.round(items.reduce((s, it) => s + it.jumlah, 0) * 100) / 100;
 
       const noDokumen = await generateNoDokumen(parsed.tipe, tanggal);
 
       // Hanya PENAGIHAN yang menghasilkan piutang. Tanpa transaksi Kas & Bank
       // (pelanggan belum membayar; Kas tercatat saat pembayaran via Hutang & Piutang).
-      // COA otomatis: jenis penjualan → akun pendapatan (4101/4102/4103/4104),
+      // COA otomatis: jenis penjualan → akun pendapatan (4101/4102/4104),
       // tersimpan di Tagihan.jenis (debit 1102 - Piutang, kredit akun pendapatan).
       let tagihanId: string | null = null;
       if (parsed.tipe === "PENAGIHAN") {
         const jenis = parsed.jenis ?? "LAINNYA";
-        const kodePendapatan = AKUN_PENDAPATAN_BY_JENIS[jenis];
-        const akunPendapatan = await tx.akunCOA.findUnique({ where: { kode: kodePendapatan } });
+        const kodePendapatan = await kodeAkunPendapatanUntukJenis(jenis);
+        const akunPendapatan = kodePendapatan
+          ? await tx.akunCOA.findUnique({ where: { kode: kodePendapatan } })
+          : null;
         if (!akunPendapatan || !akunPendapatan.isActive) {
-          throw new Error(`Akun COA ${kodePendapatan} tidak ditemukan atau nonaktif`);
+          throw new Error(`Akun COA ${kodePendapatan ?? `pendapatan ${jenis}`} tidak ditemukan atau nonaktif`);
         }
         const tagihan = await tx.tagihan.create({
           data: {
@@ -157,6 +178,61 @@ export async function POST(req: NextRequest) {
           _count: { select: { items: true, lampiran: true } },
         },
       });
+
+      // Penjualan berhasil (PENAGIHAN) mengurangi stok sesuai jumlah terjual,
+      // dengan validasi stok tersedia. Transaksi lain (Penawaran/Pesanan/dsb)
+      // tidak mengurangi stok.
+      if (parsed.tipe === "PENAGIHAN") {
+        const penjualanItems = items.filter((it) => it.produkId && it.kuantitas > 0);
+        if (penjualanItems.length > 0) {
+          const produkIds = [...new Set(penjualanItems.map((it) => it.produkId!).filter(Boolean))];
+          const barangData = await tx.persediaanBarang.findMany({
+            where: { id: { in: produkIds } },
+            select: { id: true, namaBarang: true, stokAwal: true },
+          });
+          const stokAwalMap = new Map(barangData.map((b) => [b.id, b.stokAwal]));
+          const namaMap = new Map(barangData.map((b) => [b.id, b.namaBarang]));
+          const riwayatAgg = await tx.riwayatStok.groupBy({
+            by: ["barangId", "jenis"],
+            where: { barangId: { in: produkIds } },
+            _sum: { jumlah: true },
+          });
+          const stokMap = new Map<string, number>();
+          for (const pid of produkIds) {
+            let stok = stokAwalMap.get(pid) ?? 0;
+            for (const a of riwayatAgg) {
+              if (a.barangId === pid) {
+                stok += a.jenis === "MASUK" ? (a._sum.jumlah ?? 0) : -(a._sum.jumlah ?? 0);
+              }
+            }
+            stokMap.set(pid, stok);
+          }
+          const qtyMap = new Map<string, number>();
+          for (const it of penjualanItems) {
+            qtyMap.set(it.produkId!, (qtyMap.get(it.produkId!) ?? 0) + it.kuantitas);
+          }
+          for (const [pid, qty] of qtyMap) {
+            const stok = stokMap.get(pid) ?? 0;
+            if (stok < qty) {
+              throw new Error(
+                `Stok tidak cukup untuk "${namaMap.get(pid) ?? pid}": tersedia ${stok}, dijual ${qty}.`
+              );
+            }
+          }
+          for (const it of penjualanItems) {
+            await tx.riwayatStok.create({
+              data: {
+                barangId: it.produkId!,
+                jenis: "KELUAR",
+                jumlah: it.kuantitas,
+                keterangan: `Jual via ${noDokumen}`,
+                sumber: "PENJUALAN",
+                tanggal,
+              },
+            });
+          }
+        }
+      }
 
       return dokumen;
     });

@@ -1,7 +1,9 @@
 // Export Laporan Anggaran (detail per anggaran) mengikuti template PDF referensi:
 // - Nama perusahaan di tengah atas, nama/periode anggaran, periode laporan,
 //   "(dalam IDR)".
-// - Tabel kolom "Akun" + masing-masing bulan (+ Total).
+// - Setiap akun menampilkan 3 angka: Anggaran, Realisasi aktual, Selisih
+//   (Realisasi − Anggaran). XLSX memakai 3 sub-kolom per bulan; PDF memakai
+//   3 baris per akun (keterbatasan lebar landscape).
 // - Section: Revenue, Cost of Sales, Gross Profit, Operational Expense,
 //   Total dari Operational Expense, Operating Profit, Other Income (Expense),
 //   Other Income, Other Expense, Total dari Other Income (Expense), Profit (Loss).
@@ -36,22 +38,49 @@ export function formatAkuntansi(n: number): string {
 
 type BarisAnggaran =
   | { kind: "grup"; text: string }
-  | { kind: "akun"; kode: string; nama: string; vals: number[]; total: number }
-  | { kind: "total"; text: string; vals: number[]; total: number; garisAtas?: boolean; garisBawah?: boolean };
+  | {
+      kind: "akun"; kode: string; nama: string;
+      anggaran: number[]; realisasi: number[]; selisih: number[];
+      totalAnggaran: number; totalRealisasi: number; totalSelisih: number;
+    }
+  | {
+      kind: "total"; text: string;
+      anggaran: number[]; realisasi: number[]; selisih: number[];
+      totalAnggaran: number; totalRealisasi: number; totalSelisih: number;
+      garisAtas?: boolean; garisBawah?: boolean;
+    };
 
 function snapshotKeBaris(s: AnggaranDetailSnapshot): BarisAnggaran[] {
-  const akun = (a: { kode: string; nama: string; bulan: number[]; total: number }): BarisAnggaran => ({
+  const akun = (a: {
+    kode: string; nama: string;
+    bulan: number[]; total: number;
+    realisasi: number[]; realisasiTotal: number;
+    selisih: number[]; selisihTotal: number;
+  }): BarisAnggaran => ({
     kind: "akun",
     kode: a.kode,
     nama: a.nama,
-    vals: a.bulan,
-    total: a.total,
+    anggaran: a.bulan,
+    realisasi: a.realisasi,
+    selisih: a.selisih,
+    totalAnggaran: a.total,
+    totalRealisasi: a.realisasiTotal,
+    totalSelisih: a.selisihTotal,
   });
-  const total = (text: string, vals: number[], garisAtas = true, garisBawah = false): BarisAnggaran => ({
+  const total = (
+    text: string,
+    b: { bulan: number[]; realisasi: number[]; selisih: number[] },
+    garisAtas = true,
+    garisBawah = false
+  ): BarisAnggaran => ({
     kind: "total",
     text,
-    vals,
-    total: vals.reduce((x, v) => x + v, 0),
+    anggaran: b.bulan,
+    realisasi: b.realisasi,
+    selisih: b.selisih,
+    totalAnggaran: b.bulan.reduce((x, v) => x + v, 0),
+    totalRealisasi: b.realisasi.reduce((x, v) => x + v, 0),
+    totalSelisih: b.selisih.reduce((x, v) => x + v, 0),
     garisAtas,
     garisBawah,
   });
@@ -60,18 +89,18 @@ function snapshotKeBaris(s: AnggaranDetailSnapshot): BarisAnggaran[] {
     ...s.revenue.akun.map(akun),
     { kind: "grup", text: "Cost of Sales" },
     ...s.cos.akun.map(akun),
-    total("Gross Profit", s.grossProfit.bulan),
+    total("Gross Profit", s.grossProfit),
     { kind: "grup", text: "Operational Expense" },
     ...s.opex.akun.map(akun),
-    total("Total dari Operational Expense", s.opexTotal.bulan),
-    total("Operating Profit", s.operatingProfit.bulan),
+    total("Total dari Operational Expense", s.opexTotal),
+    total("Operating Profit", s.operatingProfit),
     { kind: "grup", text: "Other Income (Expense)" },
     { kind: "grup", text: "Other Income" },
     ...s.otherIncome.akun.map(akun),
     { kind: "grup", text: "Other Expense" },
     ...s.otherExpense.akun.map(akun),
-    total("Total dari Other Income (Expense)", s.otherTotal.bulan),
-    total("Profit (Loss)", s.profit.bulan, true, true),
+    total("Total dari Other Income (Expense)", s.otherTotal),
+    total("Profit (Loss)", s.profit, true, true),
   ];
   return out;
 }
@@ -82,8 +111,14 @@ function snapshotKeBaris(s: AnggaranDetailSnapshot): BarisAnggaran[] {
 
 export function snapshotKeSheetAnggaran(s: AnggaranDetailSnapshot, sheetName: string): XlsxSheet {
   const head: XlsxCell[] = [{ v: "Akun", bold: true }];
-  for (const b of s.bulan) head.push({ v: b.label, bold: true });
-  head.push({ v: "Total", bold: true });
+  for (const b of s.bulan) {
+    head.push({ v: `${b.label} (Anggaran)`, bold: true });
+    head.push({ v: `${b.label} (Realisasi)`, bold: true });
+    head.push({ v: `${b.label} (Selisih)`, bold: true });
+  }
+  head.push({ v: "Total Anggaran", bold: true });
+  head.push({ v: "Total Realisasi", bold: true });
+  head.push({ v: "Total Selisih", bold: true });
   const rows: XlsxCell[][] = [
     [{ v: DOKUMEN_PERUSAHAAN, bold: true }],
     [{ v: s.nama, bold: true }],
@@ -92,20 +127,46 @@ export function snapshotKeSheetAnggaran(s: AnggaranDetailSnapshot, sheetName: st
     [],
     head,
   ];
+  const sel3 = (b: Extract<BarisAnggaran, { kind: "akun" } | { kind: "total" }>): XlsxCell[] => {
+    // Per bulan: [Anggaran, Realisasi, Selisih]; lalu 3 total.
+    const perBulan: XlsxCell[] = [];
+    for (let i = 0; i < s.bulan.length; i++) {
+      perBulan.push({ v: Math.round(b.anggaran[i]) });
+      perBulan.push({ v: Math.round(b.realisasi[i]) });
+      perBulan.push({ v: Math.round(b.selisih[i]) });
+    }
+    return perBulan;
+  };
+  const num3 = (cells: XlsxCell[], bold: boolean): XlsxCell[] =>
+    cells.map((c): XlsxCell => ({ v: c.v as number, bold, num: true }));
   for (const b of snapshotKeBaris(s)) {
     if (b.kind === "grup") {
       rows.push([{ v: b.text.toUpperCase(), bold: true }]);
     } else if (b.kind === "akun") {
       rows.push([
         { v: `${b.kode} - ${b.nama}` },
-        ...b.vals.map((v): XlsxCell => ({ v: Math.round(v), num: true })),
-        { v: Math.round(b.total), bold: true, num: true },
+        ...num3(sel3(b), false),
+        ...num3(
+          [
+            { v: b.totalAnggaran },
+            { v: b.totalRealisasi },
+            { v: b.totalSelisih },
+          ],
+          true
+        ),
       ]);
     } else {
       rows.push([
         { v: b.text, bold: true },
-        ...b.vals.map((v): XlsxCell => ({ v: Math.round(v), bold: true, num: true })),
-        { v: Math.round(b.total), bold: true, num: true },
+        ...num3(sel3(b), true),
+        ...num3(
+          [
+            { v: b.totalAnggaran },
+            { v: b.totalRealisasi },
+            { v: b.totalSelisih },
+          ],
+          true
+        ),
       ]);
     }
   }
@@ -193,20 +254,42 @@ function snapshotKeLines(s: AnggaranDetailSnapshot): PdfLine[] {
     if (b.kind === "grup") {
       lines.push({ kind: "grup", text: b.text.toUpperCase() });
     } else if (b.kind === "akun") {
+      // Tiga baris per akun (keterbatasan lebar landscape): Anggaran, Realisasi, Selisih.
+      const uraian = `${b.kode} - ${b.nama}`;
       lines.push({
         kind: "row",
-        uraian: bungkusKata(`${b.kode} - ${b.nama}`, 32),
-        vals: [...b.vals.map(formatAkuntansi), formatAkuntansi(b.total)],
+        uraian: bungkusKata(`${uraian} (Anggaran)`, 32),
+        vals: [...b.anggaran.map(formatAkuntansi), formatAkuntansi(b.totalAnggaran)],
+        bold: false,
+      });
+      lines.push({
+        kind: "row",
+        uraian: bungkusKata(`${uraian} (Realisasi)`, 32),
+        vals: [...b.realisasi.map(formatAkuntansi), formatAkuntansi(b.totalRealisasi)],
+        bold: false,
+      });
+      lines.push({
+        kind: "row",
+        uraian: bungkusKata(`${uraian} (Selisih)`, 32),
+        vals: [...b.selisih.map(formatAkuntansi), formatAkuntansi(b.totalSelisih)],
         bold: false,
       });
     } else {
-      lines.push({
-        kind: "row",
-        uraian: [b.text.toUpperCase()],
-        vals: [...b.vals.map(formatAkuntansi), formatAkuntansi(b.total)],
-        bold: true,
-        garisAtas: b.garisAtas,
-        garisBawah: b.garisBawah,
+      const uraianTotal = b.text.toUpperCase();
+      const baris3: [string, number[], number][] = [
+        ["Anggaran", b.anggaran, b.totalAnggaran],
+        ["Realisasi", b.realisasi, b.totalRealisasi],
+        ["Selisih", b.selisih, b.totalSelisih],
+      ];
+      baris3.forEach(([suf, vals, tot], idx) => {
+        lines.push({
+          kind: "row",
+          uraian: [`${uraianTotal} (${suf})`],
+          vals: [...vals.map(formatAkuntansi), formatAkuntansi(tot)],
+          bold: true,
+          garisAtas: idx === 0 ? b.garisAtas : false,
+          garisBawah: idx === 2 ? b.garisBawah : false,
+        });
       });
     }
   }

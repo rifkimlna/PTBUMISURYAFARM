@@ -330,6 +330,7 @@ export function CoaList({ grouped, kelompokUrutan, userRole }: CoaListProps) {
               <DialogTitle className="text-lg font-semibold">Hapus Akun COA</DialogTitle>
               <DialogDescription className="text-sm text-slate-600">
                 Apakah Anda yakin ingin menghapus akun <strong>{deletingAkun.kode} - {deletingAkun.nama}</strong>?
+                <br />Nomor akun di bawahnya dalam kelompok yang sama akan otomatis maju (mis. 4104 menjadi 4103).
                 <br />Tindakan ini tidak dapat dibatalkan.
               </DialogDescription>
             </DialogHeader>

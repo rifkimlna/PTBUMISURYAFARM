@@ -2,9 +2,9 @@
 // JANGAN diimpor dari Client Component — hanya Server Component & API route.
 //
 // Data aktual database, tanpa dummy (periode = rentang, bukan kumulatif):
-// - Penjualan (4101-4103): DokumenPenjualan PENAGIHAN (by tanggal dokumen,
+// - Penjualan (4101, 4102, 4104): DokumenPenjualan PENAGIHAN (by tanggal dokumen,
 //   jenis -> kode via AKUN_PENDAPATAN_BY_JENIS) + TransaksiKas PEMASUKAN tunai
-//   langsung (tagihanId null, kode 4101-4103). Penerimaan piutang (4105 / kas
+//   langsung (tagihanId null, kode 4101/4102/4104). Penerimaan piutang (4105 / kas
 //   bertagihan) DIKECUALIKAN agar tidak ganda dengan penjualan yang sudah
 //   diakui saat penagihan.
 // - Diskon Penjualan: agregat diskon per baris item Penagihan. Retur: belum
@@ -138,7 +138,6 @@ export function monthRangesOfCurrentYear(): { start: Date; end: Date; label: str
 const NAMA_AKUN_FALLBACK: Record<string, string> = {
   "4101": "Pendapatan Penjualan Hasil Kebun",
   "4102": "Pendapatan Penjualan Ternak (Ayam)",
-  "4103": "Pendapatan Penjualan Ikan",
   "4104": "Pendapatan Lain-lain",
 };
 
@@ -218,6 +217,15 @@ export async function getLabaRugiSnapshot(
     "";
   const namaAkun = (kode: string) =>
     coa.get(kode)?.nama ?? NAMA_AKUN_FALLBACK[kode] ?? `Akun ${kode}`;
+  const golOf = (kode: string) => coa.get(kode)?.golongan ?? "";
+  // Resolve kode sistem dari NAMA akun (tahan terhadap penomoran ulang COA).
+  const KODE_TERIMA_PIUTANG = kodeByNama.get("penerimaan piutang usaha") ?? "4105";
+  const KODE_LUNAS_HUTANG = kodeByNama.get("pelunasan hutang usaha") ?? "5501";
+  const KODE_PENDAPATAN: Record<string, string> = {
+    HASIL_KEBUN: kodeByNama.get("pendapatan penjualan hasil kebun") ?? AKUN_PENDAPATAN_BY_JENIS.HASIL_KEBUN,
+    TERNAK: kodeByNama.get("pendapatan penjualan ternak (ayam)") ?? AKUN_PENDAPATAN_BY_JENIS.TERNAK,
+    LAINNYA: kodeByNama.get("pendapatan lain-lain") ?? AKUN_PENDAPATAN_BY_JENIS.LAINNYA,
+  };
 
   const catatan: string[] = [];
   const tambah = (map: Map<string, { nama: string; nilai: number }>, kode: string, nama: string, nilai: number) => {
@@ -230,7 +238,7 @@ export async function getLabaRugiSnapshot(
   const penjualanMap = new Map<string, { nama: string; nilai: number }>();
   let diskonPenjualan = 0;
   for (const d of penagihan) {
-    const kode = AKUN_PENDAPATAN_BY_JENIS[(d.tagihan?.jenis ?? "LAINNYA") as keyof typeof AKUN_PENDAPATAN_BY_JENIS];
+    const kode = KODE_PENDAPATAN[(d.tagihan?.jenis ?? "LAINNYA")] ?? KODE_PENDAPATAN.LAINNYA;
     tambah(penjualanMap, kode, namaAkun(kode), num(d.total));
     for (const it of d.items) {
       diskonPenjualan += Number(it.kuantitas) * Number(it.harga) * (Number(it.diskonPersen) / 100);
@@ -245,9 +253,9 @@ export async function getLabaRugiSnapshot(
     const nilai = num(k.jumlah);
     // Setoran modal 31xx bukan pendapatan — dikecualikan (masuk Perubahan Modal).
     if (kode.startsWith("31")) continue;
-    if (kode === "4105") {
+    if (kode === KODE_TERIMA_PIUTANG) {
       piutangTertagih += nilai; // penerimaan piutang: bukan pendapatan baru
-    } else if (kode === "4101" || kode === "4102" || kode === "4103") {
+    } else if (kode.startsWith("41") && golOf(kode) === "Pendapatan Usaha") {
       tambah(penjualanMap, kode, namaAkun(kode), nilai); // penjualan tunai langsung
     } else if (kode) {
       tambah(pendapatanLainMap, kode, namaAkun(kode), nilai);
@@ -316,7 +324,7 @@ export async function getLabaRugiSnapshot(
     const kode = kodeOf(k.kodeAkun, "PENGELUARAN", k.kategori);
     // Mutasi modal 31xx (mis. prive) bukan beban — dikecualikan.
     if (kode.startsWith("31")) continue;
-    if (kode === "1105" || kode === "1106" || kode === "1107") continue; // pembelian persediaan
+    if (golOf(kode) === "Persediaan") continue; // pembelian persediaan
     if (/^12/.test(kode)) continue; // akuisisi aset tetap
     taruhBeban(kode, kode ? namaAkun(kode) : k.kategori, num(k.jumlah), "Kas");
   }
@@ -351,8 +359,8 @@ export async function getLabaRugiSnapshot(
 
   const biayaLainnya = kelompok("Biaya Lainnya", lainnyaMap);
   if (biayaLainnya.baris.length === 0) catatan.push("Belum ada biaya lainnya pada periode ini.");
-  else if (lainnyaMap.has("5501")) {
-    catatan.push("Akun Pelunasan Hutang Usaha (5501) disajikan di Biaya Lainnya sebagai pelunasan kewajiban.");
+  else if (lainnyaMap.has(KODE_LUNAS_HUTANG)) {
+    catatan.push(`Akun Pelunasan Hutang Usaha (${KODE_LUNAS_HUTANG}) disajikan di Biaya Lainnya sebagai pelunasan kewajiban.`);
   }
   const totalBiayaLainnya = biayaLainnya.total;
 

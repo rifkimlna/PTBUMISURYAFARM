@@ -8,17 +8,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DokumenBeliActions } from "@/components/admin/pembelian-dokumen-form";
 import { formatRupiah } from "@/lib/utils";
 
-const TIPE_VALID = ["permintaan", "penawaran", "pesanan"] as const;
-const TIPE_DB: Record<string, "PERMINTAAN" | "PENAWARAN" | "PESANAN"> = {
+const TIPE_VALID = ["permintaan", "penawaran", "pesanan", "tukar-faktur"] as const;
+const TIPE_DB: Record<string, "PERMINTAAN" | "PENAWARAN" | "PESANAN" | "TUKAR_FAKTUR"> = {
   permintaan: "PERMINTAAN",
   penawaran: "PENAWARAN",
   pesanan: "PESANAN",
+  "tukar-faktur": "TUKAR_FAKTUR",
 };
 
 const JUDUL: Record<string, { judul: string; no: string; tab: string; tempo: string }> = {
   PERMINTAAN: { judul: "Detail Permintaan Pembelian", no: "No. Permintaan", tab: "permintaan", tempo: "Dibutuhkan" },
   PENAWARAN: { judul: "Detail Penawaran Pembelian", no: "No. Penawaran", tab: "penawaran", tempo: "Kedaluwarsa" },
   PESANAN: { judul: "Detail Pemesanan Pembelian", no: "No. Pesanan", tab: "pesanan", tempo: "Target / Jatuh Tempo" },
+  TUKAR_FAKTUR: { judul: "Detail Tukar Faktur Pembelian", no: "No. Tukar Faktur", tab: "tukar-faktur", tempo: "Jatuh Tempo" },
 };
 
 function formatDate(value: Date | null | undefined) {
@@ -72,7 +74,24 @@ export default async function DetailDokumenBeliPage({
   ]);
 
   const meta = JUDUL[doc.tipe];
-  const slugByTipe: Record<string, string> = { PERMINTAAN: "permintaan", PENAWARAN: "penawaran", PESANAN: "pesanan" };
+  const slugByTipe: Record<string, string> = { PERMINTAAN: "permintaan", PENAWARAN: "penawaran", PESANAN: "pesanan", TUKAR_FAKTUR: "tukar-faktur" };
+
+  const rujukanHutang =
+    doc.tipe === "TUKAR_FAKTUR" && doc.referensiIds.length > 0
+      ? await prisma.tagihan.findMany({
+          where: { id: { in: doc.referensiIds } },
+          select: {
+            id: true,
+            pihak: true,
+            jumlah: true,
+            sisa: true,
+            status: true,
+            jatuhTempo: true,
+            fakturPembelian: { select: { noFaktur: true } },
+          },
+          orderBy: { jatuhTempo: "asc" },
+        })
+      : [];
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -98,7 +117,7 @@ export default async function DetailDokumenBeliPage({
           >
             Ubah
           </Link>
-          <DokumenBeliActions id={doc.id} tipe={doc.tipe as "PERMINTAAN" | "PENAWARAN" | "PESANAN"} status={doc.status} />
+          <DokumenBeliActions id={doc.id} tipe={doc.tipe as "PERMINTAAN" | "PENAWARAN" | "PESANAN" | "TUKAR_FAKTUR"} status={doc.status} />
         </div>
       </div>
 
@@ -119,8 +138,8 @@ export default async function DetailDokumenBeliPage({
           <div>
             <div className="text-[11px] uppercase tracking-wide text-slate-400">Status</div>
             <div className="mt-0.5">
-              <Badge variant={doc.status === "SELESAI" ? "sehat" : "gray"} className="text-[11px]">
-                {doc.status === "SELESAI" ? "Selesai" : "Belum Ditagih"}
+              <Badge variant={doc.status === "SELESAI" ? "sehat" : doc.status === "TERBUKA" ? "info" : "gray"} className="text-[11px]">
+                {doc.status === "SELESAI" ? "Selesai" : doc.status === "TERBUKA" ? "Terbuka" : "Belum Ditagih"}
               </Badge>
             </div>
           </div>
@@ -151,40 +170,79 @@ export default async function DetailDokumenBeliPage({
         </CardContent>
       </Card>
 
-      <Card className="border-slate-200">
-        <CardHeader className="border-b border-slate-100">
-          <CardTitle className="text-base">Detail Produk</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nama Produk</TableHead>
-                  <TableHead className="text-right">Kuantitas</TableHead>
-                  <TableHead>Satuan</TableHead>
-                  <TableHead className="text-right">Harga Satuan</TableHead>
-                  <TableHead className="text-right">Subtotal</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {doc.items.map((it) => (
-                  <TableRow key={it.id}>
-                    <TableCell className="text-sm">{it.deskripsi}</TableCell>
-                    <TableCell className="text-right text-sm">{Number(it.kuantitas).toLocaleString("id-ID")}</TableCell>
-                    <TableCell className="text-sm text-slate-500">{it.unit}</TableCell>
-                    <TableCell className="text-right text-sm">Rp {formatRupiah(Number(it.harga))}</TableCell>
-                    <TableCell className="text-right text-sm font-medium">Rp {formatRupiah(Number(it.jumlah))}</TableCell>
+      {doc.tipe === "TUKAR_FAKTUR" ? (
+        <Card className="border-slate-200">
+          <CardHeader className="border-b border-slate-100">
+            <CardTitle className="text-base">Faktur Dirujuk</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>No. Faktur</TableHead>
+                    <TableHead>Supplier</TableHead>
+                    <TableHead>Jatuh Tempo</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Jumlah</TableHead>
+                    <TableHead className="text-right">Sisa</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          <div className="border-t border-slate-100 px-5 py-3 text-right text-sm font-semibold">
-            Total: Rp {formatRupiah(Number(doc.total))}
-          </div>
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {rujukanHutang.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="font-mono text-xs">{r.fakturPembelian?.noFaktur ?? `…${r.id.slice(-6).toUpperCase()}`}</TableCell>
+                      <TableCell className="text-sm">{r.pihak}</TableCell>
+                      <TableCell className="text-xs text-slate-500">{formatDate(r.jatuhTempo)}</TableCell>
+                      <TableCell className="text-xs text-slate-500">{r.status === "LUNAS" ? "Dibayar" : r.status === "LUNAS_SEBAGIAN" ? "Dibayar Sebagian" : "Menunggu Pembayaran"}</TableCell>
+                      <TableCell className="text-right text-sm">Rp {formatRupiah(Number(r.jumlah))}</TableCell>
+                      <TableCell className="text-right text-sm font-medium">Rp {formatRupiah(Number(r.sisa))}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="border-t border-slate-100 px-5 py-3 text-right text-sm font-semibold">
+              Total sisa: Rp {formatRupiah(rujukanHutang.reduce((s, r) => s + Number(r.sisa), 0))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="border-slate-200">
+          <CardHeader className="border-b border-slate-100">
+            <CardTitle className="text-base">Detail Produk</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nama Produk</TableHead>
+                    <TableHead className="text-right">Kuantitas</TableHead>
+                    <TableHead>Satuan</TableHead>
+                    <TableHead className="text-right">Harga Satuan</TableHead>
+                    <TableHead className="text-right">Subtotal</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {doc.items.map((it) => (
+                    <TableRow key={it.id}>
+                      <TableCell className="text-sm">{it.deskripsi}</TableCell>
+                      <TableCell className="text-right text-sm">{Number(it.kuantitas).toLocaleString("id-ID")}</TableCell>
+                      <TableCell className="text-sm text-slate-500">{it.unit}</TableCell>
+                      <TableCell className="text-right text-sm">Rp {formatRupiah(Number(it.harga))}</TableCell>
+                      <TableCell className="text-right text-sm font-medium">Rp {formatRupiah(Number(it.jumlah))}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="border-t border-slate-100 px-5 py-3 text-right text-sm font-semibold">
+              Total: Rp {formatRupiah(Number(doc.total))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="border-slate-200">
         <CardHeader className="border-b border-slate-100">

@@ -3,11 +3,13 @@ import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { DokumenBeliForm, type DokBeliInitial, type TipeDokBeli } from "@/components/admin/pembelian-dokumen-form";
+import { TukarFakturBeliForm, type TukarFakturBeliInitial } from "@/components/admin/pembelian-forms";
 
-const TIPE_DB: Record<string, TipeDokBeli> = {
+const TIPE_DB: Record<string, TipeDokBeli | "TUKAR_FAKTUR"> = {
   permintaan: "PERMINTAAN",
   penawaran: "PENAWARAN",
   pesanan: "PESANAN",
+  "tukar-faktur": "TUKAR_FAKTUR",
 };
 
 function toYMD(value: Date | null | undefined) {
@@ -35,6 +37,47 @@ export default async function UbahDokumenBeliPage({
     },
   });
   if (!doc || doc.tipe !== tipe) notFound();
+
+  if (tipe === "TUKAR_FAKTUR") {
+    const tfInitial: TukarFakturBeliInitial = {
+      id: doc.id,
+      header: {
+        supplierId: doc.supplierId ?? "",
+        email: doc.email ?? doc.supplier?.email ?? "",
+        alamat: doc.alamat ?? doc.supplier?.alamat ?? "",
+        tanggal: toYMD(doc.tanggal),
+        jatuhTempo: toYMD(doc.jatuhTempo),
+        syarat: doc.syaratPembayaran ?? "",
+        pesan: doc.pesan ?? "",
+        memo: doc.memo ?? "",
+      },
+      lampiran: doc.lampiran.map((l) => ({
+        key: l.id,
+        id: l.id,
+        fileName: l.fileName,
+        fileUrl: l.fileUrl,
+        fileType: l.fileType,
+        fileSize: l.fileSize,
+      })),
+      referensiIds: doc.referensiIds,
+      supplierNama: doc.supplier?.nama,
+    };
+    return (
+      <div className="mx-auto max-w-5xl space-y-6">
+        <div>
+          <Link
+            href={`/keuangan/pembelian/dokumen/${slug.toLowerCase()}/${doc.id}`}
+            className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" /> Kembali ke Detail
+          </Link>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">Ubah {doc.noDokumen}</h1>
+          <p className="mt-1 text-sm text-slate-400">Form yang sama seperti input awal</p>
+        </div>
+        <TukarFakturBeliForm initial={tfInitial} />
+      </div>
+    );
+  }
 
   const initial: DokBeliInitial = {
     id: doc.id,

@@ -53,9 +53,12 @@ export type NeracaSnapshot = {
   modal: NeracaKelompok;
   totalModal: number;
   totalKewajibanModal: number;
+  /** Selisih: Total Aktiva − (Total Kewajiban + Total Modal).
+   * Nol jika seimbang, positif jika aktiva lebih besar, negatif jika kurang. */
+  selisih: number;
   /** Rincian pendukung untuk transparansi angka. */
-  labaBasisKas: number;
-  modalImplisit: number;
+  labaPeriode: number;
+  labaSebelumPeriode: number;
   /** Penjelasan bagian yang belum didukung data. */
   catatan: string[];
 };

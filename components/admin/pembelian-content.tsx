@@ -26,7 +26,6 @@ import {
   Tags,
   Trash2,
   TrendingUp,
-  Upload,
   X,
 } from "lucide-react";
 import { cn, formatRupiah } from "@/lib/utils";
@@ -69,7 +68,7 @@ export type PembelianSummary = {
 
 export type DokumenBeliRow = {
   id: string;
-  tipe: "PERMINTAAN" | "PENAWARAN" | "PESANAN";
+  tipe: "PERMINTAAN" | "PENAWARAN" | "PESANAN" | "TUKAR_FAKTUR";
   noDokumen: string;
   pihak: string;
   tanggal: string;
@@ -93,6 +92,7 @@ const SLUG_DOK_BELI: Record<string, string> = {
   PERMINTAAN: "permintaan",
   PENAWARAN: "penawaran",
   PESANAN: "pesanan",
+  TUKAR_FAKTUR: "tukar-faktur",
 };
 
 // Menu "Buat Pembelian Baru" — semua tombol berfungsi.
@@ -176,7 +176,8 @@ function formatDate(value: string | null) {
   if (!value) return "—";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+  // Kunci ke WIB agar konsisten dengan halaman detail (server bisa UTC).
+  return d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Jakarta" });
 }
 
 function displayStatus(r: FakturRow): { label: string; variant: "sehat" | "destructive" | "info" | "warning" } {
@@ -418,6 +419,7 @@ function DokumenBeliTable({
           <Select value={status} onChange={(e) => setStatus(e.target.value)} className="sm:max-w-56">
             <option value="">Semua Status</option>
             <option value="BELUM_DITAGIH">Belum Ditagih</option>
+            <option value="TERBUKA">Terbuka</option>
             <option value="SELESAI">Selesai</option>
           </Select>
           <div className="relative sm:max-w-xs sm:flex-1">
@@ -479,8 +481,11 @@ function DokumenBeliTable({
                     <TableCell className="text-sm text-slate-700">{r.pihak}</TableCell>
                     <TableCell className="text-xs text-slate-500">{formatDate(r.jatuhTempo)}</TableCell>
                     <TableCell>
-                      <Badge variant={r.status === "SELESAI" ? "sehat" : "gray"} className="text-[11px]">
-                        {r.status === "SELESAI" ? "Selesai" : "Belum Ditagih"}
+                      <Badge
+                        variant={r.status === "SELESAI" ? "sehat" : r.status === "TERBUKA" ? "info" : "gray"}
+                        className="text-[11px]"
+                      >
+                        {r.status === "SELESAI" ? "Selesai" : r.status === "TERBUKA" ? "Terbuka" : "Belum Ditagih"}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right text-sm font-medium tracking-tight">
@@ -547,7 +552,6 @@ export function PembelianContent({
   const [dokDetailRow, setDokDetailRow] = useState<DokumenBeliRow | null>(null);
   const [dokDetailData, setDokDetailData] = useState<any>(null);
   const [dokDetailLoading, setDokDetailLoading] = useState(false);
-  const [dokBusy, setDokBusy] = useState(false);
   const [dokError, setDokError] = useState("");
   const [kirimDetailRow, setKirimDetailRow] = useState<PengirimanBeliRow | null>(null);
   const [kirimDetailData, setKirimDetailData] = useState<any>(null);
@@ -558,7 +562,10 @@ export function PembelianContent({
   const [paymentTargetId, setPaymentTargetId] = useState<string | null>(null);
   const [paymentTargetLabel, setPaymentTargetLabel] = useState("");
   const [paymentOpen, setPaymentOpen] = useState(false);
-  const todayInputLocal = () => new Date(new Date().toDateString()).toISOString().slice(0, 10);
+  const todayInputLocal = () => {
+    const now = new Date();
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  };
   const [paymentForm, setPaymentForm] = useState({ jumlahBayar: "", sumberDana: "KAS" as "KAS" | "BANK" | "TABUNGAN", tanggal: todayInputLocal(), keterangan: "" });
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [paymentError, setPaymentError] = useState("");
@@ -681,48 +688,6 @@ export function PembelianContent({
     }
   };
 
-  const toggleDok = async () => {
-    if (!dokDetailRow) return;
-    const selesai = (dokDetailData?.status ?? dokDetailRow.status) === "SELESAI";
-    setDokBusy(true);
-    setDokError("");
-    try {
-      const res = await fetch(`/api/pembelian/dokumen/${encodeURIComponent(dokDetailRow.id)}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: selesai ? "BELUM_DITAGIH" : "SELESAI" }),
-      });
-      const result = await res.json().catch(() => ({ message: "Gagal ubah status" }));
-      if (!res.ok) throw new Error(result.message || "Gagal ubah status");
-      setDokDetailRow(null);
-      setDokDetailData(null);
-      router.refresh();
-    } catch (e) {
-      setDokError(e instanceof Error ? e.message : "Gagal ubah status");
-    } finally {
-      setDokBusy(false);
-    }
-  };
-
-  const hapusDokumen = async () => {
-    if (!dokDetailRow) return;
-    if (!window.confirm(`Hapus ${dokDetailRow.noDokumen} — ${dokDetailRow.pihak}?`)) return;
-    setDokBusy(true);
-    setDokError("");
-    try {
-      const res = await fetch(`/api/pembelian/dokumen/${encodeURIComponent(dokDetailRow.id)}`, { method: "DELETE" });
-      const result = await res.json().catch(() => ({ message: "Gagal menghapus dokumen" }));
-      if (!res.ok) throw new Error(result.message || "Gagal menghapus dokumen");
-      setDokDetailRow(null);
-      setDokDetailData(null);
-      router.refresh();
-    } catch (e) {
-      setDokError(e instanceof Error ? e.message : "Gagal menghapus dokumen");
-    } finally {
-      setDokBusy(false);
-    }
-  };
-
   const hapusDokumenRow = async (row: DokumenBeliRow) => {
     if (!window.confirm(`Hapus ${row.noDokumen} — ${row.pihak}?`)) return;
     setDeletingId(row.id);
@@ -774,9 +739,6 @@ export function PembelianContent({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" disabled title="Segera hadir" className="cursor-not-allowed">
-            <Upload className="h-4 w-4" /> Impor
-          </Button>
           <BuatPembelianDropdown />
         </div>
       </div>
@@ -1053,15 +1015,15 @@ export function PembelianContent({
                   )}
                 </div>
               </div>
-              <div className="flex flex-wrap justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={() => { setDetailRow(null); setDetailData(null); setPaymentTargetId(null); }}>Tutup</Button>
+              <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+                <Button variant="outline" onClick={() => { setDetailRow(null); setDetailData(null); setPaymentTargetId(null); }} className="w-full sm:w-auto">Tutup</Button>
                 {detailRow && (
-                  <Link href={`/keuangan/pembelian/faktur/${detailRow.id}`} className={cn(buttonVariants({ variant: "outline" }))}>
+                  <Link href={`/keuangan/pembelian/faktur/${detailRow.id}`} className={cn(buttonVariants({ variant: "outline" }), "w-full sm:w-auto")}>
                     Lihat halaman
                   </Link>
                 )}
                 {detailData.tagihan && detailData.tagihan.status !== "LUNAS" && Number(detailData.tagihan.sisa) > 0 && (
-                  <Button onClick={() => { setPaymentForm({ jumlahBayar: "", sumberDana: "KAS", tanggal: todayInputLocal(), keterangan: "" }); setPaymentError(""); setPaymentOpen(true); }}>Bayar Utang</Button>
+                  <Button onClick={() => { setPaymentForm({ jumlahBayar: "", sumberDana: "KAS", tanggal: todayInputLocal(), keterangan: "" }); setPaymentError(""); setPaymentOpen(true); }} className="w-full sm:w-auto">Bayar Utang</Button>
                 )}
               </div>
             </div>
@@ -1132,9 +1094,9 @@ export function PembelianContent({
                 <Input
                   value={kirimSearch}
                   onChange={(e) => setKirimSearch(e.target.value)}
-                  placeholder="Cari no. penerimaan atau nama supplier..."
+                  placeholder="Cari no. pengiriman atau nama supplier..."
                   className="pl-9 pr-9"
-                  aria-label="Cari no. penerimaan atau nama supplier"
+                  aria-label="Cari no. pengiriman atau nama supplier"
                 />
                 {kirimSearch && (
                   <button
@@ -1157,7 +1119,7 @@ export function PembelianContent({
                 <TableHeader>
                   <TableRow>
                     <TableHead>Tanggal</TableHead>
-                    <TableHead>No. Penerimaan</TableHead>
+                    <TableHead>No. Pengiriman</TableHead>
                     <TableHead>No. Pesanan Asal</TableHead>
                     <TableHead>Supplier</TableHead>
                     <TableHead>Status</TableHead>
@@ -1267,14 +1229,25 @@ export function PembelianContent({
           onOpenDetail={openDokDetail}
         />
       )}
-      {tab === "tukar-faktur" && <EmptyTabTable key={tab} tabKey={tab} />}
+      {tab === "tukar-faktur" && (
+        <DokumenBeliTable
+          rows={docs.filter((d) => d.tipe === "TUKAR_FAKTUR")}
+          tempoLabel="Tanggal Jatuh Tempo"
+          noLabel="No. Tukar Faktur"
+          pihakLabel="Supplier"
+          emptyText="Belum ada tukar faktur pembelian"
+          deletingId={deletingId}
+          onDelete={hapusDokumenRow}
+          onOpenDetail={openDokDetail}
+        />
+      )}
 
       {/* Detail Dokumen Pembelian — popup seperti Detail Penagihan */}
       <Dialog open={Boolean(dokDetailRow)} onOpenChange={(v) => { if (!v) { setDokDetailRow(null); setDokDetailData(null); setDokError(""); } }}>
         <DialogContent onClose={() => { setDokDetailRow(null); setDokDetailData(null); setDokError(""); }} className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              {dokDetailRow?.tipe === "PENAWARAN" ? "Detail Penawaran" : dokDetailRow?.tipe === "PESANAN" ? "Detail Pesanan" : "Detail Permintaan"}
+              {dokDetailRow?.tipe === "PENAWARAN" ? "Detail Penawaran" : dokDetailRow?.tipe === "PESANAN" ? "Detail Pesanan" : dokDetailRow?.tipe === "TUKAR_FAKTUR" ? "Detail Tukar Faktur" : "Detail Permintaan"}
             </DialogTitle>
             <DialogDescription>
               {dokDetailRow ? `${dokDetailRow.noDokumen} — ${dokDetailRow.pihak}` : ""}
@@ -1296,8 +1269,11 @@ export function PembelianContent({
                 <div>
                   <div className="text-[11px] uppercase tracking-wide text-slate-400">Status</div>
                   <div>
-                    <Badge variant={dokDetailData.status === "SELESAI" ? "sehat" : "gray"} className="text-[11px]">
-                      {dokDetailData.status === "SELESAI" ? "Selesai" : "Belum Ditagih"}
+                    <Badge
+                      variant={dokDetailData.status === "SELESAI" ? "sehat" : dokDetailData.status === "TERBUKA" ? "info" : "gray"}
+                      className="text-[11px]"
+                    >
+                      {dokDetailData.status === "SELESAI" ? "Selesai" : dokDetailData.status === "TERBUKA" ? "Terbuka" : "Belum Ditagih"}
                     </Badge>
                   </div>
                 </div>
@@ -1337,6 +1313,35 @@ export function PembelianContent({
                   )}
                 </div>
               </div>
+              {dokDetailData.rujukanHutang?.length > 0 && (
+                <div>
+                  <div className="mb-2 text-xs font-medium text-slate-600">Faktur Dirujuk</div>
+                  <div className="max-h-48 overflow-auto rounded-lg border border-slate-100">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-50 text-[11px] uppercase text-slate-500">
+                        <tr>
+                          <th className="px-3 py-2 text-left">No. Faktur</th>
+                          <th className="px-3 py-2 text-left">Tempo</th>
+                          <th className="px-3 py-2 text-left">Status</th>
+                          <th className="px-3 py-2 text-right">Jumlah</th>
+                          <th className="px-3 py-2 text-right">Sisa</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dokDetailData.rujukanHutang.map((r: any) => (
+                          <tr key={r.id} className="border-t border-slate-100">
+                            <td className="px-3 py-2 font-mono text-[11px]">{r.fakturPembelian?.noFaktur ?? `…${String(r.id).slice(-6).toUpperCase()}`}</td>
+                            <td className="px-3 py-2">{formatDate(r.jatuhTempo)}</td>
+                            <td className="px-3 py-2">{r.status === "LUNAS" ? "Dibayar" : r.status === "LUNAS_SEBAGIAN" ? "Dibayar Sebagian" : "Menunggu Pembayaran"}</td>
+                            <td className="px-3 py-2 text-right">Rp {formatRupiah(r.jumlah)}</td>
+                            <td className="px-3 py-2 text-right font-medium">Rp {formatRupiah(r.sisa)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
               {(dokDetailData.sumber?.length > 0 || dokDetailData.turunan?.length > 0 || dokDetailData.pengiriman?.length > 0 || dokDetailData.faktur?.length > 0) && (
                 <div className="grid gap-2 text-xs">
                   {dokDetailData.sumber?.length > 0 && (
@@ -1354,37 +1359,33 @@ export function PembelianContent({
                 </div>
               )}
               {dokError && <p className="text-sm text-red-600">{dokError}</p>}
-              <div className="flex flex-wrap justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={() => { setDokDetailRow(null); setDokDetailData(null); setDokError(""); }} disabled={dokBusy}>Tutup</Button>
+              <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+                <Button variant="outline" onClick={() => { setDokDetailRow(null); setDokDetailData(null); setDokError(""); }} className="w-full sm:w-auto">Tutup</Button>
                 {dokDetailRow && (
-                  <Link href={`/keuangan/pembelian/dokumen/${SLUG_DOK_BELI[dokDetailRow.tipe]}/${dokDetailRow.id}`} className={cn(buttonVariants({ variant: "outline" }))}>
+                  <Link href={`/keuangan/pembelian/dokumen/${SLUG_DOK_BELI[dokDetailRow.tipe]}/${dokDetailRow.id}`} className={cn(buttonVariants({ variant: "outline" }), "w-full sm:w-auto")}>
                     Lihat halaman
                   </Link>
                 )}
                 {dokDetailRow?.tipe === "PERMINTAAN" && (
-                  <Link href={`/keuangan/pembelian/penawaran/baru?dari=${dokDetailRow.id}`} className={cn(buttonVariants({}))}>
+                  <Link href={`/keuangan/pembelian/penawaran/baru?dari=${dokDetailRow.id}`} className={cn(buttonVariants({}), "w-full sm:w-auto")}>
                     Buat Penawaran
                   </Link>
                 )}
                 {dokDetailRow?.tipe === "PENAWARAN" && (
-                  <Link href={`/keuangan/pembelian/pemesanan/baru?dari=${dokDetailRow.id}`} className={cn(buttonVariants({}))}>
+                  <Link href={`/keuangan/pembelian/pemesanan/baru?dari=${dokDetailRow.id}`} className={cn(buttonVariants({}), "w-full sm:w-auto")}>
                     Buat Pesanan
                   </Link>
                 )}
                 {dokDetailRow?.tipe === "PESANAN" && (
                   <>
-                    <Link href={`/keuangan/pembelian/pengiriman/baru?pesananId=${dokDetailRow.id}`} className={cn(buttonVariants({ variant: "outline" }))}>
-                      Buat Penerimaan
+                    <Link href={`/keuangan/pembelian/pengiriman/baru?pesananId=${dokDetailRow.id}`} className={cn(buttonVariants({ variant: "outline" }), "w-full sm:w-auto")}>
+                      Buat Pengiriman
                     </Link>
-                    <Link href={`/keuangan/pembelian/faktur/baru?dariPesanan=${dokDetailRow.id}`} className={cn(buttonVariants({}))}>
+                    <Link href={`/keuangan/pembelian/faktur/baru?dariPesanan=${dokDetailRow.id}`} className={cn(buttonVariants({}), "w-full sm:w-auto")}>
                       Buat Faktur
                     </Link>
                   </>
                 )}
-                <Button variant="outline" onClick={toggleDok} disabled={dokBusy}>
-                  {(dokDetailData?.status ?? dokDetailRow?.status) === "SELESAI" ? "Buka Kembali" : "Tutup"}
-                </Button>
-                <Button variant="destructive" onClick={hapusDokumen} disabled={dokBusy}>Hapus</Button>
               </div>
             </div>
           ) : (
@@ -1393,11 +1394,11 @@ export function PembelianContent({
         </DialogContent>
       </Dialog>
 
-      {/* Detail Penerimaan — popup tanpa pembayaran */}
+      {/* Detail Pengiriman — popup tanpa pembayaran */}
       <Dialog open={Boolean(kirimDetailRow)} onOpenChange={(v) => { if (!v) { setKirimDetailRow(null); setKirimDetailData(null); } }}>
         <DialogContent onClose={() => { setKirimDetailRow(null); setKirimDetailData(null); }} className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Detail Penerimaan</DialogTitle>
+            <DialogTitle>Detail Pengiriman</DialogTitle>
             <DialogDescription>
               {kirimDetailRow ? `${kirimDetailRow.noPengiriman} — ${kirimDetailRow.supplier}` : ""}
             </DialogDescription>
@@ -1458,15 +1459,15 @@ export function PembelianContent({
                   Penerimaan tidak mencatat utang — utang baru terbentuk saat Faktur dibuat.
                 </p>
               </div>
-              <div className="flex flex-wrap justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={() => { setKirimDetailRow(null); setKirimDetailData(null); }}>Tutup</Button>
+              <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+                <Button variant="outline" onClick={() => { setKirimDetailRow(null); setKirimDetailData(null); }} className="w-full sm:w-auto">Tutup</Button>
                 {kirimDetailRow && (
-                  <Link href={`/keuangan/pembelian/pengiriman/${kirimDetailRow.id}`} className={cn(buttonVariants({ variant: "outline" }))}>
+                  <Link href={`/keuangan/pembelian/pengiriman/${kirimDetailRow.id}`} className={cn(buttonVariants({ variant: "outline" }), "w-full sm:w-auto")}>
                     Lihat halaman
                   </Link>
                 )}
                 {kirimDetailRow && (
-                  <Link href={`/keuangan/pembelian/faktur/baru?dariPengiriman=${kirimDetailRow.id}`} className={cn(buttonVariants({}))}>
+                  <Link href={`/keuangan/pembelian/faktur/baru?dariPengiriman=${kirimDetailRow.id}`} className={cn(buttonVariants({}), "w-full sm:w-auto")}>
                     Buat Faktur
                   </Link>
                 )}

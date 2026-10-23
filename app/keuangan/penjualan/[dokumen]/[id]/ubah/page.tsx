@@ -62,7 +62,7 @@ export default async function UbahDokumenPage({
       syarat: doc.syaratPembayaran ?? "",
       pesan: doc.pesan ?? "",
       memo: doc.memo ?? "",
-      jenis: (doc.tagihan?.jenis ?? "HASIL_KEBUN") as "HASIL_KEBUN" | "TERNAK" | "IKAN" | "LAINNYA",
+      jenis: (doc.tagihan?.jenis ?? "HASIL_KEBUN") as "HASIL_KEBUN" | "TERNAK" | "LAINNYA",
     },
     items: doc.items.map((it, i) => ({
       key: i + 1,

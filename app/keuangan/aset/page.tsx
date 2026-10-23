@@ -82,7 +82,9 @@ export default async function AsetPage() {
       noTransaksiLepas: a.noTransaksiLepas,
       caraLepas: a.caraLepas,
       keteranganLepas: a.keteranganLepas,
-      untungRugi: hargaJual == null ? null : Math.round(hargaJual - susut.nilaiBuku),
+      statusPembayaran: a.statusPembayaran ?? null,
+      akunPenerima: a.akunPenerima ?? null,
+      untungRugi: a.untungRugi == null ? null : Math.round(Number(a.untungRugi)),
       createdAt: a.createdAt.toISOString(),
     };
   });

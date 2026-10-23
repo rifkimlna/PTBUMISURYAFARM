@@ -132,18 +132,70 @@ export async function DELETE(
       return errorResponse("Akun COA tidak ditemukan", 404);
     }
 
-    // Check if akun is used in transactions
-    const usage = await prisma.transaksiKas.count({ where: { kodeAkun: kode } });
-    if (usage > 0) {
+    // Akun yang masih dirujuk transaksi/data tidak boleh dihapus (referensinya
+    // tidak bisa dialihkan otomatis karena maknanya ikut terhapus).
+    // Gunakan non-aktif (isActive=false) sebagai gantinya.
+    const [kas, biaya, fakturItem, dokumenItem, persediaan, anggaran, aset] = await Promise.all([
+      prisma.transaksiKas.count({ where: { kodeAkun: kode } }),
+      prisma.biaya.count({ where: { kodeAkun: kode } }),
+      prisma.fakturPembelianItem.count({ where: { kodeAkun: kode } }),
+      prisma.dokumenPembelianItem.count({ where: { kodeAkun: kode } }),
+      prisma.persediaanBarang.count({ where: { kodeAkunCOA: kode } }),
+      prisma.anggaranItem.count({ where: { kodeAkun: kode } }),
+      prisma.aset.count({ where: { akunAset: kode } }),
+    ]);
+    const dipakai = kas + biaya + fakturItem + dokumenItem + persediaan + anggaran + aset;
+    if (dipakai > 0) {
       return errorResponse(
-        `Akun tidak bisa dihapus karena sudah digunakan dalam ${usage} transaksi. Gunakan non-aktif (isActive=false) sebagai gantinya.`,
+        `Akun tidak bisa dihapus karena sudah digunakan dalam ${dipakai} data. Gunakan non-aktif (isActive=false) sebagai gantinya.`,
         400
       );
     }
 
-    await prisma.akunCOA.delete({ where: { kode } });
+    // Hapus + rapatkan penomoran: semua akun numerik dalam kelompok yang sama
+    // (2 digit awal sama) dengan kode di atas yang dihapus digeser maju satu
+    // angka (4104->4103), beserta seluruh referensinya (kas, biaya, item
+    // faktur/dokumen, persediaan, anggaran, aset) dalam satu transaksi.
+    // Logika laporan memakai nama/golongan akun (bukan kode mentah) sehingga
+    // angkanya tetap konsisten setelah pergeseran.
+    const geser: { dari: string; ke: string; nama: string }[] = [];
+    await prisma.$transaction(async (tx) => {
+      await tx.akunCOA.delete({ where: { kode } });
 
-    return successResponse(null, "Akun COA berhasil dihapus");
+      if (/^\d+$/.test(kode)) {
+        const prefix = kode.slice(0, 2);
+        const basis = parseInt(kode, 10);
+        const atas = await tx.akunCOA.findMany({
+          where: { kode: { startsWith: prefix } },
+          select: { kode: true, nama: true },
+        });
+        const maju = atas
+          .map((a) => a.kode)
+          .filter((k) => /^\d+$/.test(k) && parseInt(k, 10) > basis)
+          .sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
+        let target = basis;
+        for (const dari of maju) {
+          const ke = String(target).padStart(kode.length, "0");
+          target += 1;
+          if (dari === ke) continue;
+          await tx.akunCOA.update({ where: { kode: dari }, data: { kode: ke } });
+          await tx.transaksiKas.updateMany({ where: { kodeAkun: dari }, data: { kodeAkun: ke } });
+          await tx.biaya.updateMany({ where: { kodeAkun: dari }, data: { kodeAkun: ke } });
+          await tx.fakturPembelianItem.updateMany({ where: { kodeAkun: dari }, data: { kodeAkun: ke } });
+          await tx.dokumenPembelianItem.updateMany({ where: { kodeAkun: dari }, data: { kodeAkun: ke } });
+          await tx.persediaanBarang.updateMany({ where: { kodeAkunCOA: dari }, data: { kodeAkunCOA: ke } });
+          await tx.anggaranItem.updateMany({ where: { kodeAkun: dari }, data: { kodeAkun: ke } });
+          await tx.aset.updateMany({ where: { akunAset: dari }, data: { akunAset: ke } });
+          geser.push({ dari, ke, nama: atas.find((a) => a.kode === dari)?.nama ?? "" });
+        }
+      }
+    });
+
+    const infoGeser =
+      geser.length > 0
+        ? ` Nomor berikut digeser maju: ${geser.map((g) => `${g.dari}→${g.ke}`).join(", ")}.`
+        : "";
+    return successResponse({ digeser: geser }, `Akun COA berhasil dihapus.${infoGeser}`);
   } catch (e) {
     return errorResponse(e instanceof Error ? e.message : "Gagal hapus akun", 500);
   }

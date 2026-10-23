@@ -131,6 +131,23 @@ export async function POST(req: NextRequest) {
         },
         include: { items: true },
       });
+      // Stok bertambah saat barang benar-benar diterima (pengiriman/penerimaan),
+      // bukan saat pesanan (PO) dibuat. Buat riwayat stok MASUK per item yang
+      // memiliki produk master, terhubung tanpa duplikasi.
+      for (const it of pesanan.items) {
+        if (it.produkId) {
+          await tx.riwayatStok.create({
+            data: {
+              barangId: it.produkId,
+              jenis: "MASUK",
+              jumlah: Number(it.kuantitas),
+              keterangan: `Terima barang via ${pengiriman.noPengiriman} (${pesanan.noDokumen})`,
+              sumber: "PEMBELIAN",
+              tanggal: data.tanggalPengiriman ?? new Date(),
+            },
+          });
+        }
+      }
       // Pesanan yang sudah diterima tidak lagi "Belum Ditagih" di tab Pesanan.
       await tx.dokumenPembelian.updateMany({
         where: { id: data.pesananId, tipe: "PESANAN", status: { not: "SELESAI" } },

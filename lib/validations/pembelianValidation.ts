@@ -50,6 +50,9 @@ export const createFakturSchema = baseFakturSchema.superRefine((data, ctx) => {
   if (!data.jatuhTempo) {
     ctx.addIssue({ code: "custom", message: "Tanggal jatuh tempo wajib diisi", path: ["jatuhTempo"] });
   }
+  if (!data.syaratPembayaran?.trim()) {
+    ctx.addIssue({ code: "custom", message: "Syarat pembayaran wajib dipilih", path: ["syaratPembayaran"] });
+  }
   if (data.email && !/.+@.+\..+/.test(data.email)) {
     ctx.addIssue({ code: "custom", message: "Format email tidak valid", path: ["email"] });
   }
@@ -60,7 +63,9 @@ export type CreateSupplierInput = z.infer<typeof createSupplierSchema>;
 
 // Rantai dokumen pembelian: PERMINTAAN -> PENAWARAN -> PESANAN (PO).
 // Tanpa jurnal keuangan (utang baru terbentuk saat Faktur dibuat).
-export const TipeDokumenBeliEnum = z.enum(["PERMINTAAN", "PENAWARAN", "PESANAN"]);
+// TUKAR_FAKTUR: merujuk Tagihan HUTANG yang belum lunas (tanpa utang/Kas baru),
+// logika sama dengan Tukar Faktur Penjualan.
+export const TipeDokumenBeliEnum = z.enum(["PERMINTAAN", "PENAWARAN", "PESANAN", "TUKAR_FAKTUR"]);
 export type TipeDokumenBeli = z.infer<typeof TipeDokumenBeliEnum>;
 
 export const itemDokumenBeliSchema = z.object({
@@ -103,7 +108,15 @@ export const createDokumenBeliSchema = baseDokumenBeliSchema.superRefine((data, 
   if (data.tipe !== "PERMINTAAN" && !data.supplierId) {
     ctx.addIssue({ code: "custom", message: "Supplier wajib dipilih", path: ["supplierId"] });
   }
-  if (data.items.length === 0) {
+  if (data.tipe === "TUKAR_FAKTUR") {
+    if (data.referensiIds.length === 0) {
+      ctx.addIssue({ code: "custom", message: "Pilih minimal 1 faktur pembelian yang akan ditukar", path: ["referensiIds"] });
+    }
+  }
+  if (!data.syaratPembayaran?.trim()) {
+    ctx.addIssue({ code: "custom", message: "Syarat pembayaran wajib dipilih", path: ["syaratPembayaran"] });
+  }
+  if (data.tipe !== "TUKAR_FAKTUR" && data.items.length === 0) {
     ctx.addIssue({ code: "custom", message: "Tambahkan minimal 1 baris produk", path: ["items"] });
   }
   if (data.email && !/.+@.+\..+/.test(data.email)) {

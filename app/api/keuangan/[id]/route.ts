@@ -76,13 +76,13 @@ export async function PUT(req: NextRequest, { params }: Params) {
           // validasi sudah dilakukan di schema refine
         }
       } else {
-        // Statis dulu, lalu DB agar akun baru dari Daftar Akun ikut tersimpan.
+        // Database dulu (tahan penomoran ulang COA), lalu statis agar akun baru dari Daftar Akun ikut tersimpan.
         resolvedKodeAkun =
-          kodeAkunByNama(resolvedTipe as any, resolvedKategori ?? exists.kategori) ??
           (await getKodeAkunByNamaFromDB(
             resolvedKategori ?? exists.kategori,
             resolvedTipe as any
-          ));
+          )) ??
+          kodeAkunByNama(resolvedTipe as any, resolvedKategori ?? exists.kategori);
       }
       
       const result = await tx.transaksiKas.update({

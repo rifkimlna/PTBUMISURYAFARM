@@ -56,6 +56,7 @@ enum TipeDokumenPembelian {
   PERMINTAAN
   PENAWARAN
   PESANAN
+  TUKAR_FAKTUR
 }
 
 enum TipeTagihan {
@@ -304,12 +305,21 @@ model Aset {
   akunBebanSusut    String?  // default 5408 - Beban Penyusutan Aset Tetap
   akunAkumulasi     String?  // teks bebas; COA akumulasi belum tersedia
   tanggalMulaiSusut DateTime?
-  // --- Pelepasan (jual/lepas dicatat, tanpa Kas otomatis) ---
+  // --- Pelepasan (jual/lepas dicatat, dengan jurnal akuntansi) ---
   tanggalLepas      DateTime?
   hargaJual         Decimal? @db.Decimal(15, 2)
   noTransaksiLepas  String?
   caraLepas         String?  // DIJUAL | DILEPAS
   keteranganLepas   String?  @db.Text
+  // Status pembayaran penjualan: SUDAH_DIBAYAR | BELUM_DIBAYAR | BELUM_DIKONFIRMASI
+  statusPembayaran  String?  @default("BELUM_DIKONFIRMASI")
+  // Akun penerima Kas/Bank/Tabungan untuk penjualan sudah dibayar
+  akunPenerima      String?  // kode COA, ex: 1101 / 1103 / 1104
+  // Nilai keuntungan/rugi penjualan (disimpan untuk laporan)
+  untungRugi        Decimal? @db.Decimal(15, 2)
+  // Referensi transaksi keuangan yang terkait
+  transaksiKasJualId String?  // TransaksiKas untuk penjualan sudah dibayar
+  tagihanPiutangId   String?  // Tagihan PIUTANG untuk penjualan belum dibayar
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -365,7 +375,7 @@ model Tagihan {
   status      StatusTagihan @default(BELUM_LUNAS)
   // Persiapan modul Penjualan (diisi form Penagihan tahap berikut; nullable agar baris lama aman)
   noInvoice String? @unique // Nomor invoice penjualan, ex: INV-20260917-AB12
-  jenis     String? // Jenis produk penjualan: HASIL_KEBUN | TERNAK | IKAN | LAINNYA
+  jenis     String? // Jenis produk penjualan: HASIL_KEBUN | TERNAK | LAINNYA
   dokumen   String? // Jenis dokumen penjualan: PENAGIHAN | PROFORMA | TUKAR_FAKTUR (null = Penagihan)
 
   adminId String
@@ -417,8 +427,14 @@ model PersediaanBarang {
   // --- Modul Produk (opsional, backward compat; form COA disembunyikan dari user) ---
   barcode         String?  @unique // kode batang / SKU tambahan
   tipeProduk      String?  // BARANG (stok terlacak) | JASA (tanpa stok); null = BARANG
+  sumberProduk    String?  // PENJUALAN (hasil sendiri) | PEMBELIAN (dari supplier); null = keduanya/belum ditentukan
   hargaBeli       Decimal? @db.Decimal(15, 2)
   hargaJual       Decimal? @db.Decimal(15, 2)
+  // Nilai manual (opsional) untuk laporan/tabel Produk. Bila diisi, dipakai
+  // sebagai harga rata-rata / beli terakhir; bila null, tetap dihitung dari
+  // transaksi faktur pembelian.
+  hargaRataRataManual      Decimal? @db.Decimal(15, 2)
+  hargaBeliTerakhirManual  Decimal? @db.Decimal(15, 2)
   batasMinimum    Int      @default(0) // ambang "segera habis" per produk
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

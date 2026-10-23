@@ -10,6 +10,7 @@ export interface PersediaanCOAMapping {
   kodeAkunPersediaan: string; // COA kode untuk persediaan (Aset)
   namaAkunPersediaan: string;
   kodeAkunSumberDana: Record<"KAS" | "BANK" | "TABUNGAN", string>; // COA kode untuk sumber dana
+  namaAkunSumberDana: Record<"KAS" | "BANK" | "TABUNGAN", string>; // nama akun (untuk resolve tahan penomoran ulang)
 }
 
 // Mapping standar berdasarkan COA PT Bumi Surya Farm
@@ -23,6 +24,11 @@ export const PERSEDIAAN_COA_MAPPING: PersediaanCOAMapping[] = [
       BANK: "1103",
       TABUNGAN: "1104",
     },
+    namaAkunSumberDana: {
+      KAS: "Kas",
+      BANK: "Bank",
+      TABUNGAN: "Tabungan",
+    },
   },
   {
     kategori: "Pakan Ternak/Ikan",
@@ -33,6 +39,11 @@ export const PERSEDIAAN_COA_MAPPING: PersediaanCOAMapping[] = [
       BANK: "1103",
       TABUNGAN: "1104",
     },
+    namaAkunSumberDana: {
+      KAS: "Kas",
+      BANK: "Bank",
+      TABUNGAN: "Tabungan",
+    },
   },
   {
     kategori: "Bibit/Benih",
@@ -42,6 +53,11 @@ export const PERSEDIAAN_COA_MAPPING: PersediaanCOAMapping[] = [
       KAS: "1101",
       BANK: "1103",
       TABUNGAN: "1104",
+    },
+    namaAkunSumberDana: {
+      KAS: "Kas",
+      BANK: "Bank",
+      TABUNGAN: "Tabungan",
     },
   },
 ];
@@ -58,6 +74,11 @@ export function getKodeAkunPersediaan(kategori: KategoriPersediaan): string | nu
 export function getKodeAkunSumberDana(kategori: KategoriPersediaan, sumberDana: "KAS" | "BANK" | "TABUNGAN"): string | null {
   const mapping = getCOAMappingByKategori(kategori);
   return mapping?.kodeAkunSumberDana[sumberDana] ?? null;
+}
+
+export function getNamaAkunSumberDana(kategori: KategoriPersediaan, sumberDana: "KAS" | "BANK" | "TABUNGAN"): string | null {
+  const mapping = getCOAMappingByKategori(kategori);
+  return mapping?.namaAkunSumberDana[sumberDana] ?? null;
 }
 
 export function validateKategoriHasCOAMapping(kategori: string): { valid: boolean; error?: string } {

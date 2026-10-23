@@ -207,7 +207,7 @@ export function PengirimanPenjualanContent() {
                 onClick={tampilkan}
                 className="w-full cursor-pointer bg-emerald-700 text-white hover:bg-emerald-800"
               >
-                Tampilkan
+                Filter
               </Button>
               <div className="relative">
                 <Button
@@ -282,7 +282,7 @@ export function PengirimanPenjualanContent() {
               <div className="py-10 text-center">
                 <p className="text-sm font-semibold text-slate-900">Laporan akan muncul di sini</p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Pilih tanggal atau periode, lalu klik tombol Tampilkan.
+                  Pilih tanggal atau periode, lalu klik tombol Filter.
                 </p>
               </div>
             ) : (
