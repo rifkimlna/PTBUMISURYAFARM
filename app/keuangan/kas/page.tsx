@@ -25,8 +25,21 @@ export default async function KeuanganPage() {
   // pendapatan/beban); saldo kas per sumber tetap mencakupnya.
   const bukanModal: any = { NOT: [{ kodeAkun: { startsWith: "31" } }] };
 
-  const [transaksi, agg, totalTransaksi, perSumber, trxMasaDepan, piutang, hutang, cookieStore] =
-    await Promise.all([
+  let dbError = false;
+  let transaksi: any[] = [];
+  let agg: any[] = [];
+  let totalTransaksi = 0;
+  let perSumber: { KAS: number; BANK: number; TABUNGAN: number } = { KAS: 0, BANK: 0, TABUNGAN: 0 };
+  let trxMasaDepan: any[] = [];
+  let piutang: { _sum: { sisa: number | null }; _count: { id: number } } = { _sum: { sisa: 0 }, _count: { id: 0 } };
+  let hutang: { _sum: { sisa: number | null }; _count: { id: number } } = { _sum: { sisa: 0 }, _count: { id: 0 } };
+  let cookieStore: any = null;
+
+  try {
+    const cookieStoreResult = await cookies();
+    cookieStore = cookieStoreResult;
+
+    const results = await Promise.all([
       prisma.transaksiKas.findMany({
         orderBy: { tanggal: "desc" },
         take: 10,
@@ -39,17 +52,13 @@ export default async function KeuanganPage() {
         _count: { id: true },
       }),
       prisma.transaksiKas.count(),
-      // Saldo transfer-aware: TRANSFER keluar mengurangi asal, menambah tujuan (satu baris).
       getSaldoPerSumber(),
-      // Arus kas masa depan: HANYA transaksi bertanggal BESOK atau setelahnya.
-      // Transaksi hari ini (sudah terjadi / sudah dibayar) dikecualikan.
       prisma.transaksiKas.groupBy({
         where: { tanggal: { gte: awalBesok, lte: akhirPeriode }, ...bukanModal },
         by: ["tipe"],
         _sum: { jumlah: true },
         _count: { id: true },
       }),
-      // Piutang belum lunas yang jatuh tempo dalam periode (pakai sisa tagihan).
       prisma.tagihan.aggregate({
         where: {
           tipe: "PIUTANG",
@@ -59,7 +68,6 @@ export default async function KeuanganPage() {
         _sum: { sisa: true },
         _count: { id: true },
       }),
-      // Hutang belum lunas yang jatuh tempo dalam periode (pakai sisa tagihan).
       prisma.tagihan.aggregate({
         where: {
           tipe: "HUTANG",
@@ -69,10 +77,15 @@ export default async function KeuanganPage() {
         _sum: { sisa: true },
         _count: { id: true },
       }),
-      cookies(),
     ]);
 
-  const token = cookieStore.get("token")?.value;
+    [transaksi, agg, totalTransaksi, perSumber, trxMasaDepan, piutang, hutang] = results;
+  } catch (e) {
+    console.error("[keuangan/kas] database tidak terjangkau:", e instanceof Error ? e.message : e);
+    dbError = true;
+  }
+
+  const token = cookieStore?.get("token")?.value;
   const session = token ? await verifyToken(token) : null;
   const canDelete = session?.role === "SUPER_ADMIN";
 
@@ -84,7 +97,6 @@ export default async function KeuanganPage() {
   const futureTrxCount = (tipe: string) =>
     trxMasaDepan.find((a) => a.tipe === tipe)?._count.id ?? 0;
 
-  // Tanpa data yang memenuhi kriteria -> Rp0 (tanpa dummy).
   const pemasukan30Hari = futureTrx("PEMASUKAN") + Number(piutang._sum.sisa ?? 0);
   const pengeluaran30Hari = futureTrx("PENGELUARAN") + Number(hutang._sum.sisa ?? 0);
   const pemasukanCount = futureTrxCount("PEMASUKAN") + piutang._count.id;
@@ -102,6 +114,13 @@ export default async function KeuanganPage() {
         </div>
         <ExportButton />
       </div>
+
+      {dbError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <div className="text-sm font-medium text-red-800">⚠️ Database tidak terhubung — data kas & bank mungkin kosong.</div>
+          <div className="mt-1 text-xs text-red-600">Cek DATABASE_URL di Vercel Environment Variables lalu redeploy.</div>
+        </div>
+      )}
 
       <KeuanganContent
         initialData={transaksi.map((t) => ({

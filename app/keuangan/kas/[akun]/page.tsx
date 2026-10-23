@@ -31,30 +31,42 @@ export default async function DetailAkunPage({ params }: { params: Promise<{ aku
     OR: [{ sumberDana: meta.sumber }, { sumberDanaTujuan: meta.sumber }],
   };
 
-  const [transaksi, aggSumber, aggTujuan] = await Promise.all([
-    prisma.transaksiKas.findMany({
-      where: whereRelasi,
-      orderBy: { tanggal: "desc" },
-      take: 100,
-      include: { _count: { select: { bukti: true } } },
-    }),
-    prisma.transaksiKas.groupBy({
-      by: ["tipe"],
-      where: { sumberDana: meta.sumber },
-      _sum: { jumlah: true },
-      _count: { id: true },
-    }),
-    prisma.transaksiKas.groupBy({
-      by: ["tipe"],
-      where: { sumberDanaTujuan: meta.sumber },
-      _sum: { jumlah: true },
-      _count: { id: true },
-    }),
-  ]);
+  let dbError = false;
+  let transaksi: any[] = [];
+  let aggSumber: any[] = [];
+  let aggTujuan: any[] = [];
 
-  const sum = (rows: typeof aggSumber, tipe: string) =>
+  try {
+    const results = await Promise.all([
+      prisma.transaksiKas.findMany({
+        where: whereRelasi,
+        orderBy: { tanggal: "desc" },
+        take: 100,
+        include: { _count: { select: { bukti: true } } },
+      }),
+      prisma.transaksiKas.groupBy({
+        by: ["tipe"],
+        where: { sumberDana: meta.sumber },
+        _sum: { jumlah: true },
+        _count: { id: true },
+      }),
+      prisma.transaksiKas.groupBy({
+        by: ["tipe"],
+        where: { sumberDanaTujuan: meta.sumber },
+        _sum: { jumlah: true },
+        _count: { id: true },
+      }),
+    ]);
+
+    [transaksi, aggSumber, aggTujuan] = results;
+  } catch (e) {
+    console.error("[keuangan/kas/[akun]] database tidak terjangkau:", e instanceof Error ? e.message : e);
+    dbError = true;
+  }
+
+  const sum = (rows: any[], tipe: string) =>
     Number(rows.find((r) => r.tipe === tipe)?._sum.jumlah ?? 0);
-  const count = (rows: typeof aggSumber, tipe: string) =>
+  const count = (rows: any[], tipe: string) =>
     rows.find((r) => r.tipe === tipe)?._count.id ?? 0;
 
   const uangMasuk = sum(aggSumber, "PEMASUKAN");
@@ -91,6 +103,13 @@ export default async function DetailAkunPage({ params }: { params: Promise<{ aku
           {totalTransaksi} transaksi tercatat
         </p>
       </div>
+
+      {dbError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <div className="text-sm font-medium text-red-800">⚠️ Database tidak terhubung — data akun mungkin kosong.</div>
+          <div className="mt-1 text-xs text-red-600">Cek DATABASE_URL di Vercel Environment Variables lalu redeploy.</div>
+        </div>
+      )}
 
       <Card className="border-slate-200 bg-slate-900 text-white">
         <CardContent className="p-6">
