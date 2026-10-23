@@ -1,7 +1,8 @@
 export const dynamic = "force-dynamic";
 
 import { prisma } from "@/lib/prisma";
-import type { Prisma, StatusKesehatan } from "@/generated/prisma/client";
+import type { Prisma } from "../../../generated/prisma/client";
+import { StatusKesehatan } from "../../../generated/prisma/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PohonTable } from "@/components/admin/pohon-table";
