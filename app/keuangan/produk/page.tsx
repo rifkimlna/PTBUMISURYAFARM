@@ -11,19 +11,33 @@ import { ProdukContent } from "@/components/admin/produk-content";
 // Pembelian/Penjualan/Pengiriman tidak terganggu). Tanpa dummy: kosong berarti
 // empty state.
 export default async function ProdukPage() {
-  const [barang, agg, penyesuaian, cookieStore] = await Promise.all([
-    prisma.persediaanBarang.findMany({ orderBy: { createdAt: "desc" }, take: 500 }),
-    prisma.riwayatStok.groupBy({ by: ["barangId", "jenis"], _sum: { jumlah: true } }),
-    prisma.riwayatStok.findMany({
-      where: { sumber: "PENYESUAIAN" },
-      orderBy: { tanggal: "desc" },
-      take: 100,
-      include: { barang: { select: { id: true, namaBarang: true, satuan: true } } },
-    }),
-    cookies(),
-  ]);
+  let dbError = false;
+  let barang: any[] = [];
+  let agg: any[] = [];
+  let penyesuaian: any[] = [];
+  let cookieStore: any = null;
 
-  const token = cookieStore.get("token")?.value;
+  try {
+    cookieStore = await cookies();
+
+    const results = await Promise.all([
+      prisma.persediaanBarang.findMany({ orderBy: { createdAt: "desc" }, take: 500 }),
+      prisma.riwayatStok.groupBy({ by: ["barangId", "jenis"], _sum: { jumlah: true } }),
+      prisma.riwayatStok.findMany({
+        where: { sumber: "PENYESUAIAN" },
+        orderBy: { tanggal: "desc" },
+        take: 100,
+        include: { barang: { select: { id: true, namaBarang: true, satuan: true } } },
+      }),
+    ]);
+
+    [barang, agg, penyesuaian] = results;
+  } catch (e) {
+    console.error("[keuangan/produk] database tidak terjangkau:", e instanceof Error ? e.message : e);
+    dbError = true;
+  }
+
+  const token = cookieStore?.get("token")?.value;
   const session = token ? await verifyToken(token) : null;
   const canDelete = session?.role === "SUPER_ADMIN";
 
@@ -37,20 +51,25 @@ export default async function ProdukPage() {
   // Harga beli terakhir & rata-rata (tertimbang) dari faktur pembelian nyata
   // yang merujuk produk ini. Tanpa faktur: pakai harga tersimpan / strip.
   const ids = barang.map((b) => b.id);
-  const fakturItems =
-    ids.length > 0
-      ? await prisma.fakturPembelianItem.findMany({
-          where: { produkId: { in: ids } },
-          select: {
-            produkId: true,
-            kuantitas: true,
-            harga: true,
-            faktur: { select: { tanggal: true } },
-          },
-          orderBy: { faktur: { tanggal: "desc" } },
-          take: 2000,
-        })
-      : [];
+  let fakturItems: any[] = [];
+  try {
+    fakturItems =
+      ids.length > 0
+        ? await prisma.fakturPembelianItem.findMany({
+            where: { produkId: { in: ids } },
+            select: {
+              produkId: true,
+              kuantitas: true,
+              harga: true,
+              faktur: { select: { tanggal: true } },
+            },
+            orderBy: { faktur: { tanggal: "desc" } },
+            take: 2000,
+          })
+        : [];
+  } catch {
+    fakturItems = [];
+  }
   const lastMap = new Map<string, number>();
   const sumMap = new Map<string, { nilai: number; qty: number }>();
   for (const it of fakturItems) {
@@ -73,12 +92,12 @@ export default async function ProdukPage() {
           { jenis: "KELUAR", jumlah: sums.KELUAR },
         ]);
     const acc = sumMap.get(b.id);
-      return {
-        id: b.id,
-        namaBarang: b.namaBarang,
+    return {
+      id: b.id,
+      namaBarang: b.namaBarang,
       tipeProduk: b.tipeProduk ?? "BARANG",
       sumberProduk: (b.sumberProduk ?? null) as "PENJUALAN" | "PEMBELIAN" | null,
-        barcode: b.barcode,
+      barcode: b.barcode,
       satuan: b.satuan,
       stokAwal: b.stokAwal,
       stok,
@@ -96,7 +115,6 @@ export default async function ProdukPage() {
           : acc && acc.qty > 0
             ? Math.round((acc.nilai / acc.qty) * 100) / 100
             : null,
-      // Nilai manual (opsional) mengalahkan hasil perhitungan faktur.
       hargaRataRataManual:
         b.hargaRataRataManual == null ? null : Number(b.hargaRataRataManual),
       hargaBeliTerakhirManual:
@@ -117,6 +135,12 @@ export default async function ProdukPage() {
 
   return (
     <div className="space-y-6 min-w-0">
+      {dbError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <div className="text-sm font-medium text-red-800">⚠️ Database tidak terhubung — data produk mungkin kosong.</div>
+          <div className="mt-1 text-xs text-red-600">Cek DATABASE_URL di Vercel Environment Variables lalu redeploy.</div>
+        </div>
+      )}
       <ProdukContent
         canDelete={canDelete}
         summary={summary}
