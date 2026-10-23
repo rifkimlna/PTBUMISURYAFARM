@@ -31,8 +31,8 @@ export default async function KeuanganPage() {
   let totalTransaksi = 0;
   let perSumber: { KAS: number; BANK: number; TABUNGAN: number } = { KAS: 0, BANK: 0, TABUNGAN: 0 };
   let trxMasaDepan: any[] = [];
-  let piutang: { _sum: { sisa: number | null }; _count: { id: number } } = { _sum: { sisa: 0 }, _count: { id: 0 } };
-  let hutang: { _sum: { sisa: number | null }; _count: { id: number } } = { _sum: { sisa: 0 }, _count: { id: 0 } };
+  let piutang: { _sum: { sisa: any }; _count: { id: number } } = { _sum: { sisa: 0 }, _count: { id: 0 } };
+  let hutang: { _sum: { sisa: any }; _count: { id: number } } = { _sum: { sisa: 0 }, _count: { id: 0 } };
   let cookieStore: any = null;
 
   try {

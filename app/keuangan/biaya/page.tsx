@@ -15,107 +15,119 @@ export default async function BiayaPage() {
   awal30Hari.setDate(awal30Hari.getDate() - 30);
   awal30Hari.setHours(0, 0, 0, 0);
 
-  // Ambil semua id TransaksiKas yang sudah ditautkan ke Biaya (untuk dihindari duplikasi).
-  const biayaKasIds = await prisma.biaya.findMany({
-    where: { transaksiKasId: { not: null } },
-    select: { transaksiKasId: true },
-  });
-  const linkedKasIds = new Set(biayaKasIds.map((b) => b.transaksiKasId!).filter(Boolean));
+  let dbError = false;
+  let biayaKasIds: { transaksiKasId: string | null }[] = [];
+  let linkedKasIds = new Set<string>();
+  let bulanIni: any = { _sum: { jumlah: null }, _count: { id: 0 } };
+  let tigaPuluhHari: any = { _sum: { jumlah: null }, _count: { id: 0 } };
+  let belumBayar: any = { _sum: { sisa: null }, _count: { id: 0 } };
+  let kasBulanIni: any = { _sum: { jumlah: null }, _count: { id: 0 } };
+  let kasTigaPuluhHari: any = { _sum: { jumlah: null }, _count: { id: 0 } };
+  let biayaRows: any[] = [];
+  let kasRows: any[] = [];
 
-  const [
-    bulanIni,
-    tigaPuluhHari,
-    belumBayar,
-    kasBulanIni,
-    kasTigaPuluhHari,
-    biayaRows,
-    kasRows,
-  ] = await Promise.all([
-    // Total biaya bulan ini (dari model Biaya)
-    prisma.biaya.aggregate({
-      where: { tanggal: { gte: awalBulan } },
-      _sum: { jumlah: true },
-      _count: { id: true },
-    }),
-    // Total biaya 30 hari terakhir (dari model Biaya)
-    prisma.biaya.aggregate({
-      where: { tanggal: { gte: awal30Hari } },
-      _sum: { jumlah: true },
-      _count: { id: true },
-    }),
-    // Belum lunas (sisa tagihan dari Biaya dengan tagihanId)
-    prisma.biaya.aggregate({
-      where: { status: { not: "LUNAS" } },
-      _sum: { sisa: true },
-      _count: { id: true },
-    }),
-    // Total biaya bulan ini dari TransaksiKas PENGELUARAN belum ditautkan ke Biaya
-    prisma.transaksiKas.aggregate({
-      where: {
-        tipe: "PENGELUARAN",
-        tanggal: { gte: awalBulan },
-        id: { notIn: [...linkedKasIds] },
-      },
-      _sum: { jumlah: true },
-      _count: { id: true },
-    }),
-    // Total biaya 30 hari terakhir dari TransaksiKas PENGELUARAN belum ditautkan ke Biaya
-    prisma.transaksiKas.aggregate({
-      where: {
-        tipe: "PENGELUARAN",
-        tanggal: { gte: awal30Hari },
-        id: { notIn: [...linkedKasIds] },
-      },
-      _sum: { jumlah: true },
-      _count: { id: true },
-    }),
-    // Baris Biaya dari model Biaya
-    prisma.biaya.findMany({
-      orderBy: { tanggal: "desc" },
-      take: 100,
-      select: {
-        id: true,
-        noBiaya: true,
-        tanggal: true,
-        kategori: true,
-        kodeAkun: true,
-        penerima: true,
-        status: true,
-        sisa: true,
-        jumlah: true,
-        tags: true,
-        memo: true,
-        tagihanId: true,
-        transaksiKas: { select: { sumberDana: true } },
-      },
-    }),
-    // TransaksiKas PENGELUARAN yang belum ditautkan ke Biaya (biaya tunai kas/bank,
-    // termasuk pelunasan hutang yang langsung dibayar dari Kas & Bank).
-    // Setiap pengeluaran dihitung tepat satu kali tanpa double counting.
-    prisma.transaksiKas.findMany({
-      where: {
-        tipe: "PENGELUARAN",
-        id: { notIn: [...linkedKasIds] },
-      },
-      orderBy: { tanggal: "desc" },
-      take: 100,
-      select: {
-        id: true,
-        noTransaksi: true,
-        tanggal: true,
-        kategori: true,
-        kodeAkun: true,
-        pihak: true,
-        jumlah: true,
-        sumberDana: true,
-        keterangan: true,
-        tagihanId: true,
-      },
-    }),
-  ]);
+  try {
+    biayaKasIds = await prisma.biaya.findMany({
+      where: { transaksiKasId: { not: null } },
+      select: { transaksiKasId: true },
+    });
+    linkedKasIds = new Set(biayaKasIds.map((b) => b.transaksiKasId!).filter(Boolean));
+
+    [
+      bulanIni,
+      tigaPuluhHari,
+      belumBayar,
+      kasBulanIni,
+      kasTigaPuluhHari,
+      biayaRows,
+      kasRows,
+    ] = await Promise.all([
+      prisma.biaya.aggregate({
+        where: { tanggal: { gte: awalBulan } },
+        _sum: { jumlah: true },
+        _count: { id: true },
+      }),
+      prisma.biaya.aggregate({
+        where: { tanggal: { gte: awal30Hari } },
+        _sum: { jumlah: true },
+        _count: { id: true },
+      }),
+      prisma.biaya.aggregate({
+        where: { status: { not: "LUNAS" } },
+        _sum: { sisa: true },
+        _count: { id: true },
+      }),
+      prisma.transaksiKas.aggregate({
+        where: {
+          tipe: "PENGELUARAN",
+          tanggal: { gte: awalBulan },
+          id: { notIn: [...linkedKasIds] },
+        },
+        _sum: { jumlah: true },
+        _count: { id: true },
+      }),
+      prisma.transaksiKas.aggregate({
+        where: {
+          tipe: "PENGELUARAN",
+          tanggal: { gte: awal30Hari },
+          id: { notIn: [...linkedKasIds] },
+        },
+        _sum: { jumlah: true },
+        _count: { id: true },
+      }),
+      prisma.biaya.findMany({
+        orderBy: { tanggal: "desc" },
+        take: 100,
+        select: {
+          id: true,
+          noBiaya: true,
+          tanggal: true,
+          kategori: true,
+          kodeAkun: true,
+          penerima: true,
+          status: true,
+          sisa: true,
+          jumlah: true,
+          tags: true,
+          memo: true,
+          tagihanId: true,
+          transaksiKas: { select: { sumberDana: true } },
+        },
+      }),
+      prisma.transaksiKas.findMany({
+        where: {
+          tipe: "PENGELUARAN",
+          id: { notIn: [...linkedKasIds] },
+        },
+        orderBy: { tanggal: "desc" },
+        take: 100,
+        select: {
+          id: true,
+          noTransaksi: true,
+          tanggal: true,
+          kategori: true,
+          kodeAkun: true,
+          pihak: true,
+          jumlah: true,
+          sumberDana: true,
+          keterangan: true,
+          tagihanId: true,
+        },
+      }),
+    ]);
+  } catch (e) {
+    console.error("[keuangan/biaya] database tidak terjangkau:", e instanceof Error ? e.message : e);
+    dbError = true;
+  }
 
   return (
     <div className="space-y-6">
+      {dbError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <div className="text-sm font-medium text-red-800">⚠️ Database tidak terhubung — data biaya mungkin kosong.</div>
+          <div className="mt-1 text-xs text-red-600">Cek DATABASE_URL di Vercel Environment Variables lalu redeploy.</div>
+        </div>
+      )}
       <BiayaContent
         summary={{
           bulanIni: Number(bulanIni._sum.jumlah ?? 0) + Number(kasBulanIni._sum.jumlah ?? 0),

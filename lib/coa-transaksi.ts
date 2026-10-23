@@ -38,6 +38,17 @@ export async function getTransaksiAkun(
   kode: string,
   opts: { page?: number; limit?: number; startDate?: Date; endDate?: Date } = {}
 ): Promise<{ rows: TransaksiAkunRow[]; total: number; summary: RingkasanAkun }> {
+  try {
+    return await getTransaksiAkunUnsafe(kode, opts);
+  } catch {
+    return { rows: [], total: 0, summary: { pemasukan: 0, pengeluaran: 0, saldo: 0 } };
+  }
+}
+
+async function getTransaksiAkunUnsafe(
+  kode: string,
+  opts: { page?: number; limit?: number; startDate?: Date; endDate?: Date } = {}
+) {
   const page = Math.max(1, opts.page ?? 1);
   const limit = Math.min(100, Math.max(1, opts.limit ?? 10));
   const skip = (page - 1) * limit;

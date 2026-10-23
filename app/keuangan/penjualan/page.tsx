@@ -29,74 +29,90 @@ export default async function PenjualanPage({
   awal30Hari.setDate(awal30Hari.getDate() - 30);
   awal30Hari.setHours(0, 0, 0, 0);
 
-  const [belumDibayar, telatDibayar, pelunasan30, rows, docs, docByTagihan, kirim, semuaReferensi] = await Promise.all([
-    // Total sisa penagihan yang belum dibayar (termasuk lunas sebagian)
-    prisma.tagihan.aggregate({
-      where: { tipe: "PIUTANG", status: { not: "LUNAS" } },
-      _sum: { sisa: true },
-      _count: { id: true },
-    }),
-    // Penagihan yang lewat jatuh tempo dan belum lunas
-    prisma.tagihan.aggregate({
-      where: {
-        tipe: "PIUTANG",
-        status: { not: "LUNAS" },
-        jatuhTempo: { lt: awalHariIni },
-      },
-      _sum: { sisa: true },
-      _count: { id: true },
-    }),
-    // Pelunasan piutang yang diterima 30 hari terakhir (transaksi kas tertaut tagihan)
-    prisma.transaksiKas.aggregate({
-      where: {
-        tipe: "PEMASUKAN",
-        tagihanId: { not: null },
-        tanggal: { gte: awal30Hari },
-      },
-      _sum: { jumlah: true },
-      _count: { id: true },
-    }),
-    prisma.tagihan.findMany({
-      where: { tipe: "PIUTANG" },
-      orderBy: { tanggal: "desc" },
-      take: 100,
-      include: { admin: { select: { nama: true } } },
-    }),
-    // Dokumen non-penagihan untuk tab Penagihan (proforma/tukar) + tab Pesanan/Penawaran,
-    // plus PENAGIHAN yang belum punya piutang agar terlihat dan bisa dikelola/dihapus.
-    prisma.dokumenPenjualan.findMany({
-      where: {
-        OR: [
-          { tipe: { in: ["PESANAN", "PENAWARAN", "PROFORMA", "TUKAR_FAKTUR"] } },
-          { tipe: "PENAGIHAN", tagihanId: null },
-        ],
-      },
-      orderBy: { tanggal: "desc" },
-      take: 100,
-      include: { pelanggan: { select: { nama: true } }, _count: { select: { pengiriman: true } } },
-    }),
-    // Peta tagihan -> dokumen (agar tombol edit membuka form dokumen yang sama)
-    prisma.dokumenPenjualan.findMany({
-      where: { tagihanId: { not: null } },
-      select: { id: true, tipe: true, tagihanId: true },
-    }),
-    // Pengiriman nyata (tanpa transaksi keuangan) untuk tab Pengiriman
-    prisma.pengirimanPenjualan.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 100,
-      include: {
-        pelanggan: { select: { nama: true } },
-        pesanan: { select: { id: true, noDokumen: true, status: true } },
-        _count: { select: { items: true } },
-      },
-    }),
-    // Rantai dokumen untuk status tampilan (pesanan terkirim/ditagih -> Selesai).
-    prisma.dokumenPenjualan.findMany({
-      take: 500,
-      orderBy: { tanggal: "desc" },
-      select: { tipe: true, referensiIds: true },
-    }),
-  ]);
+  let dbError = false;
+  let belumDibayar: any = { _sum: { sisa: null }, _count: { id: 0 } };
+  let telatDibayar: any = { _sum: { sisa: null }, _count: { id: 0 } };
+  let pelunasan30: any = { _sum: { jumlah: null }, _count: { id: 0 } };
+  let rows: any[] = [];
+  let docs: any[] = [];
+  let docByTagihan: any[] = [];
+  let kirim: any[] = [];
+  let semuaReferensi: any[] = [];
+
+  try {
+    [belumDibayar, telatDibayar, pelunasan30, rows, docs, docByTagihan, kirim, semuaReferensi] =
+      await Promise.all([
+        // Total sisa penagihan yang belum dibayar (termasuk lunas sebagian)
+        prisma.tagihan.aggregate({
+          where: { tipe: "PIUTANG", status: { not: "LUNAS" } },
+          _sum: { sisa: true },
+          _count: { id: true },
+        }),
+        // Penagihan yang lewat jatuh tempo dan belum lunas
+        prisma.tagihan.aggregate({
+          where: {
+            tipe: "PIUTANG",
+            status: { not: "LUNAS" },
+            jatuhTempo: { lt: awalHariIni },
+          },
+          _sum: { sisa: true },
+          _count: { id: true },
+        }),
+        // Pelunasan piutang yang diterima 30 hari terakhir (transaksi kas tertaut tagihan)
+        prisma.transaksiKas.aggregate({
+          where: {
+            tipe: "PEMASUKAN",
+            tagihanId: { not: null },
+            tanggal: { gte: awal30Hari },
+          },
+          _sum: { jumlah: true },
+          _count: { id: true },
+        }),
+        prisma.tagihan.findMany({
+          where: { tipe: "PIUTANG" },
+          orderBy: { tanggal: "desc" },
+          take: 100,
+          include: { admin: { select: { nama: true } } },
+        }),
+        // Dokumen non-penagihan untuk tab Penagihan (proforma/tukar) + tab Pesanan/Penawaran,
+        // plus PENAGIHAN yang belum punya piutang agar terlihat dan bisa dikelola/dihapus.
+        prisma.dokumenPenjualan.findMany({
+          where: {
+            OR: [
+              { tipe: { in: ["PESANAN", "PENAWARAN", "PROFORMA", "TUKAR_FAKTUR"] } },
+              { tipe: "PENAGIHAN", tagihanId: null },
+            ],
+          },
+          orderBy: { tanggal: "desc" },
+          take: 100,
+          include: { pelanggan: { select: { nama: true } }, _count: { select: { pengiriman: true } } },
+        }),
+        // Peta tagihan -> dokumen (agar tombol edit membuka form dokumen yang sama)
+        prisma.dokumenPenjualan.findMany({
+          where: { tagihanId: { not: null } },
+          select: { id: true, tipe: true, tagihanId: true },
+        }),
+        // Pengiriman nyata (tanpa transaksi keuangan) untuk tab Pengiriman
+        prisma.pengirimanPenjualan.findMany({
+          orderBy: { createdAt: "desc" },
+          take: 100,
+          include: {
+            pelanggan: { select: { nama: true } },
+            pesanan: { select: { id: true, noDokumen: true, status: true } },
+            _count: { select: { items: true } },
+          },
+        }),
+        // Rantai dokumen untuk status tampilan (pesanan terkirim/ditagih -> Selesai).
+        prisma.dokumenPenjualan.findMany({
+          take: 500,
+          orderBy: { tanggal: "desc" },
+          select: { tipe: true, referensiIds: true },
+        }),
+      ]);
+  } catch (e) {
+    console.error("[keuangan/penjualan] database tidak terjangkau:", e instanceof Error ? e.message : e);
+    dbError = true;
+  }
 
   const docMap: Record<string, { docId: string; tipe: string }> = {};
   for (const d of docByTagihan) {
@@ -108,12 +124,18 @@ export default async function PenjualanPage({
   const tukarReferensiIds = docs.filter((d) => d.tipe === "TUKAR_FAKTUR").flatMap((d) => d.referensiIds);
   const tukarTagihan =
     tukarReferensiIds.length > 0
-      ? await prisma.tagihan.findMany({
-          where: { id: { in: tukarReferensiIds } },
-          select: { id: true, sisa: true },
-        })
+      ? (() => {
+          try {
+            return prisma.tagihan.findMany({
+              where: { id: { in: tukarReferensiIds } },
+              select: { id: true, sisa: true },
+            });
+          } catch {
+            return Promise.resolve([]);
+          }
+        })()
       : [];
-  const sisaRujukanMap = new Map(tukarTagihan.map((t) => [t.id, Number(t.sisa)]));
+  const sisaRujukanMap = new Map((await tukarTagihan).map((t) => [t.id, Number(t.sisa)]));
 
   // Himpunan id yang sudah dirujuk dokumen turunan (untuk status tampilan).
   const dirujukOlehPenagihan = new Set<string>();
@@ -179,7 +201,7 @@ export default async function PenjualanPage({
             status,
             total:
               d.tipe === "TUKAR_FAKTUR"
-                ? d.referensiIds.reduce((s, id) => s + (sisaRujukanMap.get(id) ?? 0), 0)
+                ? d.referensiIds.reduce((s: number, id: string) => s + (sisaRujukanMap.get(id) ?? 0), 0)
                 : Number(d.total),
           };
         })}

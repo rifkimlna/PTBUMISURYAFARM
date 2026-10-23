@@ -44,7 +44,8 @@ export default async function ProdukPage() {
   const map = new Map<string, { MASUK: number; KELUAR: number }>();
   for (const a of agg) {
     const entry = map.get(a.barangId) ?? { MASUK: 0, KELUAR: 0 };
-    entry[a.jenis] += a._sum.jumlah ?? 0;
+    const jenis = a.jenis as "MASUK" | "KELUAR";
+    entry[jenis] += a._sum.jumlah ?? 0;
     map.set(a.barangId, entry);
   }
 
