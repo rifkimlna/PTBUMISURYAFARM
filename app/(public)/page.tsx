@@ -152,27 +152,27 @@ export default async function LandingPage() {
             </h2>
           </div>
 
-          <div className="mt-7 sm:mt-8 mx-auto max-w-4xl grid gap-4 grid-cols-2 lg:grid-cols-3">
+          <div className="mt-7 sm:mt-8 mx-auto max-w-4xl grid gap-7 sm:gap-9 grid-cols-2 lg:grid-cols-3">
             {bibit.map((b) => {
               const habis = b.status === "Habis";
               return (
                 <div key={b.id} className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm">
                   <div className="relative">
                     <img src={fotoBibit(b)} alt={b.nama} className="aspect-[5/4] w-full object-cover" />
+                  </div>
+                  <div className="flex flex-1 flex-col gap-4 p-5 sm:p-6">
+                    <h3 className="text-[13px] sm:text-sm font-semibold leading-snug text-black">{b.nama}</h3>
+                    <div className="flex-1" />
                     <span
-                      className={`absolute left-2.5 top-2.5 rounded-md px-2 py-0.5 text-[9px] font-bold tracking-wide text-white ${
+                      className={`inline-block w-fit rounded-md px-2 py-0.5 text-[9px] font-bold tracking-wide text-white ${
                         habis ? "bg-slate-600" : b.status === "Stok Menipis" ? "bg-[#a16207]" : "bg-green-700"
                       }`}
                     >
                       {b.status.toUpperCase()}
                     </span>
-                  </div>
-                  <div className="flex flex-1 flex-col gap-2 p-3.5">
-                    <h3 className="text-[13px] sm:text-sm font-semibold leading-snug text-[#14532d]">{b.nama}</h3>
-                    <div className="flex-1" />
-                    <div className="text-[15px] font-bold text-[#a16207]">
+                    <div className="text-[15px] font-bold text-black">
                       Rp {formatRupiah(b.harga)}
-                      <span className="text-[10px] font-normal text-slate-400">/{b.satuan}</span>
+                      <span className="text-[10px] font-normal text-black/60">/{b.satuan}</span>
                     </div>
                     {habis ? (
                       <span className="block rounded-full bg-slate-100 py-1.5 text-center text-[11px] font-semibold text-slate-500">Stok Habis</span>
