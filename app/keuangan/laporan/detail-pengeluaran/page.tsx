@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { DetailPengeluaranContent } from "@/components/admin/detail-pengeluaran-content";
 
 // Laporan → Detail Pengeluaran PT Bumi Surya Farm (data aktual database, tanpa dummy).

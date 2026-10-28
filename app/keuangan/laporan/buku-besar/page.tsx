@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { BukuBesarContent } from "@/components/admin/buku-besar-content";
 
 // Laporan → Buku Besar PT Bumi Surya Farm (data aktual database, tanpa dummy).

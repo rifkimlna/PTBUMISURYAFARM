@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { DaftarPembelianContent } from "@/components/admin/daftar-pembelian-content";

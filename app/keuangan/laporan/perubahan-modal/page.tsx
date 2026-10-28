@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { PerubahanModalContent } from "@/components/admin/perubahan-modal-content";
 
 // Laporan → Perubahan Modal PT Bumi Surya Farm (data aktual database, tanpa dummy).

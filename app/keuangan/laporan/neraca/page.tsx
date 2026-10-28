@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NeracaContent } from "@/components/admin/neraca-content";
 
 // Laporan → Neraca PT Bumi Surya Farm (data aktual database, tanpa dummy).

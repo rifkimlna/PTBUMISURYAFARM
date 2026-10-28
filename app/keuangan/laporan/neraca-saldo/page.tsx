@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NeracaSaldoContent } from "@/components/admin/neraca-saldo-content";
 
 // Laporan → Neraca Saldo / Trial Balance PT Bumi Surya Farm (data aktual database, tanpa dummy).
