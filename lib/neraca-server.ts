@@ -25,7 +25,7 @@
 //                   (4104 = Penerimaan Piutang, bukan pendapatan)
 //     HPP         = PENGELUARAN, kodeAkun diawali "52" (Beban Produksi)
 //     Beban       = PENGELUARAN, kodeAkun diawali "5", kecuali "52.." dan
-//                   kecuali "5501" (5501 = Pelunasan Hutang, bukan beban)
+//                   transaksi dengan tag BAYAR_UTANG dikecualikan (bukan beban)
 //     Laba Periode = Pendapatan − HPP − Beban
 //
 // TIDAK ada logika modal penyeimbang otomatis. Jika Total Aktiva ≠ Total
@@ -35,6 +35,8 @@
 import { prisma } from "@/lib/prisma";
 import { hitungSusut } from "@/lib/aset";
 import { getCOAMappingByKategori } from "@/lib/persediaan-coa-mapping";
+import { getLabaRugi } from "@/lib/laba-rugi-common";
+import { DOKUMEN_PENJUALAN_STATUS_SAH } from "@/lib/piutang-rules";
 import type { NeracaBaris, NeracaKelompok, NeracaPeriode, NeracaSnapshot } from "@/lib/neraca-types";
 
 export { NERACA_PERIODE, NERACA_PERIODE_LABEL } from "@/lib/neraca-types";
@@ -94,7 +96,8 @@ export function resolveNeracaRange(
     }
     case "bulan-ini": {
       const s = new Date(now.getFullYear(), now.getMonth(), 1);
-      return { start: s, end: endOfDay(now), label: `${fmtTgl(s)} – ${fmtTgl(now)}` };
+      const e = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      return { start: s, end: endOfDay(e), label: `${fmtTgl(s)} – ${fmtTgl(e)}` };
     }
     case "bulan-lalu": {
       const s = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -203,7 +206,16 @@ const num = (v: unknown) => Math.round(Number(v ?? 0));
 /** Apakah kode akun merupakan akun pendapatan (kelompok Pendapatan, 4xxx). */
 function isPendapatan(kodeAkun: string | null | undefined): boolean {
   if (!kodeAkun) return false;
-  return kodeAkun.startsWith("4") && kodeAkun !== "4104"; // 4104 = Penerimaan Piutang, bukan pendapatan
+  if (kodeAkun.startsWith("31")) return false;
+  return kodeAkun.startsWith("4");
+}
+
+function isTerimaPiutang(t: { tag?: string | null; kategori?: string | null; kodeAkun?: string | null }): boolean {
+  // Pembedaan lewat TIPE kategori, bukan hardcode kode 4104
+  if (t.tag === "TERIMA_PIUTANG") return true;
+  if (t.kategori?.trim().toLowerCase() === "penerimaan piutang usaha") return true;
+  // fallback lama untuk data belum dimigrasi: kategori nama sama
+  return false;
 }
 
 /** Apakah kode akun merupakan akun HPP (golongan Beban Produksi, 52xx). */
@@ -214,12 +226,11 @@ function isHpp(kodeAkun: string | null | undefined, akunDb: Map<string, { kode: 
   return akun?.golongan === "Beban Produksi";
 }
 
-/** Apakah kode akun merupakan akun beban non-HPP (5xxx, bukan 52xx, bukan 5501). */
+/** Apakah kode akun merupakan akun beban non-HPP (5xxx, bukan 52xx). */
 function isBebanNonHpp(kodeAkun: string | null | undefined): boolean {
   if (!kodeAkun) return false;
   if (!kodeAkun.startsWith("5")) return false;
   if (kodeAkun.startsWith("52")) return false; // HPP, bukan beban umum
-  if (kodeAkun === "5501") return false; // Pelunasan Hutang, bukan beban
   return true;
 }
 
@@ -233,7 +244,7 @@ export async function getNeracaSnapshot(
 ): Promise<NeracaSnapshot> {
   const lte = { lte: asOf };
 
-  const [kasRows, kasTujuanRows, piutangAgg, hutangAgg, barang, stokRows, asetList, akunDb, modal31Rows] =
+  const [kasRows, kasTujuanRows, piutangAgg, hutangAgg, barang, stokRows, asetList, akunDb, modal31Rows, riwayatDetail] =
     await Promise.all([
       prisma.transaksiKas.groupBy({
         by: ["sumberDana", "tipe"],
@@ -246,7 +257,14 @@ export async function getNeracaSnapshot(
         _sum: { jumlah: true },
       }),
       prisma.tagihan.aggregate({
-        where: { tipe: "PIUTANG", status: { not: "LUNAS" }, tanggal: lte },
+        where: {
+          tipe: "PIUTANG",
+          status: { not: "LUNAS" },
+          tanggal: lte,
+          dokumenPenjualan: {
+            isNot: null
+          }
+        },
         _sum: { sisa: true },
       }),
       prisma.tagihan.aggregate({
@@ -261,6 +279,8 @@ export async function getNeracaSnapshot(
           stokAwal: true,
           hargaSatuan: true,
           hargaBeli: true,
+          hargaRataRataManual: true,
+          hargaBeliTerakhirManual: true,
         },
       }),
       prisma.riwayatStok.groupBy({
@@ -282,6 +302,8 @@ export async function getNeracaSnapshot(
           masaManfaatBulan: true,
           nilaiResidu: true,
           tanggalMulaiSusut: true,
+          tanggalLepas: true,
+          untungRugi: true,
         },
       }),
       prisma.akunCOA.findMany({
@@ -294,6 +316,10 @@ export async function getNeracaSnapshot(
         where: { tanggal: lte, kodeAkun: { startsWith: "31" }, tipe: { in: ["PEMASUKAN", "PENGELUARAN"] } },
         _sum: { jumlah: true },
       }),
+      prisma.riwayatStok.findMany({
+        where: { tanggal: lte },
+        select: { barangId: true, jenis: true, jumlah: true, nilaiPerSatuan: true, sumber: true },
+      }),
     ]);
 
   const namaAkun = (kode: string) =>
@@ -301,29 +327,22 @@ export async function getNeracaSnapshot(
   const akunMap = new Map(akunDb.map((a) => [a.kode, a]));
 
   // ---------- Laba Periode Berjalan (akrual sederhana dari TransaksiKas dalam [start, end]) ----------
-  const periodeTransaksi = await prisma.transaksiKas.findMany({
-    where: {
-      tanggal: { gte: start, lte: asOf },
-    },
-    select: { tipe: true, kodeAkun: true, jumlah: true },
-  });
+  // Laba periode berjalan kumulatif 1 Jan s/d asOf, memakai fungsi bersama
+  const startTahun = new Date(asOf.getFullYear(), 0, 1);
+  const { totalPendapatan, totalHpp, totalBeban, labaBersih } = await getLabaRugi(startTahun, asOf);
+  let labaPeriode = labaBersih;
 
-  let totalPendapatan = 0;
-  let totalHpp = 0;
-  let totalBeban = 0;
-  for (const t of periodeTransaksi) {
-    const jumlah = num(t.jumlah);
-    if (t.tipe === "PEMASUKAN" && isPendapatan(t.kodeAkun)) {
-      totalPendapatan += jumlah;
-    } else if (t.tipe === "PENGELUARAN") {
-      if (isHpp(t.kodeAkun, akunMap)) {
-        totalHpp += jumlah;
-      } else if (isBebanNonHpp(t.kodeAkun)) {
-        totalBeban += jumlah;
+  // ---------- Laba dari pelepasan aset (untung/rugi realisasi) ----------
+  let labaDariPelepasanAset = 0;
+  for (const a of asetList) {
+    if ((a.statusAset === "DIJUAL" || a.statusAset === "DILEPAS") && a.tanggalLepas) {
+      const tLepas = new Date(a.tanggalLepas);
+      if (tLepas >= start && tLepas <= asOf) {
+        labaDariPelepasanAset += num(a.untungRugi);
       }
     }
   }
-  const labaPeriode = totalPendapatan - totalHpp - totalBeban;
+  labaPeriode += labaDariPelepasanAset;
 
   // ---------- Laba Sebelum Periode (dari akun 3104 Laba Ditahan) ----------
   const labaDitahanRow = modal31Rows.find((r) => r.kodeAkun === "3104");
@@ -362,13 +381,53 @@ export async function getNeracaSnapshot(
       cur + (r.jenis === "MASUK" ? num(r._sum.jumlah) : -num(r._sum.jumlah))
     );
   }
+  // Agregasi nilai masuk per barang untuk rata-rata perolehan
+  const masukQtyByBarang = new Map<string, number>();
+  const masukNilaiByBarang = new Map<string, number>();
+  const riwayatTanpaNilai: Set<string> = new Set();
+  for (const r of riwayatDetail) {
+    if (r.jenis !== "MASUK") continue;
+    if (r.sumber !== "PENYESUAIAN" && r.sumber !== "PEMBELIAN") continue;
+    if (r.nilaiPerSatuan == null) {
+      // untuk pembelian nilaiPerSatuan belum diisi, anggap tanpa nilai
+      if (r.sumber === "PENYESUAIAN") riwayatTanpaNilai.add(r.barangId);
+      continue;
+    }
+    const qty = num(r.jumlah);
+    const nilai = qty * num(r.nilaiPerSatuan);
+    masukQtyByBarang.set(r.barangId, (masukQtyByBarang.get(r.barangId) ?? 0) + qty);
+    masukNilaiByBarang.set(r.barangId, (masukNilaiByBarang.get(r.barangId) ?? 0) + nilai);
+  }
   const nilaiPersediaan = new Map<string, number>();
+  const catatanPersediaan: string[] = [];
+  // total nilai opname awal untuk modal
+  let totalNilaiOpnameAwal = 0;
+  for (const val of masukNilaiByBarang.values()) totalNilaiOpnameAwal += val;
+  let totalNilaiOpname = totalNilaiOpnameAwal;
   for (const b of barang) {
     const qty = (b.stokAwal ?? 0) + (stokByBarang.get(b.id) ?? 0);
     if (qty === 0) continue;
-    const harga = Number(b.hargaSatuan ?? b.hargaBeli ?? 0);
-    const nilai = Math.round(qty * harga);
-    if (nilai === 0) continue;
+    let nilaiBarang = 0;
+    const masukQty = masukQtyByBarang.get(b.id) ?? 0;
+    const masukNilai = masukNilaiByBarang.get(b.id) ?? 0;
+    if (masukQty > 0 && masukNilai > 0) {
+      const avgCost = masukNilai / masukQty;
+      nilaiBarang = Math.round(qty * avgCost);
+    } else {
+      // fallback ke harga beli bila tidak ada opname bernilai
+      let harga: number | null = null;
+      if (b.hargaBeli != null) harga = Number(b.hargaBeli);
+      if (harga == null || isNaN(harga) || harga <= 0) {
+        if (riwayatTanpaNilai.has(b.id)) {
+          catatanPersediaan.push(`Persediaan ${b.id} qty ${qty} opname tanpa nilai perolehan`);
+        } else {
+          catatanPersediaan.push(`Persediaan ${b.id} qty ${qty} belum ada nilai perolehan / belum dijurnal`);
+        }
+        continue;
+      }
+      nilaiBarang = Math.round(qty * harga);
+    }
+    if (nilaiBarang === 0) continue;
     const mappingPersediaan = getCOAMappingByKategori(b.kategori as never);
     const kodeDinamis = mappingPersediaan
       ? akunDb.find((a) => a.nama.trim().toLowerCase() === mappingPersediaan.namaAkunPersediaan.trim().toLowerCase())?.kode
@@ -379,7 +438,7 @@ export async function getNeracaSnapshot(
       mappingPersediaan?.kodeAkunPersediaan ||
       "";
     const key = kode || "(tanpa kode COA)";
-    nilaiPersediaan.set(key, (nilaiPersediaan.get(key) ?? 0) + nilai);
+    nilaiPersediaan.set(key, (nilaiPersediaan.get(key) ?? 0) + nilaiBarang);
   }
 
   // --- Aset tetap bruto + akumulasi penyusutan ---
@@ -491,13 +550,14 @@ export async function getNeracaSnapshot(
     .map((kode) => ({ kode, nama: namaAkun(kode), nilai: netModal(kode) }));
   const modalSetorTercatat = barisModalTercatat.reduce((s, b) => s + b.nilai, 0);
 
-  // Modal = setoran tercetak + laba sebelum periode (3104) + laba periode berjalan
-  const totalModal = modalSetorTercatat + labaSebelumPeriode + labaPeriode;
+  // Modal = setoran tercetak + laba sebelum periode (3104) + laba periode berjalan + saldo awal persediaan
+  const totalModal = modalSetorTercatat + labaSebelumPeriode + labaPeriode + totalNilaiOpname;
 
   const barisModal: NeracaBaris[] = [
     ...barisModalTercatat,
     { kode: "3104", nama: `${namaAkun("3104")}`, nilai: labaSebelumPeriode },
     { kode: "LABPERI", nama: "Laba Periode Berjalan", nilai: labaPeriode > 0 ? labaPeriode : 0 },
+    { kode: "SALDO_AWAL", nama: "Saldo Awal Persediaan", nilai: totalNilaiOpname },
   ];
   const modal: NeracaKelompok = {
     judul: "Modal Pemilik",
@@ -522,16 +582,12 @@ export async function getNeracaSnapshot(
     catatan.push("Tidak ada utang terbuka pada periode ini.");
   if (nilaiPersediaan.size === 0)
     catatan.push("Tidak ada nilai persediaan pada periode ini.");
+  catatan.push(...catatanPersediaan);
   catatan.push(
     "Akun 2102–2104 disajikan Rp 0 karena belum ada sumber data (utang gaji/pajak/lain-lain belum dicatat terpisah)."
   );
   catatan.push(
-    "Nilai persediaan dihitung dari stok fisik (stokAwal + MASUK − KELUAR) × hargaSatuan. "
-    + "Sumber dan metode penilaian perlu diverifikasi — tidak ada jurnal koreksi otomatis."
-  );
-  catatan.push(
-    "Modal berasal dari TransaksiKas kode akun 31xx (Setor Modal) ditambah laba periode berjalan. "
-    + "Tidak ada modal penyeimbang otomatis."
+    "Persediaan hanya dinilai dari harga perolehan (faktur pembelian/jurnal). Stok tanpa nilai perolehan tidak dinilai dan tercantum di catatan."
   );
   if (Math.abs(selisih) > 0) {
     catatan.push(
@@ -543,11 +599,12 @@ export async function getNeracaSnapshot(
     catatan.push("Neraca seimbang: Total Aktiva = Total Kewajiban dan Modal.");
   }
 
+  const labelPer = `Per ${asOf.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`;
   return {
     periode,
     start: start.toISOString(),
     end: asOf.toISOString(),
-    label,
+    label: labelPer,
     aktivaLancar,
     aktivaTetap,
     penyusutan,

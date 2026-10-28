@@ -1,22 +1,20 @@
 // Service Laporan Perubahan Modal PT Bumi Surya Farm (KHUSUS modul ini).
 // JANGAN diimpor dari Client Component — hanya Server Component & API route.
 //
-// Sumber data (semuanya data aktual database, tanpa sumber baru):
-// - AkunCOA kelompok "Modal" (3101/3102 setoran, 3103 prive, 3104 laba
-//   ditahan, plus akun modal lain bila pengguna menambah via master COA).
-// - TransaksiKas berkode akun 31xx (TRANSFER dikecualikan, konsisten dengan
-//   Neraca & Arus Kas): PEMASUKAN = penambah (kredit), PENGELUARAN = pengurang
-//   (debit). Permulaan = kumulatif s/d sehari sebelum periode.
-// - 3104 "Laba Ditahan": permulaan = laba basis kas kumulatif sebelum periode
-//   (PEMASUKAN − PENGELUARAN non-transfer, non-modal 31xx; transaksi lama
-//   berkode kosong tetap dihitung — konsisten dengan angka 3104 di Neraca);
-//   mutasi periode = pemasukan (kredit) vs pengeluaran (debit) dengan aturan
-//   yang sama. Saldo Akhir = Permulaan + Kredit − Debit;
-//   Pergerakan = Kredit − Debit.
-// - Prive (3103) disajikan dengan rumus yang sama sehingga saldonya negatif
-//   (kontra-ekuitas) dan otomatis mengurangi Total.
+// Sumber data (aktual database, tanpa sumber baru):
+// - Jurnal (dari TransaksiKas, Dokumen Penjualan, Faktur Pembelian, Opname, HPP)
+//   untuk akun modal 3101/3102/3103 dan SALDO_AWAL Persediaan.
+// - getLabaRugi (basis akrual, sama dengan Laba Rugi & Neraca) untuk
+//   Laba Periode Berjalan.
+// - getNeracaSnapshot untuk validasi Total Modal Pemilik.
+// 3104 Laba Ditahan disajikan sesuai Neraca (saldo dari Jurnal + laba bersih
+// tahun-tahun sebelumnya); dalam tahun berjalan nilainya 0.
+// Prive (3103) kontra-ekuitas: debit mengurangi total.
 
 import { prisma } from "@/lib/prisma";
+import { getJurnalSnapshot } from "@/lib/jurnal-server";
+import { getLabaRugi } from "@/lib/laba-rugi-common";
+import { getNeracaSnapshot } from "@/lib/neraca-server";
 import type {
   PerubahanModalBaris,
   PerubahanModalPeriode,
@@ -123,136 +121,153 @@ export async function getPerubahanModalSnapshot(
   label: string
 ): Promise<PerubahanModalSnapshot> {
   const num = (v: unknown) => Math.round(Number(v ?? 0));
+  const epoch = new Date(1970, 0, 1);
 
-  const [akunModal, kas31Awal, kas31Periode, labaAwal, labaPeriode] = await Promise.all([
-    prisma.akunCOA.findMany({
-      where: { kelompok: "Modal", isActive: true },
-      select: { kode: true, nama: true },
-    }),
-    prisma.transaksiKas.groupBy({
-      by: ["kodeAkun", "tipe"],
-      where: {
-        kodeAkun: { startsWith: "31" },
-        tipe: { in: ["PEMASUKAN", "PENGELUARAN"] },
-        tanggal: { lt: start },
-      },
-      _sum: { jumlah: true },
-    }),
-    prisma.transaksiKas.groupBy({
-      by: ["kodeAkun", "tipe"],
-      where: {
-        kodeAkun: { startsWith: "31" },
-        tipe: { in: ["PEMASUKAN", "PENGELUARAN"] },
-        tanggal: { gte: start, lte: end },
-      },
-      _sum: { jumlah: true },
-    }),
-    // Laba basis kas kumulatif sebelum periode (untuk permulaan 3104).
-    // Setoran/penarikan modal 31xx DIKECUALIKAN (bukan laba — sudah dicatat
-    // di baris 3101-3103); transaksi lama berkode kosong tetap dihitung,
-    // konsisten dengan angka 3104 (labaBasisKas) pada Neraca.
-    prisma.transaksiKas.groupBy({
-      by: ["tipe"],
-      where: {
-        tipe: { in: ["PEMASUKAN", "PENGELUARAN"] },
-        tanggal: { lt: start },
-        OR: [{ kodeAkun: null }, { kodeAkun: { not: { startsWith: "31" } } }],
-      },
-      _sum: { jumlah: true },
-    }),
-    // Pemasukan/pengeluaran dalam periode (untuk mutasi 3104).
-    // Setoran/penarikan modal 31xx DIKECUALIKAN (bukan laba).
-    prisma.transaksiKas.groupBy({
-      by: ["tipe"],
-      where: {
-        tipe: { in: ["PEMASUKAN", "PENGELUARAN"] },
-        tanggal: { gte: start, lte: end },
-        OR: [{ kodeAkun: null }, { kodeAkun: { not: { startsWith: "31" } } }],
-      },
-      _sum: { jumlah: true },
-    }),
+  const [akunDb] = await Promise.all([
+    prisma.akunCOA.findMany({ where: { isActive: true }, select: { kode: true, nama: true, kelompok: true } }),
   ]);
 
-  const namaAkun = (kode: string) =>
-    akunModal.find((a) => a.kode === kode)?.nama ?? NAMA_AKUN_FALLBACK[kode] ?? `Akun ${kode}`;
+  const namaAkun = (kode: string, fallback?: string) =>
+    akunDb.find((a) => a.kode === kode)?.nama ?? NAMA_AKUN_FALLBACK[kode] ?? fallback ?? `Akun ${kode}`;
 
-  // Daftar kode ekuitas: semua akun modal aktif + 3101..3104 (fallback bila belum ada di DB).
-  const kodeSet = new Set<string>(akunModal.map((a) => a.kode));
-  for (const k of ["3101", "3102", "3103", "3104"]) kodeSet.add(k);
-  const kodeList = [...kodeSet].sort();
+  const openingEnd = new Date(start);
+  openingEnd.setDate(openingEnd.getDate() - 1);
+  const hasOpening = openingEnd >= epoch;
 
-  const agg = (
-    rows: { kodeAkun: string | null; tipe: string; _sum: { jumlah: unknown } }[],
-    kode: string,
-    tipe: "PEMASUKAN" | "PENGELUARAN"
-  ) => num(rows.find((r) => r.kodeAkun === kode && r.tipe === tipe)?._sum.jumlah);
+  const [openingJurnal, periodJurnal] = await Promise.all([
+    hasOpening ? getJurnalSnapshot(epoch, openingEnd, periode as any, "") : Promise.resolve({ voucher: [] }),
+    getJurnalSnapshot(start, end, periode as any, label),
+  ]);
 
-  const labaOf = (rows: { tipe: string; _sum: { jumlah: unknown } }[]) =>
-    num(rows.find((r) => r.tipe === "PEMASUKAN")?._sum.jumlah) -
-    num(rows.find((r) => r.tipe === "PENGELUARAN")?._sum.jumlah);
-
-  const kreditOf = (rows: { tipe: string; _sum: { jumlah: unknown } }[]) =>
-    num(rows.find((r) => r.tipe === "PEMASUKAN")?._sum.jumlah);
-  const debitOf = (rows: { tipe: string; _sum: { jumlah: unknown } }[]) =>
-    num(rows.find((r) => r.tipe === "PENGELUARAN")?._sum.jumlah);
-
-  const labaPermulaan = labaOf(labaAwal);
-  const kreditLaba = kreditOf(labaPeriode);
-  const debitLaba = debitOf(labaPeriode);
-
-  // Kode akun Laba Ditahan diselesaikan dari NAMA (tahan terhadap penomoran ulang COA).
-  const kodeLaba =
-    akunModal.find((a) => a.nama.trim().toLowerCase().includes("laba ditahan"))?.kode ?? "3104";
-
-  const baris: PerubahanModalBaris[] = kodeList.map((kode) => {
-    if (kode === kodeLaba) {
-      const pergerakan = kreditLaba - debitLaba;
-      return {
-        kode,
-        nama: namaAkun(kode),
-        permulaan: labaPermulaan,
-        debit: debitLaba,
-        kredit: kreditLaba,
-        saldoAkhir: labaPermulaan + pergerakan,
-        pergerakan,
-      };
+  const aggregate = (vouchers: { legs: { kode: string; debit: number; kredit: number }[] }[]) => {
+    const map = new Map<string, { debit: number; kredit: number }>();
+    for (const v of vouchers) {
+      for (const leg of v.legs) {
+        const kode = leg.kode;
+        const cur = map.get(kode) ?? { debit: 0, kredit: 0 };
+        cur.debit += num(leg.debit);
+        cur.kredit += num(leg.kredit);
+        map.set(kode, cur);
+      }
     }
-    const permulaan = agg(kas31Awal, kode, "PEMASUKAN") - agg(kas31Awal, kode, "PENGELUARAN");
-    const kredit = agg(kas31Periode, kode, "PEMASUKAN");
-    const debit = agg(kas31Periode, kode, "PENGELUARAN");
+    return map;
+  };
+
+  const openingMap = aggregate(openingJurnal.voucher);
+  const periodMap = aggregate(periodJurnal.voucher);
+
+  const getPrevSaldo = (kode: string) => {
+    const e = openingMap.get(kode);
+    return e ? e.kredit - e.debit : 0;
+  };
+  const getPeriod = (kode: string) => periodMap.get(kode) ?? { debit: 0, kredit: 0 };
+
+  const buildAccountRow = (kode: string, nama: string): PerubahanModalBaris => {
+    const permulaan = getPrevSaldo(kode);
+    const { debit, kredit } = getPeriod(kode);
     const pergerakan = kredit - debit;
-    return { kode, nama: namaAkun(kode), permulaan, debit, kredit, saldoAkhir: permulaan + pergerakan, pergerakan };
+    return { kode, nama, permulaan, debit, kredit, saldoAkhir: permulaan + pergerakan, pergerakan };
+  };
+
+  const rows: PerubahanModalBaris[] = [];
+
+  rows.push(buildAccountRow("3101", namaAkun("3101", "Modal Disetor / Setoran Pemilik (Bapak)")));
+  rows.push(buildAccountRow("3102", namaAkun("3102", "Modal Disetor / Setoran Pemilik (Riki)")));
+  rows.push(buildAccountRow("3103", namaAkun("3103", "Prive / Penarikan Modal")));
+
+  // 3104 Laba Ditahan - saldo dari Jurnal + laba bersih tahun-tahun sebelumnya.
+  // Untuk tahun berjalan nilainya 0 agar konsisten dengan Neraca.
+  const saldoPrev3104 = getPrevSaldo("3104");
+  const { debit: d3104, kredit: k3104 } = getPeriod("3104");
+  const permulaan3104 = saldoPrev3104;
+  const saldoAkhir3104 = permulaan3104 + k3104 - d3104;
+  // Dalam praktik tahun berjalan, saldo 3104 diharapkan 0.
+  rows.push({
+    kode: "3104",
+    nama: namaAkun("3104", "Laba Ditahan (Akumulasi)"),
+    permulaan: permulaan3104,
+    debit: d3104,
+    kredit: k3104,
+    saldoAkhir: saldoAkhir3104,
+    pergerakan: k3104 - d3104,
   });
 
-  const sum = (f: (b: PerubahanModalBaris) => number) => baris.reduce((s, b) => s + f(b), 0);
+  // Saldo Awal Persediaan - kode khusus SALDO_AWAL dari jurnal opname
+  rows.push(
+    buildAccountRow("SALDO_AWAL", "Saldo Awal Persediaan")
+  );
+
+  // Laba Periode Berjalan dari getLabaRugi (basis akrual)
+  const yearStart = new Date(end.getFullYear(), 0, 1);
+  const permulaanEnd = new Date(start);
+  permulaanEnd.setDate(permulaanEnd.getDate() - 1);
+
+  const [labaPermulaanRes, labaAkhirRes] = await Promise.all([
+    permulaanEnd >= yearStart ? getLabaRugi(yearStart, permulaanEnd) : Promise.resolve({ labaBersih: 0 }),
+    getLabaRugi(yearStart, end),
+  ]);
+
+  const permulaanLaba = num(labaPermulaanRes.labaBersih);
+  const saldoAkhirLaba = num(labaAkhirRes.labaBersih);
+  const pergerakanLaba = saldoAkhirLaba - permulaanLaba;
+
+  const labaDebit = pergerakanLaba < 0 ? -pergerakanLaba : 0;
+  const labaKredit = pergerakanLaba >= 0 ? pergerakanLaba : 0;
+
+  rows.push({
+    kode: "LABA_PERIODE",
+    nama: "Laba Periode Berjalan",
+    permulaan: permulaanLaba,
+    debit: labaDebit,
+    kredit: labaKredit,
+    saldoAkhir: saldoAkhirLaba,
+    pergerakan: pergerakanLaba,
+  });
+
+  const sum = (f: (b: PerubahanModalBaris) => number) => rows.reduce((s, b) => s + f(b), 0);
   const totalPermulaan = sum((b) => b.permulaan);
   const totalDebit = sum((b) => b.debit);
   const totalKredit = sum((b) => b.kredit);
   const totalSaldoAkhir = sum((b) => b.saldoAkhir);
   const totalPergerakan = totalKredit - totalDebit;
 
-  const adaSetoran = baris.some((b) => b.kode !== kodeLaba && (b.permulaan !== 0 || b.debit !== 0 || b.kredit !== 0));
+  // Validasi terhadap Neraca
+  const neracaPeriodeMap: Record<string, string> = {
+    "minggu-ini": "pekan-ini",
+    "minggu-lalu": "pekan-lalu",
+    "bulan-ini": "bulan-ini",
+    "bulan-lalu": "bulan-lalu",
+    "tahun-ini": "tahun-ini",
+    "tahun-lalu": "tahun-lalu",
+    "hari-ini": "hari-ini",
+    "kemarin": "kemarin",
+    "tanggal": "custom",
+  };
+  const neracaPeriode = neracaPeriodeMap[periode] ?? "custom";
+  const neracaSnap = await getNeracaSnapshot(end, neracaPeriode as any, label, start);
+  const totalModalNeraca = neracaSnap.totalModal;
 
   const catatan: string[] = [];
-  if (!adaSetoran) {
-    catatan.push(
-      "Belum ada setoran/penarikan modal berkode akun 31xx pada TransaksiKas, sehingga 3101–3103 disajikan Rp 0."
-    );
-  } else {
-    catatan.push("Mutasi 3101–3103 berasal dari TransaksiKas berkode akun 31xx (TRANSFER antar kas dikecualikan).");
-  }
-  catatan.push(
-    "3104 Laba Ditahan memakai laba basis kas (PEMASUKAN − PENGELUARAN non-transfer dan non-modal 31xx), konsisten dengan angka 3104 pada Neraca."
-  );
+  catatan.push("Sumber data: Jurnal (TransaksiKas, Dokumen Penjualan, Faktur Pembelian, Opname, HPP) dan getLabaRugi (basis akrual).");
+  catatan.push("Laba Periode Berjalan dihitung dari getLabaRugi 1 Jan s/d tanggal akhir periode. Permulaan = laba 1 Jan s/d hari sebelum periode.");
+  catatan.push("3104 Laba Ditahan mengikuti saldo Jurnal + laba bersih tahun-tahun sebelumnya; dalam tahun berjalan nilainya 0 dan akan dipindahkan ke 3104 pada penutupan tahun buku.");
   catatan.push("Prive (3103) bersifat kontra-ekuitas: penarikan menambah kolom Debit dan mengurangi Total.");
-  catatan.push("Saldo Akhir = Permulaan + Kredit − Debit; Pergerakan = Kredit − Debit.");
+  catatan.push("Saldo Akhir = Permulaan + Kredit - Debit; Pergerakan = Kredit - Debit.");
+  catatan.push("Total Saldo Akhir Perubahan Modal harus sama dengan Total Modal Pemilik di Neraca tanggal yang sama.");
+
+  if (totalSaldoAkhir !== totalModalNeraca) {
+    const selisih = totalSaldoAkhir - totalModalNeraca;
+    catatan.push(`PERINGATAN: Total Saldo Akhir Perubahan Modal Rp ${totalSaldoAkhir.toLocaleString("id-ID")} ≠ Total Modal Pemilik Neraca Rp ${totalModalNeraca.toLocaleString("id-ID")}. Selisih Rp ${Math.abs(selisih).toLocaleString("id-ID")}. Tidak dilakukan penyesuaian otomatis.`);
+  } else {
+    catatan.push(`Validasi Neraca OK: Total Saldo Akhir Rp ${totalSaldoAkhir.toLocaleString("id-ID")} = Total Modal Pemilik Neraca.`);
+  }
 
   return {
     periode,
     start: start.toISOString(),
     end: end.toISOString(),
     label,
-    baris,
+    baris: rows,
     totalPermulaan,
     totalDebit,
     totalKredit,

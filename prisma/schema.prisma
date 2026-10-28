@@ -455,6 +455,7 @@ model RiwayatStok {
   sumber     String? // asal catatan: PENYESUAIAN (opname) | PEMBELIAN | MANUAL; null = data lama
   tanggal    DateTime       @default(now())
   createdAt  DateTime       @default(now())
+  nilaiPerSatuan Decimal? @db.Decimal(15,2)
 
   @@index([barangId])
   @@index([tanggal])

@@ -18,8 +18,9 @@ export const lampiranFakturSchema = z.object({
 });
 
 // Baris item faktur: kodeAkun = sisi DEBIT baris ini.
-// - Produk persediaan: 1105/1106/1107 (diisi otomatis dari master, boleh dikoreksi).
-// - Selain itu: wajib pilih akun Beban dari COA database.
+// Pilih dari COA aktif: akun Persediaan (Aset) untuk barang stok, atau akun
+// Beban untuk pengeluaran nyata. Akun di luar dua kelompok itu ditolak.
+// Tidak ada default paksa ke 5402.
 export const itemFakturSchema = z.object({
   produkId: z.string().max(50).optional().nullable(),
   deskripsi: z.string().trim().min(2, "Deskripsi produk minimal 2 karakter").max(500),

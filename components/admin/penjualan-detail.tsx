@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, Pencil, Trash2 } from "lucide-react";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 
 export type TindakanKind = "PESANAN" | "PENAWARAN" | "PENAGIHAN";
 
@@ -26,6 +27,8 @@ export function TindakanDropdown({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingLabel, setPendingLabel] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -66,8 +69,12 @@ export function TindakanDropdown({
     }
   };
 
-  const hapus = async (label: string) => {
-    if (!window.confirm(`Hapus ${label} ini? Piutang ikutannya (bila ada dan belum dibayar) ikut terhapus.`)) return;
+  const requestHapus = (label: string) => {
+    setPendingLabel(label);
+    setConfirmOpen(true);
+  };
+
+  const confirmHapus = async () => {
     setBusy(true);
     setError("");
     try {
@@ -140,13 +147,20 @@ export function TindakanDropdown({
             </>
           )}
           <div className="border-t border-slate-100" />
-          <button type="button" role="menuitem" className={itemCls} disabled={busy} onClick={() => hapus(kind === "PESANAN" ? "pesanan" : kind === "PENAWARAN" ? "penawaran" : "penagihan")}>
+          <button type="button" role="menuitem" className={itemCls} disabled={busy} onClick={() => requestHapus(kind === "PESANAN" ? "pesanan" : kind === "PENAWARAN" ? "penawaran" : "penagihan")}>
             <Trash2 className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
             <span><span className="block font-medium text-red-600">Hapus</span></span>
           </button>
         </div>
       )}
       {error && <p className="mt-2 text-right text-xs text-red-600">{error}</p>}
+      <ConfirmDeleteDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        itemName={pendingLabel}
+        warning="Piutang ikutannya (bila ada dan belum dibayar) ikut terhapus."
+        onConfirm={confirmHapus}
+      />
     </div>
   );
 }

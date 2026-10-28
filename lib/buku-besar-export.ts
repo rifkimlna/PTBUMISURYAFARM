@@ -123,17 +123,17 @@ function snapshotKeLines(s: BukuBesarSnapshot): PdfLine[] {
       debit: formatIDREkspor(a.totalDebit), kredit: formatIDREkspor(a.totalKredit), saldo: "-", bold: true,
     });
     lines.push({
-      kind: "row", tgl: "", transaksi: [`Current Balance ${a.kode}`], nomor: "", keterangan: [""],
+      kind: "row", tgl: "", transaksi: [`Saldo Akhir ${a.kode}`], nomor: "", keterangan: [""],
       debit: "-", kredit: "-", saldo: formatIDREkspor(a.saldoAkhir), bold: true,
     });
     lines.push({ kind: "left", text: "", size: 9, bold: false });
   }
-  const grandSaldo = s.akun.reduce((acc, a) => acc + Math.round(Number(a.saldoAkhir) || 0), 0);
+  const selisih = Math.round(Number(s.totalDebit) || 0) - Math.round(Number(s.totalKredit) || 0);
   lines.push({
     kind: "row", tgl: "", transaksi: ["Grand Total"], nomor: "", keterangan: [""],
     debit: formatIDREkspor(Math.round(Number(s.totalDebit) || 0)),
     kredit: formatIDREkspor(Math.round(Number(s.totalKredit) || 0)),
-    saldo: formatIDREkspor(grandSaldo), bold: true,
+    saldo: formatIDREkspor(selisih), bold: true,
   });
   lines.push({ kind: "left", text: "Catatan:", size: 8, bold: true });
   for (const c of s.catatan) {
@@ -331,20 +331,20 @@ export function snapshotKeSheet(s: BukuBesarSnapshot, sheetName: string): XlsxSh
       { v: "", bold: true },
     ]);
     rows.push([
-      { v: `Current Balance ${a.kode} - ${a.nama}`, bold: true }, { v: "", bold: true }, { v: "", bold: true },
+      { v: `Saldo Akhir ${a.kode} - ${a.nama}`, bold: true }, { v: "", bold: true }, { v: "", bold: true },
       { v: "", bold: true }, { v: "", bold: true }, { v: "", bold: true },
       { v: "", bold: true }, { v: "", bold: true },
       { v: Math.round(a.saldoAkhir), bold: true, num: true },
     ]);
     rows.push([]);
   }
-  const grandSaldo = s.akun.reduce((acc, a) => acc + Math.round(Number(a.saldoAkhir) || 0), 0);
+  const selisih = Math.round(Number(s.totalDebit) || 0) - Math.round(Number(s.totalKredit) || 0);
   rows.push([
     { v: "Grand Total", bold: true }, { v: "", bold: true }, { v: "", bold: true },
     { v: "", bold: true }, { v: "", bold: true }, { v: "", bold: true },
     { v: Math.round(Number(s.totalDebit) || 0), bold: true, num: true },
     { v: Math.round(Number(s.totalKredit) || 0), bold: true, num: true },
-    { v: grandSaldo, bold: true, num: true },
+    { v: selisih, bold: true, num: true },
   ]);
   rows.push([]);
   rows.push([{ v: "Catatan:", bold: true }]);

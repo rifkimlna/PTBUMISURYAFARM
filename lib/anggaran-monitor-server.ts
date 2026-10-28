@@ -17,6 +17,10 @@
 
 import { prisma } from "@/lib/prisma";
 import { getLabaRugiSnapshot } from "@/lib/laba-rugi-server";
+import { getLabaRugi } from "@/lib/laba-rugi-common";
+import { isNonLabaRugiTag } from "@/lib/anggaran-tag";
+import { getTagAkunNonLabaRugi } from "@/lib/anggaran-tag-server";
+
 import type {
   MonitorAkunNilai,
   MonitorBulan,
@@ -139,6 +143,9 @@ export async function getAnggaranMonitorSnapshot(f: MonitorFilter): Promise<Moni
   });
   const coa = new Map<string, CoaInfo>(akunDb.map((a) => [a.kode, { nama: a.nama, kelompok: a.kelompok, golongan: a.golongan }]));
 
+  // Akun mutasi kas (Penerimaan Piutang / Pelunasan Hutang) dibedaikan lewat tag transaksi.
+  const tagAkun = await getTagAkunNonLabaRugi();
+
   const window = bulanWindow(f.berakhirPada, f.lihatBalik);
   const kolom = kolomDariBulan(window, f.tampilSetiap);
 
@@ -163,21 +170,34 @@ export async function getAnggaranMonitorSnapshot(f: MonitorFilter): Promise<Moni
     const start = new Date(b.tahun, b.bulan - 1, 1);
     const end = endOfDay(new Date(b.tahun, b.bulan, 0));
     const s = await getLabaRugiSnapshot(start, end, "custom", b.label);
+    const lr = await getLabaRugi(start, end);
     const baris = (rows: { kode: string; nama: string; nilai: number }[]): NilaiAktual[] =>
       rows.map((r) => ({ kode: r.kode, nama: r.nama, nilai: Math.round(Number(r.nilai) || 0) }));
     const revenue = baris(s.penjualan.baris);
-    if (Math.round(s.diskonPenjualan) !== 0)
-      revenue.push({ kode: "—", nama: "Diskon Penjualan", nilai: -Math.round(s.diskonPenjualan) });
-    if (Math.round(s.returPenjualan) !== 0)
-      revenue.push({ kode: "—", nama: "Retur Penjualan", nilai: -Math.round(s.returPenjualan) });
-    const cos = baris(s.hpp.baris);
-    if (Math.round(s.diskonPembelian) !== 0)
-      cos.push({ kode: "—", nama: "Diskon Pembelian", nilai: -Math.round(s.diskonPembelian) });
+    // Diskon/Retur tidak dipakai agar Aktual sesuai getLabaRugi
+    // if (Math.round(s.diskonPenjualan) !== 0) ...
+    // if (Math.round(s.returPenjualan) !== 0) ...
+    // Cost of Sales: gunakan total HPP dari snapshot (yang disamakan dengan getLabaRugi)
+    const cos = [];
+    if (s.totalHpp !== 0) {
+      cos.push({ kode: "HPP", nama: "Harga Pokok Penjualan", nilai: Math.round(s.totalHpp) });
+    }
+    // Diskon pembelian tidak dipakai agar Aktual sesuai getLabaRugi
+    // if (Math.round(s.diskonPembelian) !== 0) ...
+    // Other Income: pendapatan kas di luar golongan "Pendapatan Usaha"
+    // (mis. Pendapatan Lain-lain) diambil dari getLabaRugi (sumber resmi).
+    const otherIncomeMap = new Map<string, NilaiAktual>();
+    for (const r of baris(s.pendapatanLainnya.baris)) otherIncomeMap.set(r.kode, r);
+    for (const [kode, v] of lr.pendapatanDetails) {
+      if (coa.get(kode)?.golongan === "Pendapatan Usaha") continue;
+      if (otherIncomeMap.has(kode)) continue;
+      otherIncomeMap.set(kode, { kode, nama: v.nama, nilai: Math.round(Number(v.nilai) || 0) });
+    }
     aktualPerBulan.push({
       revenue,
       cos,
       opex: baris(s.biayaOperasional.baris),
-      otherIncome: baris(s.pendapatanLainnya.baris),
+      otherIncome: [...otherIncomeMap.values()],
       otherExpense: baris(s.biayaLainnya.baris),
     });
   }
@@ -195,6 +215,7 @@ export async function getAnggaranMonitorSnapshot(f: MonitorFilter): Promise<Moni
     const akunMap = new Map<string, { kode: string; nama: string }>();
     for (const [k, v] of budget) {
       const [kode] = k.split("|");
+      if (isNonLabaRugiTag(tagAkun.get(kode))) continue;
       if (sectionBudgetOf(kode, coa) !== key) continue;
       if (v === 0) continue;
       const nama = coa.get(kode)?.nama ?? `Akun ${kode}`;
@@ -203,6 +224,7 @@ export async function getAnggaranMonitorSnapshot(f: MonitorFilter): Promise<Moni
     for (const m of aktualPerBulan) {
       for (const r of ambilAktual(m)) {
         if (r.nilai === 0) continue;
+        if (isNonLabaRugiTag(tagAkun.get(r.kode))) continue;
         akunMap.set(`${r.kode}|${r.nama}`, { kode: r.kode, nama: r.nama });
       }
     }
@@ -312,7 +334,7 @@ export async function getAnggaranMonitorSnapshot(f: MonitorFilter): Promise<Moni
     catatan: [
       `Anggaran dari "${anggaran.nama}" (data asli tersimpan); bulan di luar cakupan anggaran bernilai Rp 0.`,
       "Aktual memakai angka resmi Laporan Laba Rugi per bulan (penjualan, HPP dari mutasi persediaan, biaya, pendapatan/biaya lainnya).",
-      "Klasifikasi akun budget: Pendapatan Usaha → Revenue; Pendapatan lainnya → Other Income; Beban selain Pelunasan Hutang → Operational Expense; Pelunasan Hutang (5501) → Other Expense.",
+      "Klasifikasi akun budget: Pendapatan Usaha → Revenue; Pendapatan lainnya → Other Income; Beban → Operational Expense. Penerimaan piutang dan Pelunasan hutang bukan pendapatan/beban dan tidak termasuk dalam Anggaran Laba Rugi.",
       "Harga Pokok Penjualan dihitung dari mutasi persediaan sehingga tidak memiliki pasangan akun budget (anggaran Rp 0).",
     ],
   };

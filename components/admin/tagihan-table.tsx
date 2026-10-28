@@ -13,6 +13,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Pencil, Trash2, Search, AlertTriangle, Clock, Loader2 } from "lucide-react";
 import { formatRupiah } from "@/lib/utils";
+import { labelSumberDanaDenganKode } from "@/lib/coa";
 
 export type TipeTagihan = "HUTANG" | "PIUTANG";
 type StatusTagihan = "BELUM_LUNAS" | "LUNAS_SEBAGIAN" | "LUNAS";
@@ -473,8 +474,12 @@ export function TagihanTable({ data, summary, tab }: { data: TagihanRow[]; summa
                     <TableRow key={p.id}>
                       <TableCell className="text-sm text-slate-500 whitespace-nowrap">{formatDate(p.tanggal)}</TableCell>
                       <TableCell className="text-sm font-semibold text-green-600">Rp {formatRupiah(p.jumlah)}</TableCell>
-                      <TableCell className="text-sm text-slate-500">{p.sumberDana}</TableCell>
-                      <TableCell className="text-sm text-slate-500">{p.kodeAkun ? `${p.kodeAkun} - ` : ""}{p.kategori}</TableCell>
+                      <TableCell className="text-sm text-slate-500">{labelSumberDanaDenganKode(p.sumberDana)}</TableCell>
+                      <TableCell className="text-sm text-slate-500">
+                        {p.tipe === "PIUTANG"
+                          ? "1102 - Piutang Usaha"
+                          : `${p.kodeAkun ? `${p.kodeAkun} - ` : ""}${p.kategori}`}
+                      </TableCell>
                       <TableCell className="text-sm text-slate-500">{p.adminNama}</TableCell>
                       <TableCell className="text-sm text-slate-500">{p.keterangan || "-"}</TableCell>
                     </TableRow>

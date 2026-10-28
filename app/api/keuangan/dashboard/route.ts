@@ -4,6 +4,7 @@ import { requireAuthAndRole } from "@/lib/auth";
 import { getSaldoPerSumber } from "@/lib/keuangan-server";
 import { successResponse, errorResponse } from "@/lib/api-response";
 import { z } from "zod";
+import { getLabaRugi } from "@/lib/laba-rugi-common";
 
 // Dashboard Keuangan PT BST — READ ONLY, merangkum data yang sudah ada.
 // Tiap section punya filter periodenya sendiri (query param), tidak saling memengaruhi.
@@ -194,16 +195,27 @@ async function arusKas(start: Date, end: Date, buckets: Bucket[], excludeModal31
   return { totalMasuk: masuk, totalKeluar: keluar, bersih: masuk - keluar, items };
 }
 
-// Laba rugi basis kas: Pendapatan = PEMASUKAN, Beban = PENGELUARAN.
-// Setoran modal 31xx bukan pendapatan atau beban — dikecualikan (masuk Perubahan Modal).
+// Laba rugi basis akrual menggunakan fungsi bersama getLabaRugi
 async function labaRugi(start: Date, end: Date, buckets: Bucket[]) {
-  const kas = await arusKas(start, end, buckets, true);
+  const res = await getLabaRugi(start, end);
+  const bebanTotal = res.totalHpp + res.totalBeban;
+  const items = await Promise.all(
+    buckets.map(async (b) => {
+      const r = await getLabaRugi(b.start, b.end);
+      return {
+        label: b.label,
+        pendapatan: r.totalPendapatan,
+        beban: r.totalHpp + r.totalBeban,
+        laba: r.labaBersih,
+      };
+    })
+  );
   return {
-    pendapatan: kas.totalMasuk,
-    beban: kas.totalKeluar,
-    labaBersih: kas.bersih,
-    items: kas.items.map((it) => ({ label: it.label, pendapatan: it.masuk, beban: it.keluar, laba: it.bersih })),
-    basis: "kas" as const,
+    pendapatan: res.totalPendapatan,
+    beban: bebanTotal,
+    labaBersih: res.labaBersih,
+    items,
+    basis: "akrual" as const,
   };
 }
 
@@ -232,18 +244,15 @@ async function terhutang(tipe: "PIUTANG" | "HUTANG", start: Date, end: Date) {
 }
 
 async function biayaOperasional(start: Date, end: Date) {
-  const groups = await prisma.transaksiKas.groupBy({
-    by: ["kategori"],
-    where: { tanggal: { gte: start, lte: end }, tipe: "PENGELUARAN" },
-    _sum: { jumlah: true },
-    _count: { id: true },
-    orderBy: { _sum: { jumlah: "desc" } },
-    take: 10,
-  });
-  const total = groups.reduce((s, g) => s + Number(g._sum.jumlah ?? 0), 0);
+  const { bebanDetails } = await getLabaRugi(start, end);
+  const items = Array.from(bebanDetails.entries())
+    .map(([key, v]) => ({ kategori: v.nama, nominal: v.nilai, count: 1 }))
+    .sort((a, b) => b.nominal - a.nominal)
+    .slice(0, 10);
+  const total = items.reduce((s, i) => s + i.nominal, 0);
   return {
     total,
-    items: groups.map((g) => ({ kategori: g.kategori, nominal: Number(g._sum.jumlah ?? 0), count: g._count.id })),
+    items,
   };
 }
 

@@ -1,7 +1,15 @@
 export const dynamic = "force-dynamic";
 
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 import { BiayaContent } from "@/components/admin/biaya-content";
+
+// Biaya tunai selalu memiliki transaksiKasId dan biaya hutang selalu memiliki
+// tagihanId. Baris dengan keduanya null adalah sisa data yatim akibat transaksi
+// kasnya sudah dihapus (FK ON DELETE SET NULL) — tidak boleh tampil/dihitung.
+const BIAYA_TERHUBUNG: Prisma.BiayaWhereInput = {
+  OR: [{ transaksiKasId: { not: null } }, { tagihanId: { not: null } }],
+};
 
 // Halaman Biaya PT BST.
 // Menampilkan data gabungan dari model Biaya (tunai maupun hutang) serta
@@ -43,17 +51,50 @@ export default async function BiayaPage() {
       kasRows,
     ] = await Promise.all([
       prisma.biaya.aggregate({
-        where: { tanggal: { gte: awalBulan } },
+        where: {
+          tanggal: { gte: awalBulan },
+          AND: [
+            BIAYA_TERHUBUNG,
+            {
+              OR: [
+                { transaksiKasId: null },
+                { transaksiKas: { OR: [ { tag: null }, { tag: { notIn: ["BAYAR_UTANG", "BELI_ASET"] } } ] } },
+              ],
+            },
+          ],
+        },
         _sum: { jumlah: true },
         _count: { id: true },
       }),
       prisma.biaya.aggregate({
-        where: { tanggal: { gte: awal30Hari } },
+        where: {
+          tanggal: { gte: awal30Hari },
+          AND: [
+            BIAYA_TERHUBUNG,
+            {
+              OR: [
+                { transaksiKasId: null },
+                { transaksiKas: { OR: [ { tag: null }, { tag: { notIn: ["BAYAR_UTANG", "BELI_ASET"] } } ] } },
+              ],
+            },
+          ],
+        },
         _sum: { jumlah: true },
         _count: { id: true },
       }),
       prisma.biaya.aggregate({
-        where: { status: { not: "LUNAS" } },
+        where: {
+          status: { not: "LUNAS" },
+          AND: [
+            BIAYA_TERHUBUNG,
+            {
+              OR: [
+                { transaksiKasId: null },
+                { transaksiKas: { OR: [ { tag: null }, { tag: { notIn: ["BAYAR_UTANG", "BELI_ASET"] } } ] } },
+              ],
+            },
+          ],
+        },
         _sum: { sisa: true },
         _count: { id: true },
       }),
@@ -62,6 +103,10 @@ export default async function BiayaPage() {
           tipe: "PENGELUARAN",
           tanggal: { gte: awalBulan },
           id: { notIn: [...linkedKasIds] },
+          OR: [
+            { tag: null },
+            { tag: { notIn: ["BAYAR_UTANG", "BELI_ASET"] } },
+          ],
         },
         _sum: { jumlah: true },
         _count: { id: true },
@@ -71,11 +116,26 @@ export default async function BiayaPage() {
           tipe: "PENGELUARAN",
           tanggal: { gte: awal30Hari },
           id: { notIn: [...linkedKasIds] },
+          OR: [
+            { tag: null },
+            { tag: { notIn: ["BAYAR_UTANG", "BELI_ASET"] } },
+          ],
         },
         _sum: { jumlah: true },
         _count: { id: true },
       }),
       prisma.biaya.findMany({
+        where: {
+          AND: [
+            BIAYA_TERHUBUNG,
+            {
+              OR: [
+                { transaksiKasId: null },
+                { transaksiKas: { OR: [ { tag: null }, { tag: { notIn: ["BAYAR_UTANG", "BELI_ASET"] } } ] } },
+              ],
+            },
+          ],
+        },
         orderBy: { tanggal: "desc" },
         take: 100,
         select: {
@@ -98,6 +158,10 @@ export default async function BiayaPage() {
         where: {
           tipe: "PENGELUARAN",
           id: { notIn: [...linkedKasIds] },
+          OR: [
+            { tag: null },
+            { tag: { notIn: ["BAYAR_UTANG", "BELI_ASET"] } },
+          ],
         },
         orderBy: { tanggal: "desc" },
         take: 100,

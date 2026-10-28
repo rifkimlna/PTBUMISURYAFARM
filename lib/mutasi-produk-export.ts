@@ -26,11 +26,11 @@ const PAGE_H = 842;
 const MARGIN = 36;
 
 const X_TGL = MARGIN;
-const X_NAMA = 95;
-const X_JENIS = 240;
-const X_REF = 340;
-const X_MASUK_R = 455;
-const X_KELUAR_R = 505;
+const X_NAMA = 100;
+const X_JENIS = 250;
+const X_REF = 330;
+const X_MASUK_R = 470;
+const X_KELUAR_R = 525;
 const X_SALDO_R = PAGE_W - MARGIN;
 
 const HELV_W: Record<string, number> = {
@@ -89,9 +89,9 @@ function snapshotKeLines(s: MutasiProdukSnapshot): PdfLine[] {
     lines.push({
       kind: "row",
       tgl: fmtTglEkspor(b.tanggal),
-      nama: potong(b.namaProduk, 26),
-      jenis: potong(b.jenisLabel, 17),
-      ref: potong(b.referensi, 24),
+      nama: potong(b.namaProduk, 24),
+      jenis: potong(b.jenisLabel, 16),
+      ref: potong(b.referensi, 22),
       masuk: formatQtyEkspor(b.stokMasuk),
       keluar: formatQtyEkspor(b.stokKeluar),
       saldo: formatQtyEkspor(b.saldo),

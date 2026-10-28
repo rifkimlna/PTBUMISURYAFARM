@@ -101,14 +101,19 @@ export function MutasiProdukContent() {
     });
   };
 
+  const parseYMD = (s: string) => {
+    const [y, m, d] = s.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  };
+
   const terapkanFilter = () => {
     if (!draft.tanggalAwal || !draft.tanggalAkhir) {
       setFilterError("Isi tanggal awal dan akhir terlebih dahulu");
       return;
     }
-    const awal = new Date(draft.tanggalAwal);
-    const akhir = new Date(draft.tanggalAkhir);
-    if (awal > akhir) {
+    const awal = parseYMD(draft.tanggalAwal);
+    const akhir = parseYMD(draft.tanggalAkhir);
+    if (awal.getTime() > akhir.getTime()) {
       setFilterError("Tanggal awal tidak boleh lebih besar dari tanggal akhir");
       return;
     }

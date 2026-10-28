@@ -48,6 +48,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         keterangan: parsed.keterangan ?? null,
         sumber: parsed.sumber ?? null,
         tanggal: parsed.tanggal ?? new Date(),
+        nilaiPerSatuan: parsed.nilaiPerSatuan ?? null,
       },
     });
     return successResponse(riwayat, "Stok berhasil dicatat", 201);

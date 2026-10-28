@@ -67,12 +67,12 @@ export function resolveUsiaHutangTanggal(
   } else {
     d = akhirUntukUsiaHutang(periode);
   }
-  const now = new Date();
-  const asOf = d.getTime() > now.getTime() ? endOfDay(now) : endOfDay(d);
+  const asOf = endOfDay(d);
   return { asOf, label: `Per ${fmtTgl(asOf)}` };
 }
 
 function kategoriOf(umur: number): KategoriAgingHutang {
+  if (!Number.isFinite(umur) || umur <= 0) return "Belum Jatuh Tempo";
   if (umur <= 30) return "1 - 30 Hari";
   if (umur <= 60) return "31 - 60 Hari";
   if (umur <= 90) return "61 - 90 Hari";
@@ -136,7 +136,7 @@ export async function getUsiaHutangSnapshot(
     const kategori = kategoriOf(umur);
     if (kategoriFilter && kategori !== kategoriFilter) continue;
 
-    const g = grupMap.get(supplier) ?? { supplier, baris: [], total: 0, b1: 0, b2: 0, b3: 0, b4: 0 };
+    const g = grupMap.get(supplier) ?? { supplier, baris: [], total: 0, b0: 0, b1: 0, b2: 0, b3: 0, b4: 0 };
     g.baris.push({
       id: t.id,
       tanggal: t.tanggal.toISOString(),
@@ -150,7 +150,8 @@ export async function getUsiaHutangSnapshot(
       kategori,
     });
     g.total = Math.round((g.total + sisa) * 100) / 100;
-    if (kategori === "1 - 30 Hari") g.b1 = Math.round((g.b1 + sisa) * 100) / 100;
+    if (kategori === "Belum Jatuh Tempo") g.b0 = Math.round((g.b0 + sisa) * 100) / 100;
+    else if (kategori === "1 - 30 Hari") g.b1 = Math.round((g.b1 + sisa) * 100) / 100;
     else if (kategori === "31 - 60 Hari") g.b2 = Math.round((g.b2 + sisa) * 100) / 100;
     else if (kategori === "61 - 90 Hari") g.b3 = Math.round((g.b3 + sisa) * 100) / 100;
     else g.b4 = Math.round((g.b4 + sisa) * 100) / 100;
@@ -164,6 +165,7 @@ export async function getUsiaHutangSnapshot(
     tanggal: asOf.toISOString(),
     grup,
     total: Math.round(grup.reduce((s, g) => s + g.total, 0) * 100) / 100,
+    totalB0: Math.round(grup.reduce((s, g) => s + g.b0, 0) * 100) / 100,
     totalB1: Math.round(grup.reduce((s, g) => s + g.b1, 0) * 100) / 100,
     totalB2: Math.round(grup.reduce((s, g) => s + g.b2, 0) * 100) / 100,
     totalB3: Math.round(grup.reduce((s, g) => s + g.b3, 0) * 100) / 100,

@@ -155,6 +155,7 @@ export default async function ProdukPage() {
           jenis: r.jenis,
           jumlah: r.jumlah,
           keterangan: r.keterangan,
+          nilaiPerSatuan: r.nilaiPerSatuan != null ? Number(r.nilaiPerSatuan) : null,
         }))}
       />
     </div>

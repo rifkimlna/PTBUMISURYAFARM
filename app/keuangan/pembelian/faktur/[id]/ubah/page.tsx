@@ -56,6 +56,7 @@ export default async function UbahFakturPage({
       unit: it.unit,
       harga: String(Number(it.harga)),
       diskon: String(Number(it.diskonPersen)),
+      kodeAkun: it.kodeAkun ?? "",
     })),
     lampiran: faktur.lampiran.map((l) => ({
       key: l.id,
