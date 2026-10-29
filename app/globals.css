@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 :root {
   --background: #fcfcfd;
@@ -7,7 +8,7 @@
   --card-foreground: #0f172a;
   --popover: #ffffff;
   --popover-foreground: #0f172a;
-  --primary: #15803d;
+  --primary: #166534;
   --primary-foreground: #ffffff;
   --secondary: #f8fafc;
   --secondary-foreground: #0f172a;
@@ -15,12 +16,12 @@
   --muted-foreground: #94a3b8;
   --accent: #f0fdf4;
   --accent-foreground: #14532d;
-  --accent-strong: #16a34a;
+  --accent-strong: #14532d;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
   --border: #f1f5f9;
   --input: #f1f5f9;
-  --ring: #15803d;
+  --ring: #166534;
   --radius: 1rem;
 }
 
@@ -46,6 +47,18 @@
   --color-ring: var(--ring);
   --font-sans: var(--font-poppins);
   --font-mono: var(--font-geist-mono);
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  @keyframes accordion-down {
+    from { height: 0; }
+    to { height: var(--radix-accordion-content-height); }
+  }
+  @keyframes accordion-up {
+    from { height: var(--radix-accordion-content-height); }
+    to { height: 0; }
+  }
 }
 
 /* ===== Responsive base fixes ===== */
@@ -71,9 +84,11 @@ body {
 }
 
 /* Prevent layout shift from images */
-img {
-  max-width: 100%;
-  height: auto;
+@layer base {
+  img {
+    max-width: 100%;
+    height: auto;
+  }
 }
 
 /* Fluid container helper - auto layout for all devices */

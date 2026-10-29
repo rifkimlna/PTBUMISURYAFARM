@@ -23,7 +23,7 @@ export default function TambahPohonPage() {
     hasilPanen: "",
     pemupukan: "",
     pengobatan: "",
-    tinggiCm: "",
+    tinggiM: "",
     lingkarBatangCm: "",
     phTanah: "",
     status: "SEHAT",
@@ -124,7 +124,7 @@ export default function TambahPohonPage() {
       if (form.hasilPanen) fd.set("hasilPanen", form.hasilPanen);
       if (form.pemupukan) fd.set("pemupukan", form.pemupukan);
       if (form.pengobatan) fd.set("pengobatan", form.pengobatan);
-      if (form.tinggiCm) fd.set("tinggiCm", form.tinggiCm);
+      if (form.tinggiM) fd.set("tinggiM", form.tinggiM);
       if (form.lingkarBatangCm) fd.set("lingkarBatangCm", form.lingkarBatangCm);
       if (form.phTanah) fd.set("phTanah", form.phTanah);
       fd.set("status", form.status);
@@ -284,8 +284,8 @@ export default function TambahPohonPage() {
               <div className="text-xs font-semibold tracking-widest text-slate-500 mb-3">DIMENSI & TANAH</div>
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="space-y-2">
-                <Label htmlFor="tinggiCm">Tinggi (cm)</Label>
-                <Input id="tinggiCm" type="number" step="1" min="0" max="3000" inputMode="numeric" value={form.tinggiCm} onChange={(e) => onChange("tinggiCm", e.target.value)} placeholder="180" />
+                <Label htmlFor="tinggiM">Tinggi (m)</Label>
+                <Input id="tinggiM" type="number" step="0.01" min="0" max="30" inputMode="decimal" value={form.tinggiM} onChange={(e) => onChange("tinggiM", e.target.value)} placeholder="1.80" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="lingkarBatangCm">Lingkar batang (cm)</Label>
@@ -296,7 +296,7 @@ export default function TambahPohonPage() {
                 <Input id="phTanah" type="number" step="0.1" min="0" max="14" inputMode="decimal" value={form.phTanah} onChange={(e) => onChange("phTanah", e.target.value)} placeholder="6.5" />
               </div>
             </div>
-            <p className="mt-2 text-xs text-slate-500">Ukur tinggi tanah→pucuk, lingkar 130cm dari tanah, pH pakai meter tusuk. Kategori Kecil (&lt;150) / Sedang / Besar (&gt;400) otomatis.</p>
+            <p className="mt-2 text-xs text-slate-500">Ukur tinggi tanah→pucuk (meter), lingkar 130cm dari tanah, pH pakai meter tusuk. Kategori Kecil (&lt;1.50m) / Sedang 1.50-4.00m / Besar (&gt;4.00m) otomatis.</p>
             </div>
 
             <div>
