@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import {
   ArrowLeftRight,
   ChevronDown,
@@ -30,6 +31,7 @@ import {
   X,
 } from "lucide-react";
 import { cn, formatRupiah } from "@/lib/utils";
+import { labelSumberDanaDenganKode } from "@/lib/coa";
 
 export type PenagihanRow = {
   kind: "tagihan" | "dokumen";
@@ -494,6 +496,9 @@ export function PenjualanContent({
   const [paymentForm, setPaymentForm] = useState({ jumlahBayar: "", sumberDana: "KAS" as "KAS"|"BANK"|"TABUNGAN", tanggal: todayInputLocal(), keterangan: "" });
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [paymentError, setPaymentError] = useState("");
+  const [deleteDoc, setDeleteDoc] = useState<{id:string,label:string}|null>(null);
+  const [deletePenagihan, setDeletePenagihan] = useState<PenagihanRow|null>(null);
+  const [deletePengiriman, setDeletePengiriman] = useState<PengirimanRow|null>(null);
 
   const toDateInput = (iso: string | null) => {
     if (!iso) return "";
@@ -695,19 +700,23 @@ export function PenjualanContent({
     );
   }, [rows, docs]);
 
-  const hapusDokumen = async (docId: string, label: string) => {
-    if (!window.confirm(`Hapus dokumen ${label}? Piutang ikutannya (bila ada dan belum dibayar) ikut terhapus.`)) {
-      return;
-    }
-    setDeletingId(docId);
+  const hapusDokumen = (docId: string, label: string) => {
+    setDeleteDoc({ id: docId, label });
+  };
+
+  const confirmDeleteDokumen = async () => {
+    if (!deleteDoc) return;
+    setDeletingId(deleteDoc.id);
     setActionError("");
     try {
-      const res = await fetch(`/api/penjualan/dokumen/${encodeURIComponent(docId)}`, { method: "DELETE" });
+      const res = await fetch(`/api/penjualan/dokumen/${encodeURIComponent(deleteDoc.id)}`, { method: "DELETE" });
       const result = await res.json().catch(() => ({ message: "Gagal menghapus dokumen" }));
       if (!res.ok) throw new Error(result.message || "Gagal menghapus dokumen");
       router.refresh();
+      setDeleteDoc(null);
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "Gagal menghapus dokumen");
+      throw e;
     } finally {
       setDeletingId(null);
     }
@@ -742,22 +751,41 @@ export function PenjualanContent({
     });
   }, [kirim, kirimStatus, kirimSearch]);
 
-  const hapusPenagihan = async (row: PenagihanRow) => {
-    const ikutDokumen = row.docId ? " Dokumen penjualan terkait ikut terhapus." : "";
-    if (
-      !window.confirm(`Hapus penagihan ${displayInvoice(row)} untuk ${row.pihak} sebesar Rp ${formatRupiah(row.jumlah)}?${ikutDokumen}`)
-    ) {
-      return;
-    }
-    setDeletingId(row.id);
+  const hapusPenagihan = (row: PenagihanRow) => {
+    setDeletePenagihan(row);
+  };
+
+  const confirmDeletePenagihan = async () => {
+    if (!deletePenagihan) return;
+    setDeletingId(deletePenagihan.id);
     setActionError("");
     try {
-      const res = await fetch(`/api/tagihan/${encodeURIComponent(row.id)}`, { method: "DELETE" });
+      const res = await fetch(`/api/tagihan/${encodeURIComponent(deletePenagihan.id)}`, { method: "DELETE" });
       const result = await res.json().catch(() => ({ message: "Gagal menghapus penagihan" }));
       if (!res.ok) throw new Error(result.message || "Gagal menghapus penagihan");
       router.refresh();
+      setDeletePenagihan(null);
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "Gagal menghapus penagihan");
+      throw e;
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const confirmDeletePengiriman = async () => {
+    if (!deletePengiriman) return;
+    setDeletingId(deletePengiriman.id);
+    setActionError("");
+    try {
+      const res = await fetch(`/api/penjualan/pengiriman/${encodeURIComponent(deletePengiriman.id)}`, { method: "DELETE" });
+      const result = await res.json().catch(() => ({ message: "Gagal menghapus pengiriman" }));
+      if (!res.ok) throw new Error(result.message || "Gagal menghapus pengiriman");
+      router.refresh();
+      setDeletePengiriman(null);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Gagal menghapus pengiriman");
+      throw e;
     } finally {
       setDeletingId(null);
     }
@@ -1168,8 +1196,8 @@ export function PenjualanContent({
                         {detailData.pembayaran.map((p: any) => (
                           <tr key={p.id} className="border-t border-slate-100">
                             <td className="px-3 py-2">{formatDate(p.tanggal)}</td>
-                            <td className="px-3 py-2">{p.sumberDana}</td>
-                            <td className="px-3 py-2">{p.kodeAkun ? `${p.kodeAkun} - ` : ""}{p.kategori ?? p.kodeAkun ?? "—"}</td>
+                            <td className="px-3 py-2">{labelSumberDanaDenganKode(p.sumberDana)}</td>
+                            <td className="px-3 py-2">1102 - Piutang Usaha</td>
                             <td className="px-3 py-2 text-right">Rp {formatRupiah(p.jumlah)}</td>
                           </tr>
                         ))}
@@ -1359,7 +1387,7 @@ export function PenjualanContent({
                               {dokTagihanData.pembayaran.map((p: any) => (
                                 <tr key={p.id} className="border-t border-slate-100">
                                   <td className="px-3 py-2">{formatDate(p.tanggal)}</td>
-                                  <td className="px-3 py-2">{p.sumberDana}</td>
+                                  <td className="px-3 py-2">{labelSumberDanaDenganKode(p.sumberDana)}</td>
                                   <td className="px-3 py-2 text-right">Rp {formatRupiah(p.jumlah)}</td>
                                 </tr>
                               ))}
@@ -1595,21 +1623,7 @@ export function PenjualanContent({
                               title="Hapus pengiriman"
                               aria-label={`Hapus ${p.noPengiriman}`}
                               disabled={deletingId === p.id}
-                              onClick={async () => {
-                                if (!window.confirm(`Hapus pengiriman ${p.noPengiriman}? Tidak memengaruhi keuangan.`)) return;
-                                setDeletingId(p.id);
-                                setActionError("");
-                                try {
-                                  const res = await fetch(`/api/penjualan/pengiriman/${encodeURIComponent(p.id)}`, { method: "DELETE" });
-                                  const result = await res.json().catch(() => ({ message: "Gagal menghapus pengiriman" }));
-                                  if (!res.ok) throw new Error(result.message || "Gagal menghapus pengiriman");
-                                  router.refresh();
-                                } catch (e) {
-                                  setActionError(e instanceof Error ? e.message : "Gagal menghapus pengiriman");
-                                } finally {
-                                  setDeletingId(null);
-                                }
-                              }}
+                              onClick={() => setDeletePengiriman(p)}
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
@@ -1658,6 +1672,30 @@ export function PenjualanContent({
         Pembayaran (Hutang & Piutang) → Kas & Bank → COA. Faktur Proforma dapat dibuat dari Pesanan/Pengiriman,
         bukan dari Tukar Faktur.
       </p>
+
+      <ConfirmDeleteDialog
+        open={Boolean(deleteDoc)}
+        onOpenChange={(v) => !v && setDeleteDoc(null)}
+        itemName="dokumen"
+        description={`Anda akan menghapus dokumen ${deleteDoc?.label ?? ''}.`}
+        warning="Piutang ikutannya (bila ada dan belum dibayar) ikut terhapus."
+        onConfirm={confirmDeleteDokumen}
+      />
+      <ConfirmDeleteDialog
+        open={Boolean(deletePenagihan)}
+        onOpenChange={(v) => !v && setDeletePenagihan(null)}
+        itemName={`penagihan ${deletePenagihan ? displayInvoice(deletePenagihan) : ''}`}
+        description={`Pelanggan: ${deletePenagihan?.pihak ?? ''} • Jumlah: Rp ${formatRupiah(deletePenagihan?.jumlah ?? 0)}`}
+        warning={deletePenagihan?.docId ? "Dokumen penjualan terkait ikut terhapus." : undefined}
+        onConfirm={confirmDeletePenagihan}
+      />
+      <ConfirmDeleteDialog
+        open={Boolean(deletePengiriman)}
+        onOpenChange={(v) => !v && setDeletePengiriman(null)}
+        itemName={`pengiriman ${deletePengiriman?.noPengiriman ?? ''}`}
+        description="Penghapusan pengiriman tidak memengaruhi keuangan."
+        onConfirm={confirmDeletePengiriman}
+      />
     </div>
   );
 }

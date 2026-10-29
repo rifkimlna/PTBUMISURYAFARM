@@ -12,33 +12,25 @@ import { formatRupiah } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import type { AkunCOA, KelompokCOA } from "@/lib/coa";
 
-type Tipe = "PEMASUKAN" | "PENGELUARAN" | "TRANSFER";
-
-type TransaksiRow = {
+type BukuBesarRow = {
   id: string;
   tanggal: string;
-  tipe: Tipe;
-  kategori: string;
-  kodeAkun?: string | null;
-  sumberDana?: string | null;
-  sumberDanaTujuan?: string | null;
-  jumlah: number;
-  keterangan: string | null;
-  admin: { nama: string };
-  buktiCount?: number;
-  /** Arah relatif terhadap akun yang dilihat (untuk tanda + / -). */
-  arah?: "masuk" | "keluar";
+  transaksi: string;
+  noTransaksi: string | null;
+  debit: number;
+  kredit: number;
+  saldo: number;
 };
 
 type Summary = {
-  pemasukan: number;
-  pengeluaran: number;
-  saldo: number;
+  totalDebit: number;
+  totalKredit: number;
+  saldoAkhir: number;
 };
 
 interface CoaDetailProps {
   akun: AkunCOA;
-  initialData: TransaksiRow[];
+  initialData: BukuBesarRow[];
   initialTotal: number;
   initialSummary: Summary;
 }
@@ -71,6 +63,8 @@ function formatDateInput(value: string) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
 
+type Tipe = "PEMASUKAN" | "PENGELUARAN" | "TRANSFER";
+
 function getTipeBadge(tipe: Tipe) {
   if (tipe === "TRANSFER") {
     return <Badge variant="info" className="text-[11px]">Transfer</Badge>;
@@ -82,16 +76,12 @@ function getTipeBadge(tipe: Tipe) {
   );
 }
 
-function arahBaris(row: TransaksiRow): "masuk" | "keluar" {
-  if (row.arah) return row.arah;
-  return row.tipe === "PEMASUKAN" ? "masuk" : "keluar";
+function arahBaris(row: BukuBesarRow): "masuk" | "keluar" {
+  return row.debit > 0 ? "masuk" : "keluar";
 }
 
-function labelSumberDanaRow(row: TransaksiRow): string {
-  if (row.sumberDanaTujuan) {
-    return `${labelSumberDana(row.sumberDana)} → ${labelSumberDana(row.sumberDanaTujuan)}`;
-  }
-  return labelSumberDana(row.sumberDana);
+function labelSumberDanaRow(row: BukuBesarRow): string {
+  return "—";
 }
 
 function labelSumberDana(key: string | null | undefined): string {
@@ -100,7 +90,7 @@ function labelSumberDana(key: string | null | undefined): string {
 }
 
 export function CoaDetail({ akun, initialData, initialTotal, initialSummary }: CoaDetailProps) {
-  const [data, setData] = useState<TransaksiRow[]>(initialData);
+  const [data, setData] = useState<BukuBesarRow[]>(initialData);
   const [total, setTotal] = useState(initialTotal);
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
@@ -222,10 +212,10 @@ export function CoaDetail({ akun, initialData, initialTotal, initialSummary }: C
           <CardContent className="p-5">
             <div className="flex items-center gap-2 text-xs font-medium tracking-wide text-slate-500">
               <TrendingUp className="h-4 w-4 text-green-600" aria-hidden="true" />
-              <span>Total Masuk</span>
+              <span>Total Debit</span>
             </div>
             <div className="mt-3 text-2xl sm:text-3xl font-semibold tracking-tight text-green-700">
-              Rp {formatRupiah(summary.pemasukan)}
+              Rp {formatRupiah(summary.totalDebit)}
             </div>
           </CardContent>
         </Card>
@@ -233,31 +223,31 @@ export function CoaDetail({ akun, initialData, initialTotal, initialSummary }: C
           <CardContent className="p-5">
             <div className="flex items-center gap-2 text-xs font-medium tracking-wide text-slate-500">
               <TrendingDown className="h-4 w-4 text-red-500" aria-hidden="true" />
-              <span>Total Keluar</span>
+              <span>Total Kredit</span>
             </div>
             <div className="mt-3 text-2xl sm:text-3xl font-semibold tracking-tight text-red-600">
-              Rp {formatRupiah(summary.pengeluaran)}
+              Rp {formatRupiah(summary.totalKredit)}
             </div>
           </CardContent>
         </Card>
         <Card
           className={cn(
             "rounded-2xl border shadow-sm",
-            summary.saldo >= 0 ? "border-green-200 bg-green-50" : "border-red-100 bg-red-50"
+            summary.saldoAkhir >= 0 ? "border-green-200 bg-green-50" : "border-red-100 bg-red-50"
           )}
         >
           <CardContent className="p-5">
             <div className="flex items-center gap-2 text-xs font-medium tracking-wide text-slate-500">
               <Wallet className="h-4 w-4 text-green-600" aria-hidden="true" />
-              <span>Saldo Akun</span>
+              <span>Saldo Akhir</span>
             </div>
             <div
               className={cn(
                 "mt-3 text-2xl sm:text-3xl font-semibold tracking-tight",
-                summary.saldo >= 0 ? "text-green-700" : "text-red-600"
+                summary.saldoAkhir >= 0 ? "text-green-700" : "text-red-600"
               )}
             >
-              Rp {formatRupiah(summary.saldo)}
+              Rp {formatRupiah(summary.saldoAkhir)}
             </div>
           </CardContent>
         </Card>
@@ -319,11 +309,11 @@ export function CoaDetail({ akun, initialData, initialTotal, initialSummary }: C
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[110px]">Tanggal</TableHead>
-                  <TableHead className="w-[90px]">Tipe</TableHead>
-                  <TableHead>Kategori</TableHead>
-                  <TableHead className="w-[140px]" style={{ textAlign: "right" }}>Jumlah</TableHead>
-                  <TableHead className="w-[100px]">Sumber Dana</TableHead>
-                  <TableHead className="w-[120px]">Admin</TableHead>
+                  <TableHead>Transaksi</TableHead>
+                  <TableHead className="w-[120px]">Nomor</TableHead>
+                  <TableHead className="w-[130px]" style={{ textAlign: "right" }}>Debit</TableHead>
+                  <TableHead className="w-[130px]" style={{ textAlign: "right" }}>Kredit</TableHead>
+                  <TableHead className="w-[140px]" style={{ textAlign: "right" }}>Saldo</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -339,18 +329,17 @@ export function CoaDetail({ akun, initialData, initialTotal, initialSummary }: C
                   data.map((row) => (
                     <TableRow key={row.id}>
                       <TableCell className="text-xs text-slate-500">{formatDate(row.tanggal)}</TableCell>
-                      <TableCell>{getTipeBadge(row.tipe)}</TableCell>
-                      <TableCell className="text-sm text-slate-700">{row.kodeAkun ? `${row.kodeAkun} - ` : ""}{row.kategori}</TableCell>
-                      <TableCell
-                        className={cn(
-                          "text-sm font-medium tracking-tight text-right",
-                          arahBaris(row) === "masuk" ? "text-green-700" : "text-red-600"
-                        )}
-                      >
-                        {arahBaris(row) === "masuk" ? "+" : "-"} Rp {formatRupiah(row.jumlah)}
+                      <TableCell className="text-sm text-slate-700">{row.transaksi}</TableCell>
+                      <TableCell className="text-xs font-mono text-slate-500">{row.noTransaksi ?? "—"}</TableCell>
+                      <TableCell className="text-sm text-right tabular-nums text-slate-700">
+                        {row.debit ? `Rp ${formatRupiah(row.debit)}` : "—"}
                       </TableCell>
-                      <TableCell className="text-xs text-slate-500">{labelSumberDanaRow(row)}</TableCell>
-                      <TableCell className="text-xs text-slate-500">{row.admin.nama}</TableCell>
+                      <TableCell className="text-sm text-right tabular-nums text-slate-700">
+                        {row.kredit ? `Rp ${formatRupiah(row.kredit)}` : "—"}
+                      </TableCell>
+                      <TableCell className="text-sm text-right tabular-nums font-medium text-slate-900">
+                        Rp {formatRupiah(row.saldo)}
+                      </TableCell>
                     </TableRow>
                   ))
                 )}

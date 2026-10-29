@@ -43,12 +43,6 @@ export function dbUnreachableMessage(): string {
 
 const connectionString = normalizeConnectionString(process.env.DATABASE_URL);
 
-if (!connectionString) {
-  // Jangan diam-diam pakai localhost: di Vercel .env tidak ikut deploy,
-  // jadi DATABASE_URL wajib diisi di Project Settings → Environment Variables.
-  console.error("[prisma] DATABASE_URL belum diisi. Isi di Vercel Environment Variables lalu redeploy.");
-}
-
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 function createClient() {
@@ -59,6 +53,35 @@ function createClient() {
   return new PrismaClient({ adapter });
 }
 
-export const prisma = globalForPrisma.prisma ?? createClient();
+function makeFallbackPrisma(reason: string): PrismaClient {
+  return new Proxy({} as PrismaClient, {
+    get(_, prop) {
+      if (prop === Symbol.toStringTag) return "PrismaClient";
+      if (prop === "$connect") return () => Promise.reject(new Error(reason));
+      if (prop === "$disconnect") return () => Promise.resolve();
+      throw new Error(reason);
+    },
+  }) as PrismaClient;
+}
+
+let prisma: PrismaClient;
+
+if (!connectionString) {
+  // Di Vercel .env tidak ikut deploy. DATABASE_URL wajib diisi di
+  // Project Settings → Environment Variables lalu redeploy.
+  // Jangan crash di import level: biarkan halaman tetap bisa render
+  // dengan pesan error yang jelas saat query dieksekusi.
+  console.error("[prisma] DATABASE_URL belum diisi. Isi di Vercel Environment Variables lalu redeploy.");
+  prisma = makeFallbackPrisma(dbUnreachableMessage());
+} else {
+  try {
+    prisma = globalForPrisma.prisma ?? createClient();
+  } catch (e) {
+    console.error("[prisma] Gagal membuat PrismaClient:", e instanceof Error ? e.message : String(e));
+    prisma = makeFallbackPrisma("Gagal konek ke database. Cek DATABASE_URL di Vercel lalu redeploy.");
+  }
+}
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+
+export { prisma };

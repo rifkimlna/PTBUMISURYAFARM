@@ -10,8 +10,8 @@ import { ChevronDown, Download, FileSpreadsheet, FileText } from "lucide-react";
 import { formatRupiah } from "@/lib/utils";
 import {
   PENJUALAN_PER_PRODUK_PERIODE_LABEL,
-  awalUntukPeriode,
-  akhirUntukPeriode,
+  tanggalWIB,
+  rentangPeriode,
   type PenjualanPerProdukPeriode,
   type PenjualanPerProdukSnapshot,
 } from "@/lib/penjualan-per-produk-types";
@@ -23,12 +23,9 @@ const PERIODE_OPTIONS = (Object.keys(PENJUALAN_PER_PRODUK_PERIODE_LABEL) as Penj
   label: PENJUALAN_PER_PRODUK_PERIODE_LABEL[v],
 }));
 
-function todayYMD() {
-  const d = new Date();
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-}
-function toYMD(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function draftAwal(): Draft {
+  const t = tanggalWIB();
+  return { periode: "hari-ini", tanggalAwal: t, tanggalAkhir: t };
 }
 
 function rp(v: number) {
@@ -38,16 +35,8 @@ function rp(v: number) {
 }
 
 export function PenjualanPerProdukContent() {
-  const [draft, setDraft] = useState<Draft>({
-    periode: "hari-ini",
-    tanggalAwal: todayYMD(),
-    tanggalAkhir: todayYMD(),
-  });
-  const [applied, setApplied] = useState<Draft>({
-    periode: "hari-ini",
-    tanggalAwal: todayYMD(),
-    tanggalAkhir: todayYMD(),
-  });
+  const [draft, setDraft] = useState<Draft>(draftAwal);
+  const [applied, setApplied] = useState<Draft>(draftAwal);
   const [data, setData] = useState<PenjualanPerProdukSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -91,15 +80,13 @@ export function PenjualanPerProdukContent() {
 
   const gantiPeriode = (v: PenjualanPerProdukPeriode) => {
     setFilterError("");
-    if (v === "custom") {
+    const rentang = rentangPeriode(v);
+    if (!rentang) {
+      // Custom: pertahankan tanggal yang sedang dipilih pengguna.
       setDraft((d) => ({ ...d, periode: v }));
       return;
     }
-    setDraft({
-      periode: v,
-      tanggalAwal: toYMD(awalUntukPeriode(v)),
-      tanggalAkhir: toYMD(akhirUntukPeriode(v)),
-    });
+    setDraft({ periode: v, tanggalAwal: rentang.dari, tanggalAkhir: rentang.sampai });
   };
 
   const terapkanFilter = () => {
@@ -107,9 +94,8 @@ export function PenjualanPerProdukContent() {
       setFilterError("Isi tanggal awal dan akhir terlebih dahulu");
       return;
     }
-    const awal = new Date(draft.tanggalAwal);
-    const akhir = new Date(draft.tanggalAkhir);
-    if (awal > akhir) {
+    // Format YYYY-MM-DD — perbandingan teks = perbandingan tanggal (WIB).
+    if (draft.tanggalAwal > draft.tanggalAkhir) {
       setFilterError("Tanggal awal tidak boleh lebih besar dari tanggal akhir");
       return;
     }

@@ -16,7 +16,7 @@ import {
   snapshotKeSheetMonitor,
 } from "@/lib/anggaran-monitor-export";
 
-// GET /api/keuangan/laporan/anggaran-laba-rugi?anggaranId=...&berakhirPada=YYYY-MM&lihatBalik=12&tampilkanSetiap=1&template=standar[&format=json|pdf|xlsx]
+// GET /api/keuangan/laporan/anggaran-laba-rugi?anggaranId=...&berakhirPada=YYYY-MM&lihatBalik=12&tampilSetiap=1&template=standar[&format=json|pdf|xlsx]
 // Satu sumber data untuk halaman web, PDF, dan XLSX (jaminan angka konsisten).
 export async function GET(req: NextRequest) {
   const auth = await requireAuthAndRole(req, ["SUPER_ADMIN", "ADMIN_KEUANGAN"]);
@@ -38,9 +38,9 @@ export async function GET(req: NextRequest) {
     if (!(MONITOR_LIHAT_BALIK as readonly number[]).includes(lihatBalikRaw)) {
       return errorResponse("lihatBalik tidak valid (1|2|3|4|6|8|12|24)", 400);
     }
-    const tampilSetiapRaw = Number(searchParams.get("tampilkanSetiap") ?? 1);
+    const tampilSetiapRaw = Number(searchParams.get("tampilSetiap") ?? 1);
     if (!(MONITOR_TAMPIL_SETIAP as readonly number[]).includes(tampilSetiapRaw)) {
-      return errorResponse("tampilkanSetiap tidak valid (1|3|4|6|12)", 400);
+      return errorResponse("tampilSetiap tidak valid (1|3|4|6|12)", 400);
     }
     const templateRaw = searchParams.get("template") ?? "standar";
     if (!(MONITOR_TEMPLATE as readonly string[]).includes(templateRaw)) {

@@ -13,8 +13,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Loader2, Paperclip, Plus, Trash2, X } from "lucide-react";
 import { formatRupiah } from "@/lib/utils";
 import { jatuhTempoDari } from "@/lib/tempo";
+import {
+  isAkunBebanPembelian,
+  isAkunDebitFakturValid,
+  isAkunPersediaanPembelian,
+  labelAkunPembelian,
+  pilihAkunDefaultPembelian,
+  type AkunCOAPembelian,
+} from "@/lib/coa-pembelian";
 
-type Produk = { id: string; namaBarang: string; kategori: string; satuan: string; hargaSatuan: number };
+type Produk = {
+  id: string;
+  namaBarang: string;
+  kategori: string;
+  satuan: string;
+  hargaSatuan: number;
+  kodeAkunCOA?: string | null;
+  tipeProduk?: string | null;
+};
 export type Lampiran = { fileName: string; fileUrl: string; fileType: string; fileSize: number };
 type Supplier = { id: string; nama: string; email?: string | null; telepon?: string | null; alamat?: string | null };
 
@@ -87,13 +103,23 @@ function useProduk() {
         const arr = result?.success ? (result.data?.data ?? []) : [];
         if (Array.isArray(arr)) {
           setList(
-arr.map((b: { id: string; namaBarang: string; kategori: string; satuan: string; hargaSatuan: number }) => ({
-               id: b.id,
-               namaBarang: b.namaBarang,
-               kategori: b.kategori,
-               satuan: b.satuan,
-               hargaSatuan: Number(b.hargaSatuan) || 0,
-             }))
+            arr.map((b: {
+              id: string;
+              namaBarang: string;
+              kategori: string;
+              satuan: string;
+              hargaSatuan: number;
+              kodeAkunCOA?: string | null;
+              tipeProduk?: string | null;
+            }) => ({
+              id: b.id,
+              namaBarang: b.namaBarang,
+              kategori: b.kategori,
+              satuan: b.satuan,
+              hargaSatuan: Number(b.hargaSatuan) || 0,
+              kodeAkunCOA: b.kodeAkunCOA ?? null,
+              tipeProduk: b.tipeProduk ?? null,
+            }))
           );
         }
       })
@@ -105,7 +131,39 @@ arr.map((b: { id: string; namaBarang: string; kategori: string; satuan: string; 
   return list;
 }
 
-// ---------- Baris produk (akun COA ditentukan otomatis, bukan input user) ----------
+function useAkunPembelian(enabled: boolean) {
+  const [list, setList] = useState<AkunCOAPembelian[]>([]);
+  const [loading, setLoading] = useState(enabled);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    fetch("/api/keuangan/coa?isActive=true", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((result) => {
+        if (cancelled) return;
+        const arr = result?.success && Array.isArray(result.data)
+          ? (result.data as AkunCOAPembelian[])
+          : [];
+        setList(arr.filter(isAkunDebitFakturValid));
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
+
+  return { list, loading };
+}
+
+// ---------- Baris produk ----------
+
+const ITEM_GRID_TANPA_AKUN = "sm:grid-cols-[minmax(0,2fr)_88px_72px_132px_72px_128px_32px]";
+const ITEM_GRID_DENGAN_AKUN =
+  "sm:grid-cols-[minmax(0,1.8fr)_minmax(0,1.5fr)_80px_64px_120px_64px_112px_32px]";
 
 function TambahSupplierDialog({
   open,
@@ -251,7 +309,7 @@ export function SupplierField({
   );
 }
 
-// ---------- Baris produk (akun COA ditentukan otomatis, bukan input user) ----------
+// ---------- Baris produk ----------
 export type ItemBaris = {
   key: number;
   produkId: string;
@@ -260,6 +318,7 @@ export type ItemBaris = {
   unit: string;
   harga: string;
   diskon: string;
+  kodeAkun?: string;
 };
 
 export type HutangTersedia = {
@@ -301,30 +360,65 @@ export function hitungBaris(it: ItemBaris) {
   return bruto - discAmount;
 }
 
-// ---------- Baris produk (akun COA ditentukan otomatis, bukan input user) ----------
+// ---------- Baris produk ----------
 export function ItemsTable({
   items,
   setItems,
   locked,
+  showAkun,
 }: {
   items: ItemBaris[];
   setItems: (next: ItemBaris[]) => void;
   locked?: boolean;
+  showAkun?: boolean;
 }) {
   // Nama produk: ketik bebas atau pilih dari persediaan (datalist).
   // Cocok persis dengan master → produkId terisi + satuan/harga terisi otomatis.
   const produk = useProduk();
+  const { list: akunList, loading: akunLoading } = useAkunPembelian(Boolean(showAkun));
+  const akunPersediaan = akunList.filter(isAkunPersediaanPembelian);
+  const akunBeban = akunList.filter(isAkunBebanPembelian);
+
   const tambahBaris = () =>
-    setItems([...items, { key: Date.now() + Math.random(), produkId: "", deskripsi: "", kuantitas: "1", unit: "", harga: "", diskon: "0" }]);
+    setItems([...items, { key: Date.now() + Math.random(), produkId: "", deskripsi: "", kuantitas: "1", unit: "", harga: "", diskon: "0", kodeAkun: "" }]);
   const ubah = (key: number, patch: Partial<ItemBaris>) =>
     setItems(items.map((it) => (it.key === key ? { ...it, ...patch } : it)));
 
+  // Isi akun default untuk baris produk yang belum punya akun (mis. prefill
+  // dari pesanan/penerimaan), setelah daftar COA aktif selesai dimuat.
+  useEffect(() => {
+    if (!showAkun || akunList.length === 0) return;
+    let berubah = false;
+    const next = items.map((it) => {
+      if (it.kodeAkun || !it.produkId) return it;
+      const p = produk.find((x) => x.id === it.produkId);
+      if (!p) return it;
+      const kodeAkun = pilihAkunDefaultPembelian(p, akunList);
+      if (!kodeAkun) return it;
+      berubah = true;
+      return { ...it, kodeAkun };
+    });
+    if (berubah) setItems(next);
+  }, [akunList, items, produk, setItems, showAkun]);
+
   const ubahNamaProduk = (key: number, nama: string) => {
+    const sebelumnya = items.find((it) => it.key === key);
     const cocok = produk.find((x) => x.namaBarang.trim().toLowerCase() === nama.trim().toLowerCase());
     if (cocok) {
-      ubah(key, { deskripsi: nama, produkId: cocok.id, unit: cocok.satuan, harga: String(cocok.hargaSatuan) });
+      const kodeAkun = showAkun ? pilihAkunDefaultPembelian(cocok, akunList) : "";
+      ubah(key, {
+        deskripsi: nama,
+        produkId: cocok.id,
+        unit: cocok.satuan,
+        harga: String(cocok.hargaSatuan),
+        ...(showAkun ? { kodeAkun } : {}),
+      });
     } else {
-      ubah(key, { deskripsi: nama, produkId: "" });
+      ubah(key, {
+        deskripsi: nama,
+        produkId: "",
+        ...(showAkun && sebelumnya?.produkId ? { kodeAkun: "" } : {}),
+      });
     }
   };
 
@@ -336,8 +430,9 @@ export function ItemsTable({
         Rincian Produk
       </div>
       <div className="space-y-3 p-4">
-        <div className="hidden gap-3 px-3 text-xs font-medium text-slate-500 sm:grid sm:grid-cols-[minmax(0,2fr)_88px_72px_132px_72px_128px_32px]">
+        <div className={`hidden gap-3 px-3 text-xs font-medium text-slate-500 sm:grid ${showAkun ? ITEM_GRID_DENGAN_AKUN : ITEM_GRID_TANPA_AKUN}`}>
           <span className="whitespace-nowrap">Nama Produk</span>
+          {showAkun && <span className="whitespace-nowrap">Akun Debit (COA)</span>}
           <span className="whitespace-nowrap text-right">Kuantitas</span>
           <span className="whitespace-nowrap">Unit</span>
           <span className="whitespace-nowrap text-right">Harga Satuan</span>
@@ -355,7 +450,7 @@ export function ItemsTable({
         {items.map((it) => (
           <div
             key={it.key}
-            className="grid grid-cols-2 gap-3 rounded-lg border border-slate-100 p-3 sm:grid-cols-[minmax(0,2fr)_88px_72px_132px_72px_128px_32px]"
+            className={`grid grid-cols-2 gap-3 rounded-lg border border-slate-100 p-3 ${showAkun ? ITEM_GRID_DENGAN_AKUN : ITEM_GRID_TANPA_AKUN}`}
           >
             <div className="col-span-2 sm:col-span-1">
               <span className="mb-1.5 block text-xs font-medium text-slate-600 sm:hidden">Nama Produk</span>
@@ -370,6 +465,44 @@ export function ItemsTable({
                 autoComplete="off"
               />
             </div>
+            {showAkun && (
+              <div className="col-span-2 sm:col-span-1">
+                <span className="mb-1.5 block text-xs font-medium text-slate-600 sm:hidden">Akun Debit (COA)</span>
+                <Select
+                  value={it.kodeAkun ?? ""}
+                  onChange={(e) => ubah(it.key, { kodeAkun: e.target.value })}
+                  required
+                  disabled={locked || akunLoading}
+                  className="h-10"
+                >
+                  <option value="">
+                    {akunLoading
+                      ? "Memuat akun..."
+                      : akunList.length === 0
+                        ? "Belum ada akun COA"
+                        : "Pilih akun"}
+                  </option>
+                  {akunPersediaan.length > 0 && (
+                    <optgroup label="Persediaan">
+                      {akunPersediaan.map((a) => (
+                        <option key={a.kode} value={a.kode}>
+                          {labelAkunPembelian(a)}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {akunBeban.length > 0 && (
+                    <optgroup label="Beban">
+                      {akunBeban.map((a) => (
+                        <option key={a.kode} value={a.kode}>
+                          {labelAkunPembelian(a)}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </Select>
+              </div>
+            )}
             <div>
               <span className="mb-1.5 block text-xs font-medium text-slate-600 sm:hidden">Kuantitas</span>
               <Input type="number" min="0" step="any" value={it.kuantitas} onChange={(e) => ubah(it.key, { kuantitas: e.target.value })} required disabled={locked} className="text-right" />
@@ -579,6 +712,10 @@ export function FakturForm({ initial, title, subtitle, referensiIds, asalLabel }
     try {
       if (!header.supplierId) throw new Error("Supplier wajib dipilih");
       if (!header.syarat.trim()) throw new Error("Syarat pembayaran wajib dipilih");
+      const tanpaAkun = items.find((it) => !it.kodeAkun?.trim());
+      if (tanpaAkun) {
+        throw new Error(`Pilih akun COA debit untuk baris "${tanpaAkun.deskripsi.trim() || "tanpa nama"}"`);
+      }
       const payload = {
         ...(isEdit ? {} : { supplierId: header.supplierId }),
         ...(!isEdit && referensiIds && referensiIds.length > 0 ? { referensiIds } : {}),
@@ -592,8 +729,7 @@ export function FakturForm({ initial, title, subtitle, referensiIds, asalLabel }
         tag: header.tag.trim() || undefined,
         pesan: header.pesan.trim() || undefined,
         memo: header.memo.trim() || undefined,
-        // Tanpa kodeAkun: akun DEBIT ditentukan otomatis di backend
-        // (produk master → persediaan 1105/1106/1107, selain itu → 5402).
+        // Akun DEBIT per baris dipilih dari COA aktif (persediaan atau beban).
         items: items.map((it) => ({
           produkId: it.produkId || undefined,
           deskripsi: it.deskripsi.trim(),
@@ -601,6 +737,7 @@ export function FakturForm({ initial, title, subtitle, referensiIds, asalLabel }
           unit: it.unit.trim(),
           harga: Number(it.harga),
           diskonPersen: Number(it.diskon) || 0,
+          kodeAkun: it.kodeAkun?.trim() || undefined,
         })),
         ...(lampiran.filter((l) => !l.id).length > 0
           ? { lampiran: lampiran.filter((l) => !l.id).map(({ fileName, fileUrl, fileType, fileSize }) => ({ fileName, fileUrl, fileType, fileSize })) }
@@ -703,7 +840,11 @@ export function FakturForm({ initial, title, subtitle, referensiIds, asalLabel }
               <Input value={header.tag} onChange={(e) => set("tag", e.target.value)} placeholder="Tag transaksi (opsional)" maxLength={100} />
             </Field>
           </div>
-          <ItemsTable items={items} setItems={setItems} locked={initial?.lockedTotal ?? false} />
+          <ItemsTable items={items} setItems={setItems} locked={initial?.lockedTotal ?? false} showAkun />
+          <p className="text-[11px] text-slate-500">
+            Akun debit per baris: pilih akun Persediaan untuk barang yang masuk stok, atau akun Beban untuk
+            pengeluaran. Tidak ada pemaksaan ke akun 5402.
+          </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Pesan">
               <Textarea value={header.pesan} onChange={(e) => set("pesan", e.target.value)} placeholder="Pesan untuk supplier (opsional)" />

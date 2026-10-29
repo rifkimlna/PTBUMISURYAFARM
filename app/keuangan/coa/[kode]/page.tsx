@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CoaDetail } from "@/components/admin/coa-detail";
@@ -31,16 +33,11 @@ export default async function CoaDetailPage({ params }: PageProps) {
         initialData={rows.map((d) => ({
           id: d.id,
           tanggal: d.tanggal,
-          tipe: d.tipe as "PEMASUKAN" | "PENGELUARAN" | "TRANSFER",
-          kategori: d.kategori,
-          kodeAkun: d.kodeAkun,
-          sumberDana: d.sumberDana,
-          sumberDanaTujuan: d.sumberDanaTujuan,
-          jumlah: d.jumlah,
-          keterangan: d.keterangan,
-          admin: { nama: d.adminNama },
-          buktiCount: d.buktiCount,
-          arah: d.arah,
+          transaksi: d.transaksi,
+          noTransaksi: d.noTransaksi,
+          debit: d.debit,
+          kredit: d.kredit,
+          saldo: d.saldo,
         }))}
         initialTotal={total}
         initialSummary={summary}

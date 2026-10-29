@@ -442,7 +442,7 @@ function LabaRugiSection() {
   return (
     <SectionShell
       title="Laba Rugi"
-      desc="Pendapatan vs beban basis kas dari transaksi Kas & Bank pada periode."
+      desc="Pendapatan vs beban basis akrual, sama dengan Laporan Laba Rugi."
       filter={<><PeriodeSelect value={periode} onChange={setPeriode} /><ViewToggle view={view} onChange={setView} /></>}
     >
       <StateMsg loading={loading} error={error} />
@@ -667,7 +667,7 @@ function KasSection() {
               <div className="mt-1 text-xl font-semibold tabular-nums text-slate-900">Rp {formatRupiah(data.saldoBank)}</div>
             </div>
             <div className="rounded-xl border border-green-200 bg-green-50 p-4">
-              <div className="text-xs text-slate-500">Saldo di Jurnal</div>
+              <div className="text-xs text-slate-500">Saldo Kas & Bank (dari transaksi)</div>
               <div className="mt-1 text-xl font-semibold tabular-nums text-green-700">Rp {formatRupiah(data.saldoJurnal)}</div>
             </div>
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">

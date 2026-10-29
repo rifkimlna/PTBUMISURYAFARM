@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { prisma } from "@/lib/prisma";
 import { PembelianContent } from "@/components/admin/pembelian-content";
 
@@ -25,51 +27,68 @@ export default async function PembelianPage({
   awal30Hari.setDate(awal30Hari.getDate() - 30);
   awal30Hari.setHours(0, 0, 0, 0);
 
-  const [rows, docs, kirim, semuaReferensi] = await Promise.all([
-    prisma.fakturPembelian.findMany({
-      orderBy: { tanggal: "desc" },
-      take: 100,
-      include: {
-        supplier: { select: { nama: true } },
-        tagihan: { select: { id: true, status: true, sisa: true } },
-      },
-    }),
-    prisma.dokumenPembelian.findMany({
-      where: { tipe: { in: ["PESANAN", "PENAWARAN", "PERMINTAAN", "TUKAR_FAKTUR"] } },
-      orderBy: { tanggal: "desc" },
-      take: 100,
-      include: {
-        supplier: { select: { nama: true } },
-        _count: { select: { pengiriman: true } },
-      },
-    }),
-    prisma.pengirimanPembelian.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 100,
-      include: {
-        supplier: { select: { nama: true } },
-        pesanan: { select: { id: true, noDokumen: true } },
-        _count: { select: { items: true } },
-      },
-    }),
-    prisma.dokumenPembelian.findMany({
-      take: 500,
-      orderBy: { tanggal: "desc" },
-      select: { tipe: true, referensiIds: true },
-    }),
-  ]);
+  let dbError = false;
+  let rows: any[] = [];
+  let docs: any[] = [];
+  let kirim: any[] = [];
+  let semuaReferensi: any[] = [];
+
+  try {
+    [rows, docs, kirim, semuaReferensi] = await Promise.all([
+      prisma.fakturPembelian.findMany({
+        orderBy: { tanggal: "desc" },
+        take: 100,
+        include: {
+          supplier: { select: { nama: true } },
+          tagihan: { select: { id: true, status: true, sisa: true } },
+        },
+      }),
+      prisma.dokumenPembelian.findMany({
+        where: { tipe: { in: ["PESANAN", "PENAWARAN", "PERMINTAAN", "TUKAR_FAKTUR"] } },
+        orderBy: { tanggal: "desc" },
+        take: 100,
+        include: {
+          supplier: { select: { nama: true } },
+          _count: { select: { pengiriman: true } },
+        },
+      }),
+      prisma.pengirimanPembelian.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 100,
+        include: {
+          supplier: { select: { nama: true } },
+          pesanan: { select: { id: true, noDokumen: true } },
+          _count: { select: { items: true } },
+        },
+      }),
+      prisma.dokumenPembelian.findMany({
+        take: 500,
+        orderBy: { tanggal: "desc" },
+        select: { tipe: true, referensiIds: true },
+      }),
+    ]);
+  } catch (e) {
+    console.error("[keuangan/pembelian] database tidak terjangkau:", e instanceof Error ? e.message : e);
+    dbError = true;
+  }
 
   // Total Tukar Faktur = jumlah sisa utang yang dirujuk. Dokumen lama bisa
   // tersimpan dengan total 0, jadi dihitung ulang saat tampil sebagai cadangan.
   const tukarReferensiIds = docs.filter((d) => d.tipe === "TUKAR_FAKTUR").flatMap((d) => d.referensiIds);
   const tukarTagihan =
     tukarReferensiIds.length > 0
-      ? await prisma.tagihan.findMany({
-          where: { id: { in: tukarReferensiIds } },
-          select: { id: true, sisa: true },
-        })
+      ? (() => {
+          try {
+            return prisma.tagihan.findMany({
+              where: { id: { in: tukarReferensiIds } },
+              select: { id: true, sisa: true },
+            });
+          } catch {
+            return Promise.resolve([]);
+          }
+        })()
       : [];
-  const sisaRujukanMap = new Map(tukarTagihan.map((t) => [t.id, Number(t.sisa)]));
+  const sisaRujukanMap = new Map((await tukarTagihan).map((t) => [t.id, Number(t.sisa)]));
 
   // Himpunan id yang sudah dirujuk dokumen turunan / faktur.
   const dirujukDokumen = new Set<string>();
@@ -122,6 +141,12 @@ export default async function PembelianPage({
 
   return (
     <div className="space-y-6">
+      {dbError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <div className="text-sm font-medium text-red-800">⚠️ Database tidak terhubung — data pembelian mungkin kosong.</div>
+          <div className="mt-1 text-xs text-red-600">Cek DATABASE_URL di Vercel Environment Variables lalu redeploy.</div>
+        </div>
+      )}
       <PembelianContent
         initialTab={initialTab}
         summary={{
@@ -165,7 +190,7 @@ export default async function PembelianPage({
             status,
             total:
               d.tipe === "TUKAR_FAKTUR"
-                ? d.referensiIds.reduce((s, id) => s + (sisaRujukanMap.get(id) ?? 0), 0)
+                ? d.referensiIds.reduce((s: number, id: string) => s + (sisaRujukanMap.get(id) ?? 0), 0)
                 : Number(d.total),
           };
         })}

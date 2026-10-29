@@ -39,7 +39,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     for (const k of ["namaPohon", "koordinat", "pemupukan", "pengobatan"] as const) {
       if ((data as any)[k] === "") (data as any)[k] = null;
     }
-    if (parsed.tinggiCm !== undefined || parsed.lingkarBatangCm !== undefined || parsed.phTanah !== undefined) {
+    if (parsed.tinggiM !== undefined || parsed.lingkarBatangCm !== undefined || parsed.phTanah !== undefined) {
       data.diukurPada = new Date();
     }
     // Parse koordinat text into numeric lat/lng

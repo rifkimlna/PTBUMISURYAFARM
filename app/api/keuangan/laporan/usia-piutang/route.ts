@@ -12,6 +12,7 @@ import {
   buildXlsx,
   usiaNamaFile,
   snapshotKeSheetUP,
+  snapshotKeSheetUPRingkasan,
 } from "@/lib/usia-piutang-export";
 
 // GET /api/keuangan/laporan/usia-piutang?periode=hari-ini&tanggal=&format=json|pdf|xlsx
@@ -50,7 +51,10 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const buf = buildXlsx([snapshotKeSheetUP(snapshot, "Usia Piutang")]);
+    const buf = buildXlsx([
+      snapshotKeSheetUPRingkasan(snapshot, "Ringkasan Aging"),
+      snapshotKeSheetUP(snapshot, "Usia Piutang"),
+    ]);
     const name = usiaNamaFile("xlsx", snapshot.tanggal);
     return new NextResponse(new Uint8Array(buf), {
       headers: {

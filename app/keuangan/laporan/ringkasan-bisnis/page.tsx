@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { RingkasanBisnisContent } from "@/components/admin/ringkasan-bisnis-content";
 
 // Laporan → Ringkasan Bisnis PT Bumi Surya Farm (data aktual database, tanpa dummy).

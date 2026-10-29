@@ -293,6 +293,15 @@ function snapshotKeLines(s: AnggaranDetailSnapshot): PdfLine[] {
       });
     }
   }
+  if (s.catatan.length > 0) {
+    lines.push({ kind: "left", text: "", size: 8, bold: false });
+    lines.push({ kind: "left", text: "Catatan:", size: 8, bold: true });
+    for (const c of s.catatan) {
+      for (const w of bungkusKata(`- ${c}`, 110)) {
+        lines.push({ kind: "left", text: w, size: 7.5, bold: false });
+      }
+    }
+  }
   return lines;
 }
 

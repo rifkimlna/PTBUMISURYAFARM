@@ -182,7 +182,6 @@ function SnapshotView({ s }: { s: NeracaSnapshot }) {
       <KelompokCard kelompok={s.kewajibanLancar} />
       <TotalRow label="Total Kewajiban" value={s.totalKewajiban} />
       <KelompokCard kelompok={s.modal} />
-      <TotalRow label="Total Modal Pemilik" value={s.totalModal} />
       <TotalRow label="Total Kewajiban dan Modal" value={s.totalKewajibanModal} strong />
 
       {Math.round(s.selisih) !== 0 && (

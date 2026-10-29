@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
@@ -56,6 +58,7 @@ export default async function UbahFakturPage({
       unit: it.unit,
       harga: String(Number(it.harga)),
       diskon: String(Number(it.diskonPersen)),
+      kodeAkun: it.kodeAkun ?? "",
     })),
     lampiran: faktur.lampiran.map((l) => ({
       key: l.id,

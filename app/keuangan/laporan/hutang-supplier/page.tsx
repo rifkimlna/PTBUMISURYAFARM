@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { HutangSupplierContent } from "@/components/admin/hutang-supplier-content";
 
 // Laporan → Hutang Supplier PT Bumi Surya Farm (data aktual database, tanpa dummy).

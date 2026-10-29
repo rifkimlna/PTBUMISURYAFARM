@@ -148,7 +148,12 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 
   // Hapus dalam transaksi: bila baris ini pembayaran tagihan, sisa/status
   // tagihan dihitung ulang dari pembayaran yang tersisa (tidak basi).
+  // Jika transaksi terhubung ke Biaya, hapus Biaya agar tidak yatim.
   await prisma.$transaction(async (tx) => {
+    const biaya = await tx.biaya.findUnique({ where: { transaksiKasId: id } });
+    if (biaya) {
+      await tx.biaya.delete({ where: { id: biaya.id } });
+    }
     await tx.transaksiKas.delete({ where: { id } });
     if (exists.tagihanId) {
       await sinkronTagihan(tx, exists.tagihanId);

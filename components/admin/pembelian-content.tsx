@@ -11,6 +11,7 @@ import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import {
   ArrowLeftRight,
   ChevronDown,
@@ -549,6 +550,9 @@ export function PembelianContent({
   const [kirimSearch, setKirimSearch] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
+  const [deleteFaktur, setDeleteFaktur] = useState<FakturRow|null>(null);
+  const [deleteDokumenBeli, setDeleteDokumenBeli] = useState<DokumenBeliRow|null>(null);
+  const [deleteKirimBeli, setDeleteKirimBeli] = useState<PengirimanBeliRow|null>(null);
   const [dokDetailRow, setDokDetailRow] = useState<DokumenBeliRow | null>(null);
   const [dokDetailData, setDokDetailData] = useState<any>(null);
   const [dokDetailLoading, setDokDetailLoading] = useState(false);
@@ -639,19 +643,23 @@ export function PembelianContent({
     });
   }, [faktur, status, search]);
 
-  const hapusFaktur = async (row: FakturRow) => {
-    if (!window.confirm(`Hapus faktur ${row.noFaktur} dari ${row.supplier} sebesar Rp ${formatRupiah(row.total)}?`)) {
-      return;
-    }
-    setDeletingId(row.id);
+  const hapusFaktur = (row: FakturRow) => {
+    setDeleteFaktur(row);
+  };
+
+  const confirmDeleteFaktur = async () => {
+    if (!deleteFaktur) return;
+    setDeletingId(deleteFaktur.id);
     setActionError("");
     try {
-      const res = await fetch(`/api/pembelian/faktur/${encodeURIComponent(row.id)}`, { method: "DELETE" });
+      const res = await fetch(`/api/pembelian/faktur/${encodeURIComponent(deleteFaktur.id)}`, { method: "DELETE" });
       const result = await res.json().catch(() => ({ message: "Gagal menghapus faktur" }));
       if (!res.ok) throw new Error(result.message || "Gagal menghapus faktur");
       router.refresh();
+      setDeleteFaktur(null);
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "Gagal menghapus faktur");
+      throw e;
     } finally {
       setDeletingId(null);
     }
@@ -688,33 +696,45 @@ export function PembelianContent({
     }
   };
 
-  const hapusDokumenRow = async (row: DokumenBeliRow) => {
-    if (!window.confirm(`Hapus ${row.noDokumen} — ${row.pihak}?`)) return;
-    setDeletingId(row.id);
+  const hapusDokumenRow = (row: DokumenBeliRow) => {
+    setDeleteDokumenBeli(row);
+  };
+
+  const confirmDeleteDokumenBeli = async () => {
+    if (!deleteDokumenBeli) return;
+    setDeletingId(deleteDokumenBeli.id);
     setActionError("");
     try {
-      const res = await fetch(`/api/pembelian/dokumen/${encodeURIComponent(row.id)}`, { method: "DELETE" });
+      const res = await fetch(`/api/pembelian/dokumen/${encodeURIComponent(deleteDokumenBeli.id)}`, { method: "DELETE" });
       const result = await res.json().catch(() => ({ message: "Gagal menghapus dokumen" }));
       if (!res.ok) throw new Error(result.message || "Gagal menghapus dokumen");
       router.refresh();
+      setDeleteDokumenBeli(null);
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "Gagal menghapus dokumen");
+      throw e;
     } finally {
       setDeletingId(null);
     }
   };
 
-  const hapusKirim = async (row: PengirimanBeliRow) => {
-    if (!window.confirm(`Hapus penerimaan ${row.noPengiriman}? Tidak memengaruhi keuangan.`)) return;
-    setDeletingId(row.id);
+  const hapusKirim = (row: PengirimanBeliRow) => {
+    setDeleteKirimBeli(row);
+  };
+
+  const confirmDeleteKirimBeli = async () => {
+    if (!deleteKirimBeli) return;
+    setDeletingId(deleteKirimBeli.id);
     setActionError("");
     try {
-      const res = await fetch(`/api/pembelian/pengiriman/${encodeURIComponent(row.id)}`, { method: "DELETE" });
+      const res = await fetch(`/api/pembelian/pengiriman/${encodeURIComponent(deleteKirimBeli.id)}`, { method: "DELETE" });
       const result = await res.json().catch(() => ({ message: "Gagal menghapus pengiriman" }));
       if (!res.ok) throw new Error(result.message || "Gagal menghapus pengiriman");
       router.refresh();
+      setDeleteKirimBeli(null);
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "Gagal menghapus pengiriman");
+      throw e;
     } finally {
       setDeletingId(null);
     }
@@ -1484,6 +1504,29 @@ export function PembelianContent({
         Alur: Permintaan → Penawaran → Pesanan Pembelian → Pengiriman (Penerimaan) → Faktur Pembelian → Utang → Pembayaran (Hutang & Piutang) → Kas & Bank → COA.
         Faktur dapat dibuat langsung tanpa melalui pesanan.
       </p>
+
+      <ConfirmDeleteDialog
+        open={!!deleteFaktur}
+        onOpenChange={(v) => { if (!v) setDeleteFaktur(null); }}
+        itemName={`faktur ${deleteFaktur?.noFaktur ?? ''}`}
+        description={`Anda akan menghapus faktur ${deleteFaktur?.noFaktur ?? ''} dari ${deleteFaktur?.supplier ?? ''} sebesar Rp ${formatRupiah(deleteFaktur?.total ?? 0)}.`}
+        onConfirm={confirmDeleteFaktur}
+      />
+      <ConfirmDeleteDialog
+        open={!!deleteDokumenBeli}
+        onOpenChange={(v) => { if (!v) setDeleteDokumenBeli(null); }}
+        itemName={`dokumen ${deleteDokumenBeli?.noDokumen ?? ''}`}
+        description={`Anda akan menghapus ${deleteDokumenBeli?.noDokumen ?? ''} — ${deleteDokumenBeli?.pihak ?? ''}.`}
+        onConfirm={confirmDeleteDokumenBeli}
+      />
+      <ConfirmDeleteDialog
+        open={!!deleteKirimBeli}
+        onOpenChange={(v) => { if (!v) setDeleteKirimBeli(null); }}
+        itemName={`penerimaan ${deleteKirimBeli?.noPengiriman ?? ''}`}
+        description={`Anda akan menghapus penerimaan ${deleteKirimBeli?.noPengiriman ?? ''}.`}
+        warning="Tidak memengaruhi keuangan."
+        onConfirm={confirmDeleteKirimBeli}
+      />
     </div>
   );
 }

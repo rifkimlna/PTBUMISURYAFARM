@@ -34,7 +34,7 @@ const menus: { label: string; href?: string; subs?: Sub[] }[] = [
     ],
   },
   { label: "Kontak", href: "/#kontak" },
-  { label: "Scan", href: "/scan" },
+  { label: "Karir", href: "/karir" },
 ];
 
 export function PublicNavbar() {
@@ -72,16 +72,14 @@ export function PublicNavbar() {
   }, [open]);
 
   return (
-    <header ref={navRef} className="sticky top-0 z-40 w-full border-b border-slate-100 bg-white">
+    <>
+      {/* Spacer agar konten tidak tertutup navbar fixed */}
+      <div className="h-[56px] sm:h-[60px]" aria-hidden />
+      <header ref={navRef} className="fixed top-0 left-0 right-0 z-40 w-full border-b border-green-900 bg-green-800 shadow-md">
       <div className="mx-auto flex h-[56px] sm:h-[60px] max-w-[1280px] items-center justify-between px-4 sm:px-6 lg:px-8 gap-2">
         <Link href="/" className="flex items-center gap-2.5 shrink-0">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-700 text-white shrink-0">
-            <Leaf className="h-4 w-4" />
-          </div>
-          <div className="leading-none">
-            <div className="text-[11px] sm:text-[13px] font-semibold tracking-tight text-slate-900">BUMI SURYA</div>
-            <div className="text-[9px] sm:text-[10px] font-medium tracking-[0.18em] text-green-800">FARM</div>
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="Logo Bumi Surya Farm" className="h-8 sm:h-9 w-auto max-w-[130px] object-contain shrink-0" />
         </Link>
 
         {/* Desktop nav - now CLICK based, not hover-only (hover broken on touch/ngrok) */}
@@ -93,7 +91,7 @@ export function PublicNavbar() {
                   type="button"
                   onClick={() => setDesktopOpen(desktopOpen === m.label ? null : m.label)}
                   aria-expanded={desktopOpen === m.label}
-                  className="flex items-center gap-1 rounded-full px-3 py-2 text-[13px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 cursor-pointer select-none"
+                  className="flex items-center gap-1 rounded-full px-3 py-2 text-[13px] font-medium text-white hover:bg-white/10 hover:text-white cursor-pointer select-none"
                 >
                   {m.label} <ChevronDown className={`h-3 w-3 opacity-60 transition-transform ${desktopOpen === m.label ? "rotate-180" : ""}`} />
                 </button>
@@ -119,7 +117,7 @@ export function PublicNavbar() {
                 )}
               </div>
             ) : (
-              <Link key={m.label} href={m.href!} className="rounded-full px-3 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900">
+              <Link key={m.label} href={m.href!} className="rounded-full px-3 py-2 text-[13px] font-medium text-white hover:bg-white/10 hover:text-white">
                 {m.label}
               </Link>
             )
@@ -127,14 +125,11 @@ export function PublicNavbar() {
         </nav>
 
         <div className="hidden items-center gap-2 lg:flex shrink-0">
-          <a href="https://wa.me/628123456789" target="_blank" rel="noopener noreferrer" className="hidden xl:flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 px-2">
-            <Phone className="h-3 w-3" /> +62 812
-          </a>
-          <Link href="/scan" className="rounded-full px-3 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 flex items-center gap-1.5">
+          <Link href="/scan" className="rounded-full px-3 py-2 text-[13px] font-medium text-white hover:bg-white/10 hover:text-white flex items-center gap-1.5">
             <ScanLine className="h-3.5 w-3.5" /> Scan
           </Link>
           <Link href="/login">
-            <Button size="sm" className="rounded-full px-5 cursor-pointer">
+            <Button size="sm" className="rounded-full px-5 cursor-pointer bg-white text-green-800 hover:bg-green-50 hover:text-green-900">
               Login
             </Button>
           </Link>
@@ -145,7 +140,7 @@ export function PublicNavbar() {
           type="button"
           aria-label={open ? "Tutup menu" : "Buka menu"}
           aria-expanded={open}
-          className="lg:hidden p-2 -mr-2 rounded-full hover:bg-slate-50 active:bg-slate-100 cursor-pointer touch-manipulation"
+          className="lg:hidden p-2 -mr-2 rounded-full hover:bg-white/10 active:bg-white/15 text-white cursor-pointer touch-manipulation"
           onClick={() => setOpen(!open)}
         >
           {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -154,16 +149,16 @@ export function PublicNavbar() {
 
       {/* Mobile drawer - full width, scrollable, proper z-index for ngrok */}
       {open && (
-        <div className="lg:hidden border-t border-slate-100 bg-white max-h-[calc(100dvh-56px)] overflow-auto overscroll-contain">
+        <div className="lg:hidden border-t border-green-900 bg-green-800 max-h-[calc(100dvh-56px)] overflow-auto overscroll-contain">
           <div className="px-4 sm:px-6 py-4 space-y-1">
             {menus.map((m) => (
-              <div key={m.label} className="border-b border-slate-50 last:border-0">
+              <div key={m.label} className="border-b border-green-500/30 last:border-0">
                 {m.subs ? (
                   <>
                     <button
                       type="button"
                       onClick={() => setOpenSub(openSub === m.label ? null : m.label)}
-                      className="flex w-full items-center justify-between py-3.5 text-sm font-medium text-slate-900 cursor-pointer touch-manipulation"
+                      className="flex w-full items-center justify-between py-3.5 text-sm font-medium text-white cursor-pointer touch-manipulation"
                     >
                       {m.label} <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${openSub === m.label ? "rotate-180" : ""}`} />
                     </button>
@@ -182,7 +177,7 @@ export function PublicNavbar() {
                     )}
                   </>
                 ) : (
-                  <Link href={m.href!} onClick={() => setOpen(false)} className="block py-3.5 text-sm font-medium text-slate-900">
+                  <Link href={m.href!} onClick={() => setOpen(false)} className="block py-3.5 text-sm font-medium text-white">
                     {m.label}
                   </Link>
                 )}
@@ -203,5 +198,6 @@ export function PublicNavbar() {
         </div>
       )}
     </header>
+    </>
   );
 }

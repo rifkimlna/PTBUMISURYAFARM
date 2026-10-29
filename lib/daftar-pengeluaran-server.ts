@@ -123,7 +123,7 @@ export async function getDaftarPengeluaranSnapshot(
   const dalam = { gte: start, lte: end };
   const num = (v: unknown) => Math.round(Number(v ?? 0));
 
-  const [biayaList, kasKeluar, asetKasIds, biayaKasIds, akunDb] = await Promise.all([
+  const [biayaList, kasKeluar, asetKasIds, biayaKasIds, akunDb, fakturItems] = await Promise.all([
     prisma.biaya.findMany({
       where: { tanggal: dalam },
       select: {
@@ -156,6 +156,13 @@ export async function getDaftarPengeluaranSnapshot(
     prisma.akunCOA.findMany({
       where: { isActive: true },
       select: { kode: true, nama: true, golongan: true },
+    }),
+    prisma.fakturPembelianItem.findMany({
+      where: {
+        faktur: { tanggal: dalam },
+        kodeAkun: { startsWith: "5" },
+      },
+      select: { jumlah: true },
     }),
   ]);
 
@@ -221,12 +228,18 @@ export async function getDaftarPengeluaranSnapshot(
 
   const grandTotal = baris.reduce((s, b) => s + b.jumlah, 0);
 
+  const bebanFaktur = fakturItems.reduce((s, i) => s + num(i.jumlah), 0);
+  const totalBebanLabaRugi = grandTotal + bebanFaktur;
+
   const catatan: string[] = [];
   if (tanpaKode) {
     catatan.push("Ada pengeluaran tanpa mapping COA — kategori disajikan sesuai data tersimpan.");
   }
+  catatan.push("Laporan ini menampilkan daftar pengeluaran biaya/kas yang tercatat. Bukan seluruh beban akuntansi.");
   catatan.push("Transfer antar kas/bank, pelunasan hutang usaha, pembelian persediaan, dan akuisisi aset tetap tidak termasuk pengeluaran di laporan ini.");
   catatan.push("Satu pengeluaran dihitung tepat satu kali (tanpa transaksi ganda).");
+  catatan.push(`Rekonsiliasi ke Laba Rugi: Total biaya dalam laporan Rp ${grandTotal.toLocaleString("id-ID")}, beban faktur pembelian belum tercakup Rp ${bebanFaktur.toLocaleString("id-ID")}, total beban sesuai Laba Rugi Rp ${totalBebanLabaRugi.toLocaleString("id-ID")}.`);
+  catatan.push("Beban faktur pembelian diakui akrual pada tanggal faktur dan tercermin di Laba Rugi, namun tidak termasuk dalam daftar pengeluaran kas/biaya ini.");
 
   return {
     periode,

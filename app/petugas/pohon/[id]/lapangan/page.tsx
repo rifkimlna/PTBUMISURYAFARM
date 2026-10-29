@@ -61,9 +61,9 @@ export default async function PetugasLapanganPage({ params }: { params: Promise<
             </a>
           )}
         </div>
-        {(pohon as any).tinggiCm != null || (pohon as any).phTanah != null ? (
+        {(pohon as any).tinggiM != null || (pohon as any).phTanah != null ? (
           <div className="mt-3 flex flex-wrap gap-1.5 text-xs">
-            {(pohon as any).tinggiCm != null && <span className="rounded-full bg-blue-50 border border-blue-100 px-2.5 py-1 font-medium text-blue-800">📏 {(pohon as any).tinggiCm}cm</span>}
+            {(pohon as any).tinggiM != null && <span className="rounded-full bg-blue-50 border border-blue-100 px-2.5 py-1 font-medium text-blue-800">📏 {Number((pohon as any).tinggiM).toFixed(2)}m</span>}
             {(pohon as any).lingkarBatangCm != null && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">Ø {Number((pohon as any).lingkarBatangCm).toFixed(0)}cm</span>}
             {(pohon as any).phTanah != null && <span className="rounded-full bg-amber-50 border border-amber-100 px-2.5 py-1 font-medium text-amber-800">🧪 pH {Number((pohon as any).phTanah).toFixed(1)}</span>}
           </div>
@@ -77,7 +77,7 @@ export default async function PetugasLapanganPage({ params }: { params: Promise<
           pemupukan: (pohon as any).pemupukan || "",
           pengobatan: (pohon as any).pengobatan || "",
           status: pohon.status as string,
-          tinggiCm: (pohon as any).tinggiCm != null ? String((pohon as any).tinggiCm) : "",
+          tinggiM: (pohon as any).tinggiM != null ? String((pohon as any).tinggiM) : "",
           lingkarBatangCm: (pohon as any).lingkarBatangCm != null ? String((pohon as any).lingkarBatangCm) : "",
           phTanah: (pohon as any).phTanah != null ? String((pohon as any).phTanah) : "",
         }}

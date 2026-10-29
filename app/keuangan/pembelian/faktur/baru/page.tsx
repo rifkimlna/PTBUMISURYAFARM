@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
@@ -63,6 +65,7 @@ export default async function FakturBaruPage({
         unit: it.unit,
         harga: String(Number(it.harga)),
         diskon: String(Number(it.diskonPersen)),
+        kodeAkun: it.kodeAkun ?? "",
       })),
       lampiran: [],
       lockedTotal: false,
@@ -73,7 +76,7 @@ export default async function FakturBaruPage({
       where: { id: dariPengiriman },
       include: {
         supplier: true,
-        pesanan: { include: { supplier: true } },
+        pesanan: { include: { supplier: true, items: { orderBy: { id: "asc" } } } },
         items: { orderBy: { id: "asc" } },
       },
     });
@@ -95,15 +98,19 @@ export default async function FakturBaruPage({
         pesan: kirim.pesan ?? kirim.pesanan.pesan ?? "",
         memo: kirim.memo ?? kirim.pesanan.memo ?? "",
       },
-      items: kirim.items.map((it, i) => ({
-        key: i + 1,
-        produkId: "",
-        deskripsi: it.deskripsi,
-        kuantitas: String(Number(it.kuantitas)),
-        unit: it.unit,
-        harga: String(Number(it.harga)),
-        diskon: "0",
-      })),
+      items: kirim.items.map((it, i) => {
+        const asal = kirim.pesanan.items.find((p) => p.deskripsi === it.deskripsi) ?? kirim.pesanan.items[i];
+        return {
+          key: i + 1,
+          produkId: asal?.produkId ?? "",
+          deskripsi: it.deskripsi,
+          kuantitas: String(Number(it.kuantitas)),
+          unit: it.unit,
+          harga: String(Number(it.harga)),
+          diskon: "0",
+          kodeAkun: asal?.kodeAkun ?? "",
+        };
+      }),
       lampiran: [],
       lockedTotal: false,
       supplierNama: kirim.supplier.nama,

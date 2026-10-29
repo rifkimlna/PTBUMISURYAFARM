@@ -20,7 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { formatRupiah } from "@/lib/utils";
-import { STATIC_COA_PEMASUKAN, STATIC_COA_PENGELUARAN } from "@/lib/coa";
+import { isNonLabaRugiTag } from "@/lib/anggaran-tag";
 import {
   MONITOR_LIHAT_BALIK,
   MONITOR_TAMPIL_SETIAP,
@@ -39,9 +39,9 @@ import {
 //    periode + tabel Anggaran vs Aktual per section (expand/collapse).
 // Pembuatan/ubah anggaran (setup/tabel) dipertahankan apa adanya.
 
-// 4105 Penerimaan Piutang adalah mutasi neraca (bukan pendapatan baru) —
-// dikecualikan mengikuti logic laba rugi.
-const KODE_NON_LABA_RUGI = new Set(["4105"]);
+// Penerimaan Piutang dan Pelunasan Hutang adalah mutasi kas (bukan pendapatan/beban).
+// Akun seperti itu disingkirkan lewat TAG transaksi kas (TERIMA_PIUTANG / BAYAR_UTANG)
+// memakai fungsi bersama isNonLabaRugiTag - tanpa daftar kode akun.
 
 const URUTAN_GOLONGAN = [
   "Pendapatan Usaha",
@@ -53,7 +53,7 @@ const URUTAN_GOLONGAN = [
   "Pelunasan Hutang",
 ];
 
-type Akun = { kode: string; nama: string; kelompok: "Pendapatan" | "Beban"; golongan: string };
+type Akun = { kode: string; nama: string; kelompok: "Pendapatan" | "Beban"; golongan: string; tag: string | null };
 type Bulan = { tahun: number; bulan: number };
 type BudgetRow = { id: string; nama: string; tahunMulai: number; bulanMulai: number; durasi: number; updatedAt: string };
 
@@ -94,23 +94,6 @@ function rp(v: number) {
   const n = Math.round(Number(v) || 0);
   if (n < 0) return `(Rp ${formatRupiah(Math.abs(n))})`;
   return `Rp ${formatRupiah(n)}`;
-}
-
-function coaFallback(): Akun[] {
-  return [
-    ...STATIC_COA_PEMASUKAN.filter((a) => !KODE_NON_LABA_RUGI.has(a.kode)).map((a) => ({
-      kode: a.kode,
-      nama: a.nama,
-      kelompok: "Pendapatan" as const,
-      golongan: a.golongan,
-    })),
-    ...STATIC_COA_PENGELUARAN.map((a) => ({
-      kode: a.kode,
-      nama: a.nama,
-      kelompok: "Beban" as const,
-      golongan: a.golongan,
-    })),
-  ];
 }
 
 type MonitorFilter = {
@@ -173,7 +156,8 @@ function AnggaranLabaRugiIsi() {
   const [dl, setDl] = useState<"pdf" | "xlsx" | null>(null);
 
   // ---- Pembuatan/ubah anggaran (dipertahankan) ----
-  const [akun, setAkun] = useState<Akun[]>(coaFallback());
+  const [akun, setAkun] = useState<Akun[]>([]);
+  const [akunError, setAkunError] = useState("");
   const [nama, setNama] = useState("");
   const [mulai, setMulai] = useState("");
   const [hingga, setHingga] = useState("");
@@ -207,29 +191,32 @@ function AnggaranLabaRugiIsi() {
     };
   }, [reloadKey]);
 
-  // Daftar akun terbaru dari COA sistem (fallback statis bila API gagal).
+  // Daftar akun dari COA sistem; akun mutasi kas (ber-tag non laba rugi) disingkirkan.
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        const [p, b] = await Promise.all([
-          fetch("/api/keuangan/coa?kelompok=Pendapatan&isActive=true", { credentials: "include" }).then((r) => r.json()),
-          fetch("/api/keuangan/coa?kelompok=Beban&isActive=true", { credentials: "include" }).then((r) => r.json()),
-        ]);
-        const rows: Akun[] = [];
-        for (const j of [p, b]) {
-          if (j?.success && Array.isArray(j.data)) {
-            for (const a of j.data) {
-              if (KODE_NON_LABA_RUGI.has(a.kode)) continue;
-              rows.push({ kode: a.kode, nama: a.nama, kelompok: a.kelompok, golongan: a.golongan });
-            }
-          }
+    fetch("/api/keuangan/anggaran-laba-rugi/akun", { credentials: "include" })
+      .then((res) => res.json())
+      .then((j) => {
+        if (cancelled) return;
+        if (!j?.success || !Array.isArray(j.data)) {
+          setAkunError(j?.message || "Gagal memuat daftar akun");
+          return;
         }
-        if (!cancelled && rows.length > 0) setAkun(rows);
-      } catch {
-        // fallback statis sudah terpasang
-      }
-    })();
+        const rows: Akun[] = j.data
+          .filter((a: Akun) => !isNonLabaRugiTag(a.tag))
+          .map((a: Akun) => ({
+            kode: a.kode,
+            nama: a.nama,
+            kelompok: a.kelompok,
+            golongan: a.golongan,
+            tag: a.tag,
+          }));
+        setAkun(rows);
+        setAkunError("");
+      })
+      .catch(() => {
+        if (!cancelled) setAkunError("Gagal memuat daftar akun");
+      });
     return () => {
       cancelled = true;
     };
@@ -852,6 +839,7 @@ function AnggaranLabaRugiIsi() {
         </div>
 
         {tableError && <p className="text-center text-sm text-red-600">{tableError}</p>}
+        {akunError && <p className="text-center text-sm text-red-600">{akunError}</p>}
 
         <Card className="border-slate-200">
           <CardHeader className="border-b border-slate-100">
@@ -1044,7 +1032,7 @@ function AnggaranLabaRugiIsi() {
             </div>
             <p className="text-[11px] leading-relaxed text-slate-400">
               Profit (Loss) = Total Pendapatan − Total Beban, dihitung otomatis dari nominal yang diinput.
-              Akun 4105 (Penerimaan Piutang) tidak termasuk karena bukan pendapatan.
+              Penerimaan Piutang dan Pelunasan Hutang bukan pendapatan/beban sehingga tidak termasuk.
             </p>
           </CardContent>
         </Card>

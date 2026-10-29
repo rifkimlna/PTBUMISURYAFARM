@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { redirect } from "next/navigation";
 
 // Persediaan Barang kini menjadi modul Produk. Route lama dialihkan agar

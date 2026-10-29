@@ -160,6 +160,12 @@ function formatTgl(d: Date) {
   return d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
 }
 
+function parseYMD(s: string): Date {
+  const parts = s.split("-").map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) throw new Error("Tanggal tidak valid");
+  return new Date(parts[0], parts[1] - 1, parts[2]);
+}
+
 export function resolvePeriodeTanggal(
   periode: MutasiProdukPeriode,
   tanggalAwals?: string,
@@ -169,18 +175,14 @@ export function resolvePeriodeTanggal(
   let sampai: Date;
   if (periode === "custom") {
     if (!tanggalAwals || !tanggalAkhirs) throw new Error("Tanggal awal dan akhir wajib diisi");
-    dari = startOfDayLokal(new Date(tanggalAwals));
-    sampai = startOfDayLokal(new Date(tanggalAkhirs));
+    dari = startOfDayLokal(parseYMD(tanggalAwals));
+    sampai = startOfDayLokal(parseYMD(tanggalAkhirs));
     if (Number.isNaN(dari.getTime()) || Number.isNaN(sampai.getTime()))
       throw new Error("Tanggal tidak valid");
     if (dari > sampai) throw new Error("Tanggal awal tidak boleh lebih besar dari tanggal akhir");
   } else {
-    const now = new Date();
     dari = startOfDayLokal(awalUntukPeriode(periode));
     sampai = startOfDayLokal(akhirUntukPeriode(periode));
-    const today = startOfDayLokal(now);
-    if (dari > today) dari = today;
-    if (sampai > today) sampai = today;
   }
   const label = `Periode ${formatTgl(dari)} - ${formatTgl(sampai)}`;
   return { dari, sampai, label };

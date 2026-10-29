@@ -112,7 +112,7 @@ export function resolveNeracaSaldoRange(
 
 // ---------- Penyusunan neraca saldo ----------
 
-const KELOMPOK_URUTAN = ["Aset", "Kewajiban", "Ekuitas", "Pendapatan", "Beban"];
+const KELOMPOK_URUTAN = ["Aset", "Kewajiban", "Ekuitas", "Pendapatan", "HARGA POKOK PENJUALAN", "Beban", "Lainnya"];
 /** Label tampil: enum COA memakai `Modal`, laporan memakai `Ekuitas`. */
 const KELOMPOK_TAMPIL: Record<string, string> = {
   Aset: "Aset",
@@ -120,6 +120,8 @@ const KELOMPOK_TAMPIL: Record<string, string> = {
   Modal: "Ekuitas",
   Pendapatan: "Pendapatan",
   Beban: "Beban",
+  "HARGA POKOK PENJUALAN": "HARGA POKOK PENJUALAN",
+  Lainnya: "Lainnya",
 };
 const AWAL_EPOCH = new Date(2000, 0, 1);
 
@@ -172,7 +174,15 @@ export async function getNeracaSaldoSnapshot(
     const a = aggAwal.get(kode);
     const g = aggGerak.get(kode);
     const nama = m?.nama ?? a?.nama ?? g?.nama ?? `Akun ${kode}`;
-    const kelompokRaw = m?.kelompok ?? "";
+    let kelompokRaw = m?.kelompok ?? "";
+    // Penanganan akun pseudo yang tidak ada di COA
+    if (kode === "HPP") {
+      kelompokRaw = "HARGA POKOK PENJUALAN";
+    } else if (kode === "SALDO_AWAL") {
+      kelompokRaw = "Ekuitas";
+    } else if (!m) {
+      kelompokRaw = "Lainnya";
+    }
     const kelompok = KELOMPOK_TAMPIL[kelompokRaw] ?? kelompokRaw ?? "";
     const awalNet = (a?.debit ?? 0) - (a?.kredit ?? 0);
     const gerakD = g?.debit ?? 0;
@@ -223,7 +233,7 @@ export async function getNeracaSaldoSnapshot(
   const grand = jumlahkan(semuaBaris);
 
   const catatan: string[] = [
-    "Angka merupakan agregat kaki jurnal (debit/kredit) dari data TransaksiKas asli — setiap voucher seimbang.",
+    "Neraca Saldo bersumber dari seluruh Jurnal (transaksi kas, invoice penjualan, faktur pembelian, opname bernilai, dan HPP).",
     "Saldo awal = akumulasi jurnal sebelum periode; Pergerakan = jurnal dalam periode; Saldo akhir = saldo awal + pergerakan.",
     "Kelompok Modal pada COA ditampilkan sebagai Ekuitas. Hanya akun bersaldo atau bermutasi yang ditampilkan.",
   ];

@@ -5,16 +5,18 @@
 // Pelanggan (sumber yang sama: Tagihan PIUTANG − pembayaran per tanggal):
 // - Umur = tanggal laporan − tanggal jatuh tempo invoice (fallback tanggal
 //   invoice bila jatuh tempo kosong), dalam hari kalender.
-// - Bucket: umur <= 30 -> 1–30 Hari; 31–60; 61–90; > 90 -> > 90 Hari.
+// - Bucket: umur <= 0 (belum jatuh tempo / jatuh tempo tepat hari laporan) ->
+//   Belum Jatuh Tempo; 1–30; 31–60; 61–90; > 90 -> > 90 Hari.
+//   Perhitungan memakai satu fungsi bersama hitungAgingPiutang sehingga tabel,
+//   PDF, dan XLSX selalu konsisten.
 // - Total per pelanggan = jumlah seluruh sisa piutangnya.
 
-import { akhirUntukUsia } from "@/lib/usia-piutang-types";
+import { akhirUntukUsia, bucketAging, hitungAgingPiutang } from "@/lib/usia-piutang-types";
 import {
   getPiutangPelangganSnapshot,
   type PiutangBaris,
 } from "@/lib/piutang-pelanggan-server";
 import type {
-  KategoriAging,
   UsiaGrup,
   UsiaPiutangPeriode,
   UsiaPiutangSnapshot,
@@ -23,7 +25,10 @@ import type {
 export {
   USIA_PIUTANG_PERIODE,
   USIA_PIUTANG_PERIODE_LABEL,
+  KATEGORI_AGING,
   akhirUntukUsia,
+  hitungAgingPiutang,
+  kategoriAgingDariUmur,
 } from "@/lib/usia-piutang-types";
 export type {
   KategoriAging,
@@ -64,25 +69,20 @@ export function resolveUsiaTanggal(
   return { asOf, label: `Per ${fmtTgl(asOf)}` };
 }
 
-function kategoriOf(umur: number): KategoriAging {
-  if (umur <= 30) return "1 - 30 Hari";
-  if (umur <= 60) return "31 - 60 Hari";
-  if (umur <= 90) return "61 - 90 Hari";
-  return "> 90 Hari";
-}
-
 export async function getUsiaPiutangSnapshot(asOf: Date, label: string): Promise<UsiaPiutangSnapshot> {
   const dasar = await getPiutangPelangganSnapshot(asOf, label);
-  const basisHari = startOfDay(asOf).getTime();
 
   const grupMap = new Map<string, UsiaGrup>();
   let totalTransaksi = 0;
 
   const dorong = (pelanggan: string, b: PiutangBaris) => {
-    const basis = b.jatuhTempo ? startOfDay(new Date(b.jatuhTempo)) : startOfDay(new Date(b.tanggal));
-    const umur = Math.floor((basisHari - basis.getTime()) / 86400000);
-    const kategori = kategoriOf(umur);
-    const g = grupMap.get(pelanggan) ?? { pelanggan, baris: [], total: 0, b1: 0, b2: 0, b3: 0, b4: 0 };
+    const { umurHari, kategori } = hitungAgingPiutang({
+      tanggalLaporan: asOf,
+      jatuhTempo: b.jatuhTempo,
+      tanggalInvoice: b.tanggal,
+    });
+    const g =
+      grupMap.get(pelanggan) ?? { pelanggan, baris: [], total: 0, b0: 0, b1: 0, b2: 0, b3: 0, b4: 0 };
     g.baris.push({
       id: b.id,
       tanggal: b.tanggal,
@@ -91,14 +91,11 @@ export async function getUsiaPiutangSnapshot(asOf: Date, label: string): Promise
       deskripsi: b.deskripsi,
       jumlah: b.jumlah,
       sisa: b.sisa,
-      umurHari: umur,
+      umurHari,
       kategori,
     });
     g.total += b.sisa;
-    if (kategori === "1 - 30 Hari") g.b1 += b.sisa;
-    else if (kategori === "31 - 60 Hari") g.b2 += b.sisa;
-    else if (kategori === "61 - 90 Hari") g.b3 += b.sisa;
-    else g.b4 += b.sisa;
+    g[bucketAging(kategori)] += b.sisa;
     totalTransaksi += 1;
     grupMap.set(pelanggan, g);
   };
@@ -113,6 +110,7 @@ export async function getUsiaPiutangSnapshot(asOf: Date, label: string): Promise
     tanggal: asOf.toISOString(),
     grup,
     total: grup.reduce((s, g) => s + g.total, 0),
+    totalB0: grup.reduce((s, g) => s + g.b0, 0),
     totalB1: grup.reduce((s, g) => s + g.b1, 0),
     totalB2: grup.reduce((s, g) => s + g.b2, 0),
     totalB3: grup.reduce((s, g) => s + g.b3, 0),

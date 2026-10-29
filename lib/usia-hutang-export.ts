@@ -26,10 +26,11 @@ const PAGE_H = 595;
 const MARGIN = 36;
 
 const X_SUP = MARGIN;
-const X_TOTAL_R = 400;
-const X_B1_R = 490;
-const X_B2_R = 580;
-const X_B3_R = 670;
+const X_TOTAL_R = 350;
+const X_B0_R = 450;
+const X_B1_R = 550;
+const X_B2_R = 650;
+const X_B3_R = 750;
 const X_B4_R = PAGE_W - MARGIN;
 
 const HELV_W: Record<string, number> = {
@@ -70,7 +71,7 @@ type PdfLine =
   | { kind: "center"; text: string; size: number; bold: boolean }
   | { kind: "left"; text: string; size: number; bold: boolean }
   | { kind: "head" }
-  | { kind: "row"; sup: string; total: string; b1: string; b2: string; b3: string; b4: string; bold: boolean };
+  | { kind: "row"; sup: string; total: string; b0: string; b1: string; b2: string; b3: string; b4: string; bold: boolean };
 
 function snapshotKeLines(s: UsiaHutangSnapshot): PdfLine[] {
   const lines: PdfLine[] = [
@@ -89,6 +90,7 @@ function snapshotKeLines(s: UsiaHutangSnapshot): PdfLine[] {
       kind: "row",
       sup: potong(g.supplier, 55),
       total: formatIDRUsiaHutang(g.total),
+      b0: formatIDRUsiaHutang(g.b0),
       b1: formatIDRUsiaHutang(g.b1),
       b2: formatIDRUsiaHutang(g.b2),
       b3: formatIDRUsiaHutang(g.b3),
@@ -100,6 +102,7 @@ function snapshotKeLines(s: UsiaHutangSnapshot): PdfLine[] {
     kind: "row",
     sup: "TOTAL",
     total: formatIDRUsiaHutang(s.total),
+    b0: formatIDRUsiaHutang(s.totalB0),
     b1: formatIDRUsiaHutang(s.totalB1),
     b2: formatIDRUsiaHutang(s.totalB2),
     b3: formatIDRUsiaHutang(s.totalB3),
@@ -189,6 +192,7 @@ export function buildUsiaHutangPdf(snapshots: UsiaHutangSnapshot[]): Buffer {
         const bot = yTop - 13;
         stream += draw("Supplier", 7, true, X_SUP, bot);
         stream += drawRight("Total Hutang", 7, true, X_TOTAL_R, bot);
+        stream += drawRight("Belum Jatuh Tempo", 7, true, X_B0_R, bot);
         stream += drawRight("1 - 30 Hari", 7, true, X_B1_R, bot);
         stream += drawRight("31 - 60 Hari", 7, true, X_B2_R, bot);
         stream += drawRight("61 - 90 Hari", 7, true, X_B3_R, bot);
@@ -198,6 +202,7 @@ export function buildUsiaHutangPdf(snapshots: UsiaHutangSnapshot[]): Buffer {
         const base = yTop - size - 2;
         stream += draw(line.sup, size, line.bold, X_SUP, base);
         stream += drawRight(line.total, size, line.bold, X_TOTAL_R, base);
+        stream += drawRight(line.b0, size, line.bold, X_B0_R, base);
         stream += drawRight(line.b1, size, line.bold, X_B1_R, base);
         stream += drawRight(line.b2, size, line.bold, X_B2_R, base);
         stream += drawRight(line.b3, size, line.bold, X_B3_R, base);
@@ -242,6 +247,7 @@ export type XlsxSheet = { name: string; rows: XlsxCell[][]; widths?: number[] };
 const HEADER_UTAMA = [
   "Supplier",
   "Total Hutang",
+  "Belum Jatuh Tempo",
   "1 - 30 Hari",
   "31 - 60 Hari",
   "61 - 90 Hari",
@@ -262,6 +268,7 @@ export function snapshotKeSheetUH(s: UsiaHutangSnapshot, sheetName: string): Xls
     rows.push([
       { v: g.supplier },
       { v: Math.round(g.total), num: true },
+      { v: Math.round(g.b0), num: true },
       { v: Math.round(g.b1), num: true },
       { v: Math.round(g.b2), num: true },
       { v: Math.round(g.b3), num: true },
@@ -271,12 +278,13 @@ export function snapshotKeSheetUH(s: UsiaHutangSnapshot, sheetName: string): Xls
   rows.push([
     { v: "TOTAL", bold: true },
     { v: Math.round(s.total), bold: true, num: true },
+    { v: Math.round(s.totalB0), bold: true, num: true },
     { v: Math.round(s.totalB1), bold: true, num: true },
     { v: Math.round(s.totalB2), bold: true, num: true },
     { v: Math.round(s.totalB3), bold: true, num: true },
     { v: Math.round(s.totalB4), bold: true, num: true },
   ]);
-  return { name: sheetName.slice(0, 31), rows, widths: [30, 18, 14, 14, 14, 14] };
+  return { name: sheetName.slice(0, 31), rows, widths: [30, 18, 14, 14, 14, 14, 14] };
 }
 
 /** Sheet rincian faktur (umur & kategori aging) — pendamping ringkasan. */

@@ -13,9 +13,75 @@ import {
   type ProfitabilitasSnapshot,
 } from "@/lib/profitabilitas-produk-types";
 
-type Draft = { dari: string; sampai: string; produk: string; kategori: string };
+type Periode = "hari-ini" | "kemarin" | "pekan-ini" | "pekan-lalu" | "bulan-ini" | "bulan-lalu" | "kuartal-ini" | "kuartal-lalu" | "tahun-ini" | "tahun-lalu" | "custom";
+
+const PERIODE_LABEL: Record<Periode, string> = {
+  "hari-ini": "Hari ini",
+  "kemarin": "Kemarin",
+  "pekan-ini": "Pekan ini",
+  "pekan-lalu": "Pekan lalu",
+  "bulan-ini": "Bulan ini",
+  "bulan-lalu": "Bulan lalu",
+  "kuartal-ini": "Kuartal ini",
+  "kuartal-lalu": "Kuartal lalu",
+  "tahun-ini": "Tahun ini",
+  "tahun-lalu": "Tahun lalu",
+  custom: "Custom",
+};
+
+type Draft = { periode: Periode; dari: string; sampai: string; produk: string; kategori: string };
 
 const LIMIT = 25;
+
+function toYMD(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+function addDays(d: Date, n: number) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+function rentangUntuk(periode: Periode): { dari: string; sampai: string } | null {
+  const now = new Date();
+  const today = startOfDay(now);
+  switch (periode) {
+    case "hari-ini":
+      return { dari: toYMD(today), sampai: toYMD(today) };
+    case "kemarin": {
+      const y = addDays(today, -1);
+      return { dari: toYMD(y), sampai: toYMD(y) };
+    }
+    case "pekan-ini": {
+      const dow = (today.getDay() + 6) % 7;
+      return { dari: toYMD(addDays(today, -dow)), sampai: toYMD(addDays(today, -dow + 6)) };
+    }
+    case "pekan-lalu": {
+      const dow = (today.getDay() + 6) % 7;
+      return { dari: toYMD(addDays(today, -dow - 7)), sampai: toYMD(addDays(today, -dow - 7 + 6)) };
+    }
+    case "bulan-ini":
+      return { dari: toYMD(new Date(now.getFullYear(), now.getMonth(), 1)), sampai: toYMD(new Date(now.getFullYear(), now.getMonth() + 1, 0)) };
+    case "bulan-lalu":
+      return { dari: toYMD(new Date(now.getFullYear(), now.getMonth() - 1, 1)), sampai: toYMD(new Date(now.getFullYear(), now.getMonth(), 0)) };
+    case "kuartal-ini": {
+      const q = Math.floor(now.getMonth() / 3);
+      return { dari: toYMD(new Date(now.getFullYear(), q * 3, 1)), sampai: toYMD(new Date(now.getFullYear(), q * 3 + 3, 0)) };
+    }
+    case "kuartal-lalu": {
+      const q = Math.floor(now.getMonth() / 3) - 1;
+      return { dari: toYMD(new Date(now.getFullYear(), q * 3, 1)), sampai: toYMD(new Date(now.getFullYear(), q * 3 + 3, 0)) };
+    }
+    case "tahun-ini":
+      return { dari: toYMD(new Date(now.getFullYear(), 0, 1)), sampai: toYMD(new Date(now.getFullYear(), 11, 31)) };
+    case "tahun-lalu":
+      return { dari: toYMD(new Date(now.getFullYear() - 1, 0, 1)), sampai: toYMD(new Date(now.getFullYear() - 1, 11, 31)) };
+    default:
+      return null;
+  }
+}
 
 /** Rupiah layar gaya Mekari: "Rp. 35.000,00", negatif dalam kurung. */
 function rp2(v: number): string {
@@ -35,14 +101,27 @@ function margin(v: number): string {
   return `${s}%`;
 }
 
+function rp2Dash(v: number | null | undefined): string {
+  return v == null ? "-" : rp2(v);
+}
+
+function marginDash(v: number | null | undefined): string {
+  return v == null ? "-" : margin(v);
+}
+
 function qtyFmt(v: number): string {
   const b = Math.round(Number(v) * 100) / 100;
   return b.toLocaleString("id-ID", { maximumFractionDigits: 2 });
 }
 
+function qtyDash(v: number | null | undefined): string {
+  return v == null ? "-" : qtyFmt(v);
+}
+
 export function ProfitabilitasProdukContent() {
-  const [draft, setDraft] = useState<Draft>({ dari: todayYMDLokal(), sampai: todayYMDLokal(), produk: "", kategori: "" });
-  const [applied, setApplied] = useState<Draft>({ dari: todayYMDLokal(), sampai: todayYMDLokal(), produk: "", kategori: "" });
+  const initialRange = rentangUntuk("hari-ini") ?? { dari: todayYMDLokal(), sampai: todayYMDLokal() };
+  const [draft, setDraft] = useState<Draft>({ periode: "hari-ini", dari: initialRange.dari, sampai: initialRange.sampai, produk: "", kategori: "" });
+  const [applied, setApplied] = useState<Draft>({ periode: "hari-ini", dari: initialRange.dari, sampai: initialRange.sampai, produk: "", kategori: "" });
   const [showFilter, setShowFilter] = useState(false);
   const [kategoriList, setKategoriList] = useState<string[]>([]);
   const [data, setData] = useState<ProfitabilitasSnapshot | null>(null);
@@ -107,6 +186,12 @@ export function ProfitabilitasProdukContent() {
       cancelled = true;
     };
   }, [applied, page, queryFor]);
+
+  const gantiPeriode = (v: Periode) => {
+    setFilterError("");
+    const r = rentangUntuk(v);
+    setDraft((d) => (r ? { ...d, periode: v, dari: r.dari, sampai: r.sampai } : { ...d, periode: v }));
+  };
 
   const validasiTanggal = (): boolean => {
     if (!draft.dari || !draft.sampai) {
@@ -188,7 +273,7 @@ export function ProfitabilitasProdukContent() {
                 type="date"
                 value={draft.dari}
                 onChange={(e) => {
-                  setDraft((d) => ({ ...d, dari: e.target.value }));
+                  setDraft((d) => ({ ...d, periode: "custom", dari: e.target.value }));
                   setFilterError("");
                 }}
                 className="h-10 text-sm"
@@ -203,30 +288,37 @@ export function ProfitabilitasProdukContent() {
                 type="date"
                 value={draft.sampai}
                 onChange={(e) => {
-                  setDraft((d) => ({ ...d, sampai: e.target.value }));
+                  setDraft((d) => ({ ...d, periode: "custom", sampai: e.target.value }));
                   setFilterError("");
                 }}
                 className="h-10 text-sm"
               />
             </div>
-            <div className="flex items-end gap-2 md:col-span-2 xl:col-span-2">
+            <div>
+              <label htmlFor="pp-periode" className="mb-1.5 block text-xs font-medium text-slate-600">
+                Periode
+              </label>
+              <Select
+                id="pp-periode"
+                value={draft.periode}
+                onChange={(e) => gantiPeriode(e.target.value as Periode)}
+                aria-label="Periode"
+                className="h-10 text-sm"
+              >
+                {Object.entries(PERIODE_LABEL).map(([v, label]) => (
+                  <option key={v} value={v}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="flex items-end gap-2">
               <Button
                 type="button"
                 onClick={tampilkan}
                 className="w-full cursor-pointer bg-emerald-700 text-white hover:bg-emerald-800"
               >
                 Filter
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowFilter((v) => !v)}
-                aria-expanded={showFilter}
-                className="cursor-pointer"
-              >
-                <SlidersHorizontal className="h-4 w-4" />
-                Filter
-                <ChevronDown className={`h-4 w-4 transition-transform ${showFilter ? "rotate-180" : ""}`} />
               </Button>
               <div className="relative">
                 <Button
@@ -279,8 +371,7 @@ export function ProfitabilitasProdukContent() {
               </div>
             </div>
           </div>
-          {showFilter && (
-            <div className="grid gap-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4 md:grid-cols-3">
+          <div className="mt-3 grid gap-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4 md:grid-cols-3">
               <div>
                 <label htmlFor="pp-produk" className="mb-1.5 block text-xs font-medium text-slate-600">
                   Produk
@@ -318,7 +409,6 @@ export function ProfitabilitasProdukContent() {
                 </Button>
               </div>
             </div>
-          )}
           {filterError && <p className="text-xs text-red-600">{filterError}</p>}
         </CardContent>
       </Card>
@@ -353,7 +443,7 @@ export function ProfitabilitasProdukContent() {
                       <TableHead className="min-w-[100px] whitespace-nowrap text-right text-xs">Qty Terjual</TableHead>
                       <TableHead className="min-w-[80px] whitespace-nowrap text-xs">Satuan</TableHead>
                       <TableHead className="min-w-[170px] whitespace-nowrap text-right text-xs">Nilai Total Penjualan</TableHead>
-                      <TableHead className="min-w-[150px] whitespace-nowrap text-right text-xs">Total HPP</TableHead>
+                      <TableHead className="min-w-[150px] whitespace-nowrap text-right text-xs">HPP Tercatat</TableHead>
                       <TableHead className="min-w-[160px] whitespace-nowrap text-right text-xs">Nilai Total Profit</TableHead>
                       <TableHead className="min-w-[120px] whitespace-nowrap text-right text-xs">Profit Margin (%)</TableHead>
                       <TableHead className="min-w-[170px] whitespace-nowrap text-right text-xs">Harga Jual Rata-rata</TableHead>
@@ -374,19 +464,19 @@ export function ProfitabilitasProdukContent() {
                           {rp2(b.nilaiPenjualan)}
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-right text-xs tabular-nums text-slate-700">
-                          {rp2(b.totalHpp)}
+                          {rp2Dash(b.totalHpp)}
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-right text-xs font-medium tabular-nums text-slate-900">
-                          {rp2(b.profit)}
+                          {rp2Dash(b.profit)}
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-right text-xs tabular-nums text-slate-700">
-                          {margin(b.marginPersen)}
+                          {marginDash(b.marginPersen)}
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-right text-xs tabular-nums text-slate-700">
                           {rp2(b.hargaJualRata)}
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-right text-xs tabular-nums text-slate-700">
-                          {rp2(b.hargaBeliRata)}
+                          {rp2Dash(b.hargaBeliRata)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -395,9 +485,11 @@ export function ProfitabilitasProdukContent() {
                         TOTAL
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-right text-xs font-semibold tabular-nums text-slate-900">
-                        {qtyFmt(data?.totalQty ?? 0)}
+                        {qtyDash(data?.totalQty)}
                       </TableCell>
-                      <TableCell />
+                      <TableCell className="whitespace-nowrap text-xs font-semibold text-slate-500">
+                        {data?.totalQty == null ? "Campuran" : data?.satuanTotal ?? ""}
+                      </TableCell>
                       <TableCell className="whitespace-nowrap text-right text-xs font-semibold tabular-nums text-slate-900">
                         {rp2(data?.totalPenjualan ?? 0)}
                       </TableCell>
@@ -405,16 +497,27 @@ export function ProfitabilitasProdukContent() {
                         {rp2(data?.totalHpp ?? 0)}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-right text-xs font-semibold tabular-nums text-slate-900">
-                        {rp2(data?.totalProfit ?? 0)}
+                        {rp2Dash(data?.totalProfit)}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-right text-xs font-semibold tabular-nums text-slate-900">
-                        {margin(data?.marginTotalPersen ?? 0)}
+                        {marginDash(data?.marginTotalPersen)}
                       </TableCell>
                       <TableCell />
                       <TableCell />
                     </TableRow>
                   </TableBody>
                 </Table>
+              </div>
+            )}
+
+            {!loading && baris.length > 0 && data && data.catatan.length > 0 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <p className="text-xs font-semibold text-amber-800">Catatan</p>
+                <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs leading-relaxed text-amber-800">
+                  {data.catatan.map((c, i) => (
+                    <li key={i}>{c}</li>
+                  ))}
+                </ul>
               </div>
             )}
 
@@ -465,7 +568,7 @@ export function ProfitabilitasProdukContent() {
       <p className="flex items-center gap-1.5 text-[11px] leading-relaxed text-slate-400">
         <Download className="h-3.5 w-3.5 shrink-0" />
         Tabel, PDF, dan XLSX memakai sumber data Profitabilitas Produk yang sama sehingga angkanya identik.
-        HPP diambil dari master Produk (harga beli, fallback harga satuan); item tanpa master HPP Rp 0.
+        HPP memakai mutasi stok KELUAR PENJUALAN dan biaya perolehan rata-rata tertimbang; HPP belum diketahui ditampilkan "-", bukan Rp 0.
       </p>
     </div>
   );
