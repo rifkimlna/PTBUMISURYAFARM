@@ -120,6 +120,7 @@ export default function AdminHubLayout({ children }: { children: React.ReactNode
               <Link href="/perkebunan" onClick={() => setOpen(false)} className="block rounded-full px-3 py-2 text-sm hover:bg-slate-50">Perkebunan</Link>
               <Link href="/keuangan" onClick={() => setOpen(false)} className="block rounded-full px-3 py-2 text-sm hover:bg-slate-50">Keuangan</Link>
               <Link href="/petugas/scan" onClick={() => setOpen(false)} className="block rounded-full px-3 py-2 text-sm hover:bg-slate-50">Petugas</Link>
+              <Link href="/admin/karir" onClick={() => setOpen(false)} className="block rounded-full px-3 py-2 text-sm hover:bg-slate-50">Karir</Link>
               <Link href="/" onClick={() => setOpen(false)} className="block rounded-full px-3 py-2 text-sm hover:bg-slate-50">Publik</Link>
             </nav>
           </div>
@@ -130,6 +131,7 @@ export default function AdminHubLayout({ children }: { children: React.ReactNode
         <Link href="/perkebunan" className="rounded-full px-3 py-1.5 text-xs font-medium hover:bg-slate-50">Perkebunan</Link>
         <Link href="/keuangan" className="rounded-full px-3 py-1.5 text-xs font-medium hover:bg-slate-50">Keuangan</Link>
         <Link href="/petugas/scan" className="rounded-full px-3 py-1.5 text-xs font-medium hover:bg-slate-50">Petugas</Link>
+        <Link href="/admin/karir" className="rounded-full px-3 py-1.5 text-xs font-medium hover:bg-slate-50">Karir</Link>
         <Link href="/" className="rounded-full px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-50">Publik</Link>
       </nav>
 

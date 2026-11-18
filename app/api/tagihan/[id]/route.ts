@@ -168,6 +168,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
             (await getKodeAkunByNamaFromDB(kategori, tipeKas as any)) ??
             kodeAkunByNama(tipeKas as any, kategori),
           sumberDana: parsed.sumberDana,
+          tag: isHutang ? null : "TERIMA_PIUTANG",
           jumlah: parsed.jumlahBayar,
           keterangan:
             parsed.keterangan ??

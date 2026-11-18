@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { ProformaInvoiceContent } from "@/components/admin/proforma-invoice-content";

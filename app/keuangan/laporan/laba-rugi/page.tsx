@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { LabaRugiContent } from "@/components/admin/laba-rugi-content";
 
 // Laporan → Laba Rugi PT Bumi Surya Farm (data aktual database, tanpa dummy).

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { JurnalContent } from "@/components/admin/jurnal-content";
 
 // Laporan → Jurnal PT Bumi Surya Farm (data aktual database, tanpa dummy).

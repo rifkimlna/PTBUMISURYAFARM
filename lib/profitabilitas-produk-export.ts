@@ -12,11 +12,21 @@ export function formatIDREkspor(n: number): string {
   return v < 0 ? `(Rp ${abs})` : `Rp ${abs}`;
 }
 
+/** Rupiah atau "-" bila nilai belum diketahui (null). */
+export function formatIDREksporAtauDash(n: number | null | undefined): string {
+  return n == null ? "-" : formatIDREkspor(n);
+}
+
 /** Margin persen gaya Indonesia: 100 -> "100%", 33.33 -> "33,3%". */
 export function formatMarginEkspor(p: number): string {
   const v = Math.round(Number(p) * 10) / 10;
   const s = Number.isInteger(v) ? String(v) : String(v).replace(".", ",");
   return `${s}%`;
+}
+
+/** Margin atau "-" bila belum diketahui (null). */
+export function formatMarginEksporAtauDash(p: number | null | undefined): string {
+  return p == null ? "-" : formatMarginEkspor(p);
 }
 
 export function fmtTglEkspor(iso: string): string {
@@ -77,6 +87,30 @@ function potong(t: string, max: number): string {
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 }
 
+function bungkus(t: string, max: number): string[] {
+  const kata = (t || "").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  const hasil: string[] = [];
+  let baris = "";
+  for (const k of kata) {
+    if (k.length > max) {
+      if (baris) {
+        hasil.push(baris);
+        baris = "";
+      }
+      for (let i = 0; i < k.length; i += max) hasil.push(k.slice(i, i + max));
+      continue;
+    }
+    if (!baris) baris = k;
+    else if (baris.length + 1 + k.length <= max) baris += ` ${k}`;
+    else {
+      hasil.push(baris);
+      baris = k;
+    }
+  }
+  if (baris) hasil.push(baris);
+  return hasil.length > 0 ? hasil : ["-"];
+}
+
 type PdfLine =
   | { kind: "center"; text: string; size: number; bold: boolean }
   | { kind: "left"; text: string; size: number; bold: boolean }
@@ -102,20 +136,36 @@ function snapshotKeLines(s: ProfitabilitasSnapshot): PdfLine[] {
       qty: Number(b.qtyTerjual).toLocaleString("id-ID"),
       sat: potong(b.satuan || "—", 10),
       jual: formatIDREkspor(b.nilaiPenjualan),
-      hpp: formatIDREkspor(b.totalHpp),
-      prof: formatIDREkspor(b.profit),
-      mar: formatMarginEkspor(b.marginPersen),
+      hpp: formatIDREksporAtauDash(b.totalHpp),
+      prof: formatIDREksporAtauDash(b.profit),
+      mar: formatMarginEksporAtauDash(b.marginPersen),
       hj: formatIDREkspor(b.hargaJualRata),
-      hb: formatIDREkspor(b.hargaBeliRata),
+      hb: formatIDREksporAtauDash(b.hargaBeliRata),
       bold: false,
     });
   }
   lines.push({
-    kind: "row", nama: "TOTAL", qty: Number(s.totalQty).toLocaleString("id-ID"), sat: "",
-    jual: formatIDREkspor(s.totalPenjualan), hpp: formatIDREkspor(s.totalHpp),
-    prof: formatIDREkspor(s.totalProfit), mar: formatMarginEkspor(s.marginTotalPersen),
-    hj: "", hb: "", bold: true,
+    kind: "row",
+    nama: "TOTAL",
+    qty: s.totalQty == null ? "-" : Number(s.totalQty).toLocaleString("id-ID"),
+    sat: s.totalQty == null ? "Campuran" : "",
+    jual: formatIDREkspor(s.totalPenjualan),
+    hpp: formatIDREkspor(s.totalHpp),
+    prof: formatIDREksporAtauDash(s.totalProfit),
+    mar: formatMarginEksporAtauDash(s.marginTotalPersen),
+    hj: "",
+    hb: "",
+    bold: true,
   });
+  if (s.catatan.length > 0) {
+    lines.push({ kind: "left", text: "", size: 8, bold: false });
+    lines.push({ kind: "left", text: "Catatan:", size: 8, bold: true });
+    for (const c of s.catatan) {
+      for (const baris of bungkus(c, 135)) {
+        lines.push({ kind: "left", text: baris, size: 7.5, bold: false });
+      }
+    }
+  }
   return lines;
 }
 
@@ -201,7 +251,7 @@ export function buildProfitabilitasPdf(snapshots: ProfitabilitasSnapshot[]): Buf
         stream += drawRight("Qty Terjual", HEAD_SIZE, true, X_QTY_R, bot);
         stream += draw("Satuan", HEAD_SIZE, true, X_SAT, bot);
         stream += drawRight("Nilai Total Penjualan", HEAD_SIZE, true, X_JUAL_R, bot);
-        stream += drawRight("Total HPP", HEAD_SIZE, true, X_HPP_R, bot);
+        stream += drawRight("HPP Tercatat", HEAD_SIZE, true, X_HPP_R, bot);
         stream += drawRight("Nilai Total Profit", HEAD_SIZE, true, X_PROF_R, bot);
         stream += drawRight("Profit Margin (%)", HEAD_SIZE, true, X_MAR_R, bot);
         stream += drawRight("Harga Jual Rata-rata", HEAD_SIZE, true, X_HJ_R, bot);
@@ -276,7 +326,7 @@ export function snapshotKeSheetProfit(s: ProfitabilitasSnapshot, sheetName: stri
       { v: "Qty Terjual", bold: true },
       { v: "Satuan", bold: true },
       { v: "Nilai Total Penjualan", bold: true },
-      { v: "Total HPP", bold: true },
+      { v: "HPP Tercatat", bold: true },
       { v: "Nilai Total Profit", bold: true },
       { v: "Profit Margin (%)", bold: true },
       { v: "Harga Jual Rata-rata", bold: true },
@@ -289,24 +339,33 @@ export function snapshotKeSheetProfit(s: ProfitabilitasSnapshot, sheetName: stri
       { v: Math.round(b.qtyTerjual * 100) / 100, num: true },
       { v: b.satuan },
       { v: Math.round(b.nilaiPenjualan), num: true },
-      { v: Math.round(b.totalHpp), num: true },
-      { v: Math.round(b.profit), num: true },
-      { v: Math.round(b.marginPersen * 10) / 10, num: true },
+      b.totalHpp == null ? { v: "-" } : { v: Math.round(b.totalHpp), num: true },
+      b.profit == null ? { v: "-" } : { v: Math.round(b.profit), num: true },
+      b.marginPersen == null ? { v: "-" } : { v: Math.round(b.marginPersen * 10) / 10, num: true },
       { v: Math.round(b.hargaJualRata), num: true },
-      { v: Math.round(b.hargaBeliRata), num: true },
+      b.hargaBeliRata == null ? { v: "-" } : { v: Math.round(b.hargaBeliRata), num: true },
     ]);
   }
   rows.push([
     { v: "TOTAL", bold: true },
-    { v: Math.round(s.totalQty * 100) / 100, bold: true, num: true },
-    { v: "" },
+    s.totalQty == null
+      ? { v: "-", bold: true }
+      : { v: Math.round(s.totalQty * 100) / 100, bold: true, num: true },
+    { v: s.totalQty == null ? "Campuran" : "", bold: true },
     { v: Math.round(s.totalPenjualan), bold: true, num: true },
     { v: Math.round(s.totalHpp), bold: true, num: true },
-    { v: Math.round(s.totalProfit), bold: true, num: true },
-    { v: Math.round(s.marginTotalPersen * 10) / 10, bold: true, num: true },
+    s.totalProfit == null ? { v: "-", bold: true } : { v: Math.round(s.totalProfit), bold: true, num: true },
+    s.marginTotalPersen == null
+      ? { v: "-", bold: true }
+      : { v: Math.round(s.marginTotalPersen * 10) / 10, bold: true, num: true },
     { v: "" },
     { v: "" },
   ]);
+  if (s.catatan.length > 0) {
+    rows.push([]);
+    rows.push([{ v: "Catatan:", bold: true }]);
+    for (const c of s.catatan) rows.push([{ v: c }]);
+  }
   return { name: sheetName.slice(0, 31), rows };
 }
 

@@ -12,17 +12,30 @@ import { AsetContent } from "@/components/admin/aset-content";
 // aset (TransaksiKas tunai / Tagihan utang); penyusutan & pelepasan hanya
 // dihitung/dicatat tanpa Kas otomatis.
 export default async function AsetPage() {
-  const [aset, akun, cookieStore] = await Promise.all([
-    prisma.aset.findMany({ orderBy: { createdAt: "desc" }, take: 500 }),
-    prisma.akunCOA.findMany({
-      where: { isActive: true },
-      select: { kode: true, nama: true, kelompok: true, golongan: true },
-      orderBy: { kode: "asc" },
-    }),
-    cookies(),
-  ]);
+  let dbError = false;
+  let aset: any[] = [];
+  let akun: any[] = [];
+  let cookieStore: any = null;
 
-  const token = cookieStore.get("token")?.value;
+  try {
+    cookieStore = await cookies();
+
+    const results = await Promise.all([
+      prisma.aset.findMany({ orderBy: { createdAt: "desc" }, take: 500 }),
+      prisma.akunCOA.findMany({
+        where: { isActive: true },
+        select: { kode: true, nama: true, kelompok: true, golongan: true },
+        orderBy: { kode: "asc" },
+      }),
+    ]);
+
+    [aset, akun] = results;
+  } catch (e) {
+    console.error("[keuangan/aset] database tidak terjangkau:", e instanceof Error ? e.message : e);
+    dbError = true;
+  }
+
+  const token = cookieStore?.get("token")?.value;
   const session = token ? await verifyToken(token) : null;
   const canDelete = session?.role === "SUPER_ADMIN";
 
@@ -91,6 +104,12 @@ export default async function AsetPage() {
 
   return (
     <div className="space-y-6 min-w-0">
+      {dbError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <div className="text-sm font-medium text-red-800">⚠️ Database tidak terhubung — data aset mungkin kosong.</div>
+          <div className="mt-1 text-xs text-red-600">Cek DATABASE_URL di Vercel Environment Variables lalu redeploy.</div>
+        </div>
+      )}
       <AsetContent
         canDelete={canDelete}
         periode={periode}

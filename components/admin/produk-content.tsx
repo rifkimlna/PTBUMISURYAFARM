@@ -51,6 +51,7 @@ export type PenyesuaianRow = {
   jenis: "MASUK" | "KELUAR";
   jumlah: number;
   keterangan: string | null;
+  nilaiPerSatuan: number | null;
 };
 
 export type ProdukSummary = {
@@ -230,6 +231,7 @@ export function ProdukContent({
   const [sesuaiProdukId, setSesuaiProdukId] = useState("");
   const [fisik, setFisik] = useState("");
   const [sesuaiKet, setSesuaiKet] = useState("");
+  const [nilaiPerSatuanInput, setNilaiPerSatuanInput] = useState("");
   const [sesuaiSaving, setSesuaiSaving] = useState(false);
   const [sesuaiMsg, setSesuaiMsg] = useState("");
 
@@ -373,6 +375,7 @@ export function ProdukContent({
     setSesuaiProdukId(presetId ?? barangSaja[0]?.id ?? "");
     setFisik("");
     setSesuaiKet("");
+    setNilaiPerSatuanInput("");
     setSesuaiMsg("");
     setSesuaiOpen(true);
     setTindakanOpen(false);
@@ -383,6 +386,15 @@ export function ProdukContent({
     if (!sesuaiProduk || sistem == null || selisih == null || selisih === 0) {
       setSesuaiMsg("Tidak ada selisih untuk disesuaikan (stok fisik sama dengan sistem).");
       return;
+    }
+    const nilaiInput = nilaiPerSatuanInput.trim() === "" ? null : Number(nilaiPerSatuanInput);
+    if (selisih > 0 && nilaiInput !== null && (isNaN(nilaiInput) || nilaiInput < 0)) {
+      setSesuaiMsg("Nilai per Satuan tidak boleh negatif.");
+      return;
+    }
+    if (selisih > 0 && (nilaiInput === null || nilaiInput === 0)) {
+      const ok = window.confirm("Nilai kosong, stok tidak akan masuk Persediaan di Neraca. Lanjutkan?");
+      if (!ok) return;
     }
     setSesuaiSaving(true);
     setSesuaiMsg("");
@@ -395,6 +407,7 @@ export function ProdukContent({
           jumlah: Math.abs(selisih),
           keterangan: `Opname: sistem ${sistem} → fisik ${fisik.trim()}${sesuaiKet.trim() ? ` | ${sesuaiKet.trim()}` : ""}`,
           sumber: "PENYESUAIAN",
+          nilaiPerSatuan: selisih > 0 ? nilaiInput : null,
         }),
       });
       const result = await res.json().catch(() => ({}));
@@ -715,19 +728,21 @@ export function ProdukContent({
                   <Button type="button" size="sm" onClick={() => openSesuai()} className="sm:ml-auto w-fit cursor-pointer"><Scale className="h-3.5 w-3.5" /> Sesuaikan Stok</Button>
                 </div>
                 <div className="overflow-x-auto">
-                  <div className="min-w-[720px]">
+                  <div className="min-w-[960px]">
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Tanggal</TableHead>
                           <TableHead>Produk</TableHead>
                           <TableHead className="text-right">Perubahan</TableHead>
+                          <TableHead className="text-right">Nilai per Satuan</TableHead>
+                          <TableHead className="text-right">Total Nilai</TableHead>
                           <TableHead>Keterangan</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {penyesuaian.length === 0 ? (
-                          <TableRow><TableCell colSpan={4} className="py-8 text-center">
+                          <TableRow><TableCell colSpan={6} className="py-8 text-center">
                             <div className="flex flex-col items-center gap-2">
                               <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-400"><Scale className="h-5 w-5" /></span>
                               <p className="text-sm font-medium text-slate-500">Belum ada penyesuaian stok.</p>
@@ -740,6 +755,10 @@ export function ProdukContent({
                             <TableCell className="text-sm font-medium">{r.barangNama} <span className="font-mono text-xs text-slate-400">{r.barangId}</span></TableCell>
                             <TableCell className={`text-right text-sm font-semibold whitespace-nowrap ${r.jenis === "MASUK" ? "text-green-700" : "text-red-600"}`}>
                               {r.jenis === "MASUK" ? "+" : "−"}{formatRupiah(r.jumlah)} {r.satuan}
+                            </TableCell>
+                            <TableCell className="text-right text-xs text-slate-700 whitespace-nowrap">{r.nilaiPerSatuan != null ? `Rp ${formatRupiah(r.nilaiPerSatuan)}` : "−"}</TableCell>
+                            <TableCell className="text-right text-xs text-slate-700 whitespace-nowrap">
+                              {r.nilaiPerSatuan != null ? `Rp ${formatRupiah(r.jumlah * r.nilaiPerSatuan)}` : "−"}
                             </TableCell>
                             <TableCell className="text-xs text-slate-500 max-w-[320px] truncate" title={r.keterangan ?? ""}>{dash(r.keterangan)}</TableCell>
                           </TableRow>
@@ -895,6 +914,14 @@ export function ProdukContent({
             <Field label="Keterangan">
               <Input value={sesuaiKet} onChange={(e) => setSesuaiKet(e.target.value)} placeholder="Berita acara opname (opsional)" maxLength={300} />
             </Field>
+            {selisih != null && selisih > 0 && (
+              <Field label="Nilai per Satuan (Rp)">
+                <Input type="number" min="0" step="any" value={nilaiPerSatuanInput} onChange={(e) => setNilaiPerSatuanInput(e.target.value)} placeholder="0" />
+              </Field>
+            )}
+            {selisih != null && selisih > 0 && nilaiPerSatuanInput.trim() !== "" && (
+              <p className="text-xs text-slate-500">Pratinjau: Nilai total = {formatRupiah(Math.abs(selisih))} × Rp {formatRupiah(Number(nilaiPerSatuanInput))} = Rp {formatRupiah(Math.abs(selisih) * Number(nilaiPerSatuanInput))}</p>
+            )}
             {sesuaiMsg && <p className="text-sm text-red-600">{sesuaiMsg}</p>}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setSesuaiOpen(false)}>Batal</Button>

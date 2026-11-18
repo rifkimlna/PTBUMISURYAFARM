@@ -77,7 +77,7 @@ type PdfLine =
 function snapshotKeLines(s: DaftarPenjualanSnapshot): PdfLine[] {
   const lines: PdfLine[] = [
     { kind: "center", text: DAFTAR_PENJUALAN_PERUSAHAAN, size: 12, bold: true },
-    { kind: "center", text: "DAFTAR FAKTUR PENJUALAN", size: 12, bold: true },
+    { kind: "center", text: "DAFTAR PENJUALAN", size: 12, bold: true },
     { kind: "center", text: s.label, size: 9.5, bold: true },
     { kind: "center", text: "(dalam IDR)", size: 9.5, bold: true },
     { kind: "left", text: "", size: 9, bold: false },
@@ -256,7 +256,7 @@ export type XlsxSheet = { name: string; rows: XlsxCell[][] };
 export function snapshotKeSheetDP(s: DaftarPenjualanSnapshot, sheetName: string): XlsxSheet {
   const rows: XlsxCell[][] = [
     [{ v: DAFTAR_PENJUALAN_PERUSAHAAN, bold: true }],
-    [{ v: "Daftar Faktur Penjualan", bold: true }],
+    [{ v: "Daftar Penjualan", bold: true }],
     [{ v: s.label }],
     [{ v: "(dalam IDR)" }],
     [],

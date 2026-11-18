@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuthAndRole } from "@/lib/auth";
 import { baseFakturSchema } from "@/lib/validations/pembelianValidation";
+import { isAkunDebitFakturValid, pilihAkunDefaultPembelian } from "@/lib/coa-pembelian";
 import { deleteBuktiFile } from "@/lib/storage";
 import { hapusFakturPembelianSumber } from "@/lib/hapus-rantai";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
@@ -113,39 +114,37 @@ export async function PUT(req: NextRequest, { params }: Params) {
       if (!parsed.jatuhTempo) throw new Error("Tanggal jatuh tempo wajib diisi");
       if (!parsed.syaratPembayaran?.trim()) throw new Error("Syarat pembayaran wajib dipilih");
 
-      // Akun DEBIT tiap baris ditentukan otomatis (sama seperti saat buat):
-      // produk master → persediaan (1105/1106/1107), selain itu → 5402.
+      // Akun DEBIT tiap baris dipilih dari COA aktif di database:
+      // akun Persediaan (Aset) untuk barang stok, atau akun Beban untuk pengeluaran.
+      // Tidak ada default paksa ke 5402.
+      const akunAktif = await tx.akunCOA.findMany({
+        where: { isActive: true },
+        select: { kode: true, nama: true, kelompok: true, golongan: true },
+      });
+      const akunByKode = new Map(akunAktif.map((a) => [a.kode, a]));
       const items = [];
       for (const it of parsed.items) {
         let kodeAkun = it.kodeAkun?.trim() || null;
         if (kodeAkun) {
-          const akun = await tx.akunCOA.findUnique({ where: { kode: kodeAkun } });
-          if (!akun || !akun.isActive) throw new Error(`Akun COA ${kodeAkun} tidak ditemukan atau nonaktif`);
-          const isPersediaan = ["1105", "1106", "1107"].includes(akun.kode);
-          if (akun.kelompok !== "Beban" && !isPersediaan) {
-            throw new Error(`Baris "${it.deskripsi}": akun harus persediaan (1105/1106/1107) atau Beban`);
+          const akun = akunByKode.get(kodeAkun);
+          if (!akun) throw new Error(`Akun COA ${kodeAkun} tidak ditemukan atau nonaktif`);
+          if (!isAkunDebitFakturValid(akun)) {
+            throw new Error(
+              `Baris "${it.deskripsi}": akun ${kodeAkun} - ${akun.nama} bukan akun persediaan atau beban yang valid`
+            );
           }
         } else if (it.produkId) {
           const barang = await tx.persediaanBarang.findUnique({
             where: { id: it.produkId },
-            select: { id: true, kodeAkunCOA: true, kategori: true },
+            select: { id: true, kategori: true, kodeAkunCOA: true },
           });
           if (!barang) throw new Error(`Produk "${it.deskripsi}" tidak ditemukan di persediaan`);
-          kodeAkun = barang.kodeAkunCOA ?? null;
+          kodeAkun = pilihAkunDefaultPembelian(barang, akunAktif) || null;
           if (!kodeAkun) {
-            const fallback: Record<string, string> = {
-              "Pupuk & Obat-obatan": "1105",
-              "Pakan Ternak/Ikan": "1106",
-              "Bibit/Benih": "1107",
-            };
-            kodeAkun = fallback[barang.kategori] ?? "5402";
+            throw new Error(`Baris "${it.deskripsi}": pilih akun COA debit (persediaan/beban)`);
           }
-          const akun = await tx.akunCOA.findUnique({ where: { kode: kodeAkun } });
-          if (!akun || !akun.isActive) throw new Error(`Akun COA ${kodeAkun} tidak ditemukan atau nonaktif`);
         } else {
-          kodeAkun = "5402";
-          const akun = await tx.akunCOA.findUnique({ where: { kode: kodeAkun } });
-          if (!akun || !akun.isActive) throw new Error(`Akun COA ${kodeAkun} tidak ditemukan atau nonaktif`);
+          throw new Error(`Baris "${it.deskripsi}": pilih akun COA debit (persediaan/beban)`);
         }
         items.push({
           produkId: it.produkId?.trim() || null,

@@ -33,10 +33,11 @@ export const USIA_HUTANG_PERIODE_LABEL: Record<UsiaHutangPeriode, string> = {
   custom: "Custom",
 };
 
-export type KategoriAgingHutang = "1 - 30 Hari" | "31 - 60 Hari" | "61 - 90 Hari" | "> 90 Hari";
+export type KategoriAgingHutang = "Belum Jatuh Tempo" | "1 - 30 Hari" | "31 - 60 Hari" | "61 - 90 Hari" | "> 90 Hari";
 
 /** Pilihan filter lanjutan kelompok umur ("" = semua). */
 export const USIA_HUTANG_KATEGORI: KategoriAgingHutang[] = [
+  "Belum Jatuh Tempo",
   "1 - 30 Hari",
   "31 - 60 Hari",
   "61 - 90 Hari",
@@ -61,6 +62,7 @@ export type UsiaHutangGrup = {
   supplier: string;
   baris: UsiaHutangBaris[];
   total: number;
+  b0: number;
   b1: number;
   b2: number;
   b3: number;
@@ -74,6 +76,7 @@ export type UsiaHutangSnapshot = {
   tanggal: string;
   grup: UsiaHutangGrup[];
   total: number;
+  totalB0: number;
   totalB1: number;
   totalB2: number;
   totalB3: number;

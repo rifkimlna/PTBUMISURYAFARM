@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { LaporanContent } from "@/components/admin/laporan-content";
 
 // Halaman Laporan PT BST — UI SAJA (tahap awal).

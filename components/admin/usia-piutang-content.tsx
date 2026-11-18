@@ -256,6 +256,7 @@ export function UsiaPiutangContent() {
                     <TableRow className="bg-slate-100">
                       <TableHead className="text-xs">Customer</TableHead>
                       <TableHead className="text-right text-xs">Total</TableHead>
+                      <TableHead className="text-right text-xs">Belum Jatuh Tempo</TableHead>
                       <TableHead className="text-right text-xs">1 - 30 Hari</TableHead>
                       <TableHead className="text-right text-xs">31 - 60 Hari</TableHead>
                       <TableHead className="text-right text-xs">61 - 90 Hari</TableHead>
@@ -268,6 +269,9 @@ export function UsiaPiutangContent() {
                         <TableCell className="text-xs font-medium text-slate-900">{g.pelanggan}</TableCell>
                         <TableCell className="whitespace-nowrap text-right text-xs font-semibold tabular-nums text-slate-900">
                           {rp(g.total)}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-right text-xs tabular-nums text-slate-700">
+                          {rp(g.b0)}
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-right text-xs tabular-nums text-slate-700">
                           {rp(g.b1)}
@@ -287,6 +291,9 @@ export function UsiaPiutangContent() {
                       <TableCell className="text-xs font-semibold text-white">Total Piutang</TableCell>
                       <TableCell className="whitespace-nowrap text-right text-xs font-semibold tabular-nums text-white">
                         {rp(data?.total ?? 0)}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-right text-xs font-semibold tabular-nums text-white">
+                        {rp(data?.totalB0 ?? 0)}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-right text-xs font-semibold tabular-nums text-white">
                         {rp(data?.totalB1 ?? 0)}

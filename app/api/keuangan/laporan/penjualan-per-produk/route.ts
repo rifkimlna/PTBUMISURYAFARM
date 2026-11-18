@@ -33,14 +33,14 @@ export async function GET(req: NextRequest) {
     const tanggalAwals = searchParams.get("tanggalAwal") ?? undefined;
     const tanggalAkhir = searchParams.get("tanggalAkhir") ?? undefined;
 
-    const { dari, sampai, label } = resolvePeriodeTanggal(periode, tanggalAwals, tanggalAkhir);
+    const { dari, sampai, label, dariYmd, sampaiYmd } = resolvePeriodeTanggal(periode, tanggalAwals, tanggalAkhir) as { dari: Date; sampai: Date; label: string; dariYmd: string; sampaiYmd: string };
     const snapshot = await getPenjualanPerProdukSnapshot(dari, sampai, label);
 
     if (format === "json") return successResponse(snapshot);
 
     if (format === "pdf") {
       const buf = buildPenjualanPerProdukPdf([snapshot]);
-      const name = penjualanPerProdukNamaFile("pdf", dari.toISOString(), sampai.toISOString());
+      const name = penjualanPerProdukNamaFile("pdf", dariYmd, sampaiYmd);
       return new NextResponse(new Uint8Array(buf), {
         headers: {
           "Content-Type": "application/pdf",
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
     }
 
     const buf = buildXlsx([snapshotKeSheetPP(snapshot, "Penjualan per Produk")]);
-    const name = penjualanPerProdukNamaFile("xlsx", dari.toISOString(), sampai.toISOString());
+    const name = penjualanPerProdukNamaFile("xlsx", dariYmd, sampaiYmd);
     return new NextResponse(new Uint8Array(buf), {
       headers: {
         "Content-Type":

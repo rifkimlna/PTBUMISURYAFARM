@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, ChevronDown, Paperclip, X, Loader2, ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine, Wallet } from "lucide-react";
 import { formatRupiah } from "@/lib/utils";
 import { kategoriByTipe, labelSumberDana, SUMBER_DANA_KEYS } from "@/lib/coa";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 
 type CoaOption = { kode: string; nama: string };
 
@@ -199,6 +200,7 @@ export function TransaksiTable({
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteRow, setDeleteRow] = useState<TransaksiRow | null>(null);
   const [form, setForm] = useState<FormValues>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -399,23 +401,7 @@ export function TransaksiTable({
   };
 
   const deleteTransaksi = async (row: TransaksiRow) => {
-    if (!window.confirm(`Hapus transaksi ${row.kategori} Rp ${formatRupiah(row.jumlah)}?`)) return;
-    setMessage("");
-    try {
-      const response = await fetch(`/api/keuangan/${encodeURIComponent(row.id)}`, { method: "DELETE" });
-      const result = await response.json().catch(() => ({ message: "Gagal menghapus transaksi" }));
-      if (!response.ok) throw new Error(result.message || "Gagal menghapus transaksi");
-      setMessage("Transaksi berhasil dihapus");
-      onDataChange?.();
-      if (rows.length === 1 && page > 1) goToPage(page - 1);
-      else {
-        setLoading(true);
-        setRowsVersion((v) => v + 1);
-        router.refresh();
-      }
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Gagal menghapus transaksi");
-    }
+    setDeleteRow(row);
   };
 
   return (
@@ -739,6 +725,30 @@ export function TransaksiTable({
           </form>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDeleteDialog
+        open={!!deleteRow}
+        onOpenChange={(v) => { if (!v) setDeleteRow(null); }}
+        itemName={`transaksi ${deleteRow?.kategori || ""}`}
+        description={`Anda akan menghapus transaksi ${deleteRow?.kategori} sebesar Rp ${deleteRow ? formatRupiah(deleteRow.jumlah) : ""}.`}
+        warning="Tindakan ini tidak dapat dibatalkan."
+        onConfirm={async () => {
+          if (!deleteRow) return;
+          setMessage("");
+          const response = await fetch(`/api/keuangan/${encodeURIComponent(deleteRow.id)}`, { method: "DELETE" });
+          const result = await response.json().catch(() => ({ message: "Gagal menghapus transaksi" }));
+          if (!response.ok) throw new Error(result.message || "Gagal menghapus transaksi");
+          setMessage("Transaksi berhasil dihapus");
+          onDataChange?.();
+          if (rows.length === 1 && page > 1) goToPage(page - 1);
+          else {
+            setLoading(true);
+            setRowsVersion((v) => v + 1);
+            router.refresh();
+          }
+          setDeleteRow(null);
+        }}
+      />
     </>
   );
 }

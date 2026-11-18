@@ -20,7 +20,7 @@ type Pohon = {
   hasilPanen?: string | number | null;
   pemupukan?: string | null;
   pengobatan?: string | null;
-  tinggiCm?: number | null;
+  tinggiM?: number | null;
   lingkarBatangCm?: string | number | null;
   phTanah?: string | number | null;
   diukurPada?: string | null;
@@ -104,7 +104,7 @@ function PohonCard({ p, onQr }: { p: Pohon; onQr: (id: string) => void }) {
   const hasil = p.hasilPanen != null && p.hasilPanen !== "" && Number(p.hasilPanen) > 0 ? `${Number(p.hasilPanen).toFixed(1)} KG` : "Belum panen";
   const riwayatCount = p._count?.riwayat ?? p.riwayatCount ?? 0;
   const hasGeotag = isRealFotoUrl(p.fotoGeotagUrl);
-  const tinggiTxt = p.tinggiCm != null ? `${p.tinggiCm}cm` : "Belum ukur";
+  const tinggiTxt = p.tinggiM != null ? `${Number(p.tinggiM).toFixed(2)}m` : "Belum ukur";
   const ph = p.phTanah != null && p.phTanah !== "" ? `${Number(p.phTanah).toFixed(1)} (${phLabel(Number(p.phTanah))})` : "-";
   const aksi = "flex flex-col items-center justify-center gap-0.5 h-11 rounded-xl text-[10px] font-medium cursor-pointer border-slate-200";
   return (
@@ -128,7 +128,7 @@ function PohonCard({ p, onQr }: { p: Pohon; onQr: (id: string) => void }) {
           <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-500 truncate">
             <span className="shrink-0 rounded-full bg-slate-100 px-2 py-px font-medium">{p.lokasiBlok}</span>
             <span className="truncate">{p.varietas} • {usia}</span>
-            <UkuranBadge tinggi={p.tinggiCm} />
+            <UkuranBadge tinggi={p.tinggiM} />
           </div>
           <div className="mt-1 text-[11px] text-slate-500 truncate">📏 {tinggiTxt}{p.lingkarBatangCm ? ` • Ø ${Number(p.lingkarBatangCm).toFixed(0)}cm` : ""} • 🧪 pH {ph}</div>
           <div className="mt-1 flex items-center gap-2 text-[11px] truncate">
@@ -223,8 +223,8 @@ export function PohonTable({ data }: { data: Pohon[] }) {
                         {p.namaPohon || "-"}
                       </TableCell>
                       <TableCell className="text-sm text-slate-700 whitespace-nowrap">{p.varietas || "-"}</TableCell>
-                      <TableCell className="whitespace-nowrap"><UkuranBadge tinggi={p.tinggiCm} /></TableCell>
-                      <TableCell className="text-xs text-slate-600 whitespace-nowrap">{p.tinggiCm != null ? `${p.tinggiCm}cm` : <span className="text-slate-400">-</span>}</TableCell>
+                      <TableCell className="whitespace-nowrap"><UkuranBadge tinggi={p.tinggiM} /></TableCell>
+                      <TableCell className="text-xs text-slate-600 whitespace-nowrap">{p.tinggiM != null ? `${Number(p.tinggiM).toFixed(2)}m` : <span className="text-slate-400">-</span>}</TableCell>
                       <TableCell className="text-xs text-slate-600 whitespace-nowrap">{p.phTanah != null && p.phTanah !== "" ? `${Number(p.phTanah).toFixed(1)}` : <span className="text-slate-400">-</span>}</TableCell>
                       <TableCell className="text-xs text-slate-600 whitespace-nowrap">
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium">{riwayatCount} riwayat</span>

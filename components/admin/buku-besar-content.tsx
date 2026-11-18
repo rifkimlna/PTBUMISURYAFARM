@@ -92,7 +92,7 @@ function fmtTgl(iso: string) {
   return new Date(iso).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
 }
 
-function AkunCard({ a }: { a: BukuBesarAkun }) {
+function AkunCard({ a, hideKeterangan }: { a: BukuBesarAkun; hideKeterangan?: boolean }) {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200">
       <div className="flex flex-wrap items-baseline justify-between gap-1 bg-slate-50 px-4 py-2.5">
@@ -110,25 +110,25 @@ function AkunCard({ a }: { a: BukuBesarAkun }) {
               <TableHead className="whitespace-nowrap text-xs">Tanggal</TableHead>
               <TableHead className="text-xs">Transaksi</TableHead>
               <TableHead className="whitespace-nowrap text-xs">Nomor</TableHead>
-              <TableHead className="text-xs">Keterangan</TableHead>
+              {!hideKeterangan && <TableHead className="text-xs">Keterangan</TableHead>}
               <TableHead className="text-right text-xs">Debit</TableHead>
               <TableHead className="text-right text-xs">Kredit</TableHead>
               <TableHead className="text-right text-xs">Saldo</TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
+           <TableBody>
             <TableRow>
               <TableCell className="text-xs text-slate-400">—</TableCell>
               <TableCell className="text-xs text-slate-500">Saldo awal</TableCell>
               <TableCell className="text-xs text-slate-300">—</TableCell>
-              <TableCell className="text-xs text-slate-300">—</TableCell>
+              {!hideKeterangan && <TableCell className="text-xs text-slate-300">—</TableCell>}
               <TableCell className="text-right text-xs text-slate-300">—</TableCell>
               <TableCell className="text-right text-xs text-slate-300">—</TableCell>
               <TableCell className="text-right text-xs tabular-nums text-slate-700">{rp(a.saldoAwal)}</TableCell>
             </TableRow>
             {a.baris.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-4 text-center text-xs text-slate-400">
+                <TableCell colSpan={hideKeterangan ? 6 : 7} className="py-4 text-center text-xs text-slate-400">
                   Tidak ada mutasi pada periode ini
                 </TableCell>
               </TableRow>
@@ -140,9 +140,11 @@ function AkunCard({ a }: { a: BukuBesarAkun }) {
                   <TableCell className="whitespace-nowrap font-mono text-[11px] text-slate-500">
                     {b.noTransaksi ?? <span className="font-sans text-slate-300">—</span>}
                   </TableCell>
-                  <TableCell className="max-w-64 text-xs text-slate-600">
-                    {b.keterangan ? b.keterangan : <span className="text-slate-300">—</span>}
-                  </TableCell>
+                  {!hideKeterangan && (
+                    <TableCell className="max-w-64 text-xs text-slate-600">
+                      {b.keterangan ? b.keterangan : <span className="text-slate-300">—</span>}
+                    </TableCell>
+                  )}
                   <TableCell className="text-right text-xs tabular-nums text-slate-700">
                     {b.debit !== 0 ? rp(b.debit) : <span className="text-slate-300">—</span>}
                   </TableCell>
@@ -154,7 +156,7 @@ function AkunCard({ a }: { a: BukuBesarAkun }) {
               ))
             )}
             <TableRow className="bg-slate-50/70">
-              <TableCell colSpan={4} className="text-xs font-semibold text-slate-900">
+              <TableCell colSpan={hideKeterangan ? 3 : 4} className="text-xs font-semibold text-slate-900">
                 Total mutasi {a.kode}
               </TableCell>
               <TableCell className="text-right text-xs font-semibold tabular-nums text-slate-900">{rp(a.totalDebit)}</TableCell>
@@ -162,8 +164,8 @@ function AkunCard({ a }: { a: BukuBesarAkun }) {
               <TableCell className="text-right text-xs tabular-nums text-slate-300">—</TableCell>
             </TableRow>
             <TableRow className="bg-emerald-50/60">
-              <TableCell colSpan={4} className="text-xs font-semibold text-emerald-900">
-                Current Balance {a.kode} — {a.nama}
+              <TableCell colSpan={hideKeterangan ? 3 : 4} className="text-xs font-semibold text-emerald-900">
+                Saldo Akhir {a.kode} — {a.nama}
               </TableCell>
               <TableCell className="text-right text-xs tabular-nums text-slate-300">—</TableCell>
               <TableCell className="text-right text-xs tabular-nums text-slate-300">—</TableCell>
@@ -177,7 +179,9 @@ function AkunCard({ a }: { a: BukuBesarAkun }) {
 }
 
 function SnapshotView({ s }: { s: BukuBesarSnapshot }) {
-  const grandSaldo = s.akun.reduce((acc, a) => acc + (Number(a.saldoAkhir) || 0), 0);
+  const selisih = (Number(s.totalDebit) || 0) - (Number(s.totalKredit) || 0);
+  const hasKeterangan = s.akun.some(a => a.baris.some(b => b.keterangan && b.keterangan.trim() !== ""));
+  const hideKeterangan = !hasKeterangan;
   return (
     <div className="space-y-4">
       <div className="flex flex-col items-center gap-1 border-b border-slate-100 pb-4 text-center">
@@ -190,7 +194,7 @@ function SnapshotView({ s }: { s: BukuBesarSnapshot }) {
       {s.akun.length === 0 ? (
         <p className="py-6 text-center text-xs text-slate-400">Tidak ada mutasi pada periode ini.</p>
       ) : (
-        s.akun.map((a) => <AkunCard key={a.kode} a={a} />)
+        s.akun.map((a) => <AkunCard key={a.kode} a={a} hideKeterangan={hideKeterangan} />)
       )}
 
       {s.akun.length > 0 && (
@@ -208,8 +212,8 @@ function SnapshotView({ s }: { s: BukuBesarSnapshot }) {
               <p className="text-xs font-semibold tabular-nums text-slate-900">{rp(s.totalKredit)}</p>
             </div>
             <div>
-              <p className="text-[11px] text-slate-500">Grand Total Saldo</p>
-              <p className="text-xs font-semibold tabular-nums text-emerald-900">{rp(grandSaldo)}</p>
+              <p className="text-[11px] text-slate-500">Selisih Total Debit - Total Kredit</p>
+              <p className="text-xs font-semibold tabular-nums text-emerald-900">{rp(selisih)}</p>
             </div>
           </div>
         </div>

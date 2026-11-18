@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { ManajemenAnggaranContent } from "@/components/admin/manajemen-anggaran-content";
 
 // Manajemen Anggaran PT Bumi Surya Farm — daftar anggaran tersimpan,

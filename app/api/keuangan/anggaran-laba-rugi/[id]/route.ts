@@ -9,6 +9,8 @@ import {
 } from "@/lib/api-response";
 import { z } from "zod";
 import { bulanPeriode } from "../route";
+import { isNonLabaRugiTag } from "@/lib/anggaran-tag";
+import { getTagAkunNonLabaRugi } from "@/lib/anggaran-tag-server";
 
 const itemSchema = z.object({
   kodeAkun: z.string().min(1).max(10),
@@ -21,8 +23,6 @@ const updateSchema = z.object({
   nama: z.string().min(2, "Nama anggaran minimal 2 karakter").max(100).optional(),
   items: z.array(itemSchema).max(5000).optional(),
 });
-
-const KODE_NON_LABA_RUGI = new Set(["4105"]);
 
 // GET /api/keuangan/anggaran-laba-rugi/[id] - detail + item
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -65,11 +65,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       const periode = new Set(
         bulanPeriode(header.tahunMulai, header.bulanMulai, header.durasi).map((b) => `${b.tahun}-${b.bulan}`)
       );
+      const tagAkun = await getTagAkunNonLabaRugi();
       for (const it of parsed.items) {
         if (!periode.has(`${it.tahun}-${it.bulan}`)) {
           return errorResponse(`Item ${it.kodeAkun} di luar periode anggaran`, 400);
         }
-        if (KODE_NON_LABA_RUGI.has(it.kodeAkun)) {
+        if (isNonLabaRugiTag(tagAkun.get(it.kodeAkun))) {
           return errorResponse(`Akun ${it.kodeAkun} bukan akun laba rugi`, 400);
         }
       }

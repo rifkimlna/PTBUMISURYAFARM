@@ -32,7 +32,21 @@ export const USIA_PIUTANG_PERIODE_LABEL: Record<UsiaPiutangPeriode, string> = {
   custom: "Custom",
 };
 
-export type KategoriAging = "1 - 30 Hari" | "31 - 60 Hari" | "61 - 90 Hari" | "> 90 Hari";
+export type KategoriAging =
+  | "Belum Jatuh Tempo"
+  | "1 - 30 Hari"
+  | "31 - 60 Hari"
+  | "61 - 90 Hari"
+  | "> 90 Hari";
+
+/** Urutan kelompok aging — dipakai tabel, PDF, dan XLSX. */
+export const KATEGORI_AGING: readonly KategoriAging[] = [
+  "Belum Jatuh Tempo",
+  "1 - 30 Hari",
+  "31 - 60 Hari",
+  "61 - 90 Hari",
+  "> 90 Hari",
+];
 
 export type UsiaBaris = {
   id: string;
@@ -50,6 +64,8 @@ export type UsiaGrup = {
   pelanggan: string;
   baris: UsiaBaris[];
   total: number;
+  /** Belum jatuh tempo (termasuk jatuh tempo tepat pada tanggal laporan). */
+  b0: number;
   b1: number;
   b2: number;
   b3: number;
@@ -62,12 +78,74 @@ export type UsiaPiutangSnapshot = {
   tanggal: string;
   grup: UsiaGrup[];
   total: number;
+  totalB0: number;
   totalB1: number;
   totalB2: number;
   totalB3: number;
   totalB4: number;
   totalTransaksi: number;
 };
+
+// ---------- Perhitungan aging bersama (tabel, PDF, dan XLSX) ----------
+
+export type BucketAging = "b0" | "b1" | "b2" | "b3" | "b4";
+
+/** Indeks hari kalender lokal — bebas jam/zona waktu. */
+function indeksHariLokal(d: Date): number {
+  return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000;
+}
+
+function keTanggal(v: Date | string): Date {
+  return v instanceof Date ? v : new Date(v);
+}
+
+/**
+ * Kelompok aging dari umur piutang (hari kalender):
+ * - umur <= 0 -> "Belum Jatuh Tempo" (belum jatuh tempo / jatuh tempo tepat hari laporan).
+ * - 1–30, 31–60, 61–90, > 90 -> kelompok keterlambatan.
+ */
+export function kategoriAgingDariUmur(umurHari: number): KategoriAging {
+  if (!Number.isFinite(umurHari) || umurHari <= 0) return "Belum Jatuh Tempo";
+  if (umurHari <= 30) return "1 - 30 Hari";
+  if (umurHari <= 60) return "31 - 60 Hari";
+  if (umurHari <= 90) return "61 - 90 Hari";
+  return "> 90 Hari";
+}
+
+/**
+ * Satu fungsi perhitungan aging untuk tabel, PDF, dan XLSX.
+ * Umur = tanggal laporan − tanggal jatuh tempo (fallback tanggal invoice bila
+ * jatuh tempo kosong), dalam hari kalender.
+ */
+export function hitungAgingPiutang(input: {
+  tanggalLaporan: Date | string;
+  jatuhTempo?: Date | string | null;
+  tanggalInvoice: Date | string;
+}): { umurHari: number; kategori: KategoriAging } {
+  const laporan = keTanggal(input.tanggalLaporan);
+  const dasar = input.jatuhTempo ? keTanggal(input.jatuhTempo) : keTanggal(input.tanggalInvoice);
+  if (Number.isNaN(laporan.getTime()) || Number.isNaN(dasar.getTime())) {
+    throw new Error("Tanggal laporan / jatuh tempo tidak valid");
+  }
+  const umurHari = indeksHariLokal(laporan) - indeksHariLokal(dasar);
+  return { umurHari, kategori: kategoriAgingDariUmur(umurHari) };
+}
+
+/** Pemetaan kelompok → field bucket (satu sumber untuk semua format). */
+export function bucketAging(kategori: KategoriAging): BucketAging {
+  switch (kategori) {
+    case "Belum Jatuh Tempo":
+      return "b0";
+    case "1 - 30 Hari":
+      return "b1";
+    case "31 - 60 Hari":
+      return "b2";
+    case "61 - 90 Hari":
+      return "b3";
+    case "> 90 Hari":
+      return "b4";
+  }
+}
 
 // ---------- Helper tanggal murni (aman untuk Client Component) ----------
 

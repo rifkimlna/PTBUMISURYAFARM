@@ -104,58 +104,80 @@ export async function POST(req: NextRequest) {
         .toString(36)
         .slice(2, 6)
         .toUpperCase()}`;
-    const pengiriman = await prisma.$transaction(async (tx) => {
-      const created = await tx.pengirimanPembelian.create({
-        data: {
-          noPengiriman,
-          pesananId: data.pesananId,
-          supplierId: pesanan.supplierId!,
-          alamatPengiriman: data.alamatPengiriman ?? pesanan.alamat,
-          tanggalPengiriman: data.tanggalPengiriman ?? new Date(),
-          noTransaksi,
-          noRefSupplier: data.noRefSupplier ?? pesanan.noRefSupplier,
-          gudang: data.gudang ?? pesanan.gudang,
-          pesan: data.pesan ?? pesanan.pesan,
-          memo: data.memo ?? pesanan.memo,
-          adminId: adminId!,
-          items: {
-            create: pesanan.items.map((it) => ({
-              deskripsi: it.deskripsi,
-              kuantitas: it.kuantitas,
-              unit: it.unit,
-              harga: it.harga,
-              jumlah: it.jumlah,
-            })),
-          },
-          lampiran: data.lampiran ? { create: data.lampiran } : undefined,
-        },
-        include: { items: true },
-      });
-      // Stok bertambah saat barang benar-benar diterima (pengiriman/penerimaan),
-      // bukan saat pesanan (PO) dibuat. Buat riwayat stok MASUK per item yang
-      // memiliki produk master, terhubung tanpa duplikasi.
-      for (const it of pesanan.items) {
-        if (it.produkId) {
-          await tx.riwayatStok.create({
-            data: {
-              barangId: it.produkId,
-              jenis: "MASUK",
-              jumlah: Number(it.kuantitas),
-              keterangan: `Terima barang via ${pengiriman.noPengiriman} (${pesanan.noDokumen})`,
-              sumber: "PEMBELIAN",
-              tanggal: data.tanggalPengiriman ?? new Date(),
-            },
+    let pengirimanResult: any = null;
+    const MAX_RETRY = 3;
+    for (let attempt = 0; attempt < MAX_RETRY; attempt++) {
+      try {
+        pengirimanResult = await prisma.$transaction(async (tx) => {
+          const existing = await tx.pengirimanPembelian.findFirst({
+            where: { pesananId: data.pesananId },
+            select: { id: true, noPengiriman: true },
           });
+          if (existing) {
+            throw new Error(`Pesanan ${pesanan.noDokumen} sudah memiliki penerimaan ${existing.noPengiriman}`);
+          }
+
+          const created = await tx.pengirimanPembelian.create({
+            data: {
+              noPengiriman,
+              pesananId: data.pesananId,
+              supplierId: pesanan.supplierId!,
+              alamatPengiriman: data.alamatPengiriman ?? pesanan.alamat,
+              tanggalPengiriman: data.tanggalPengiriman ?? new Date(),
+              noTransaksi,
+              noRefSupplier: data.noRefSupplier ?? pesanan.noRefSupplier,
+              gudang: data.gudang ?? pesanan.gudang,
+              pesan: data.pesan ?? pesanan.pesan,
+              memo: data.memo ?? pesanan.memo,
+              adminId: adminId!,
+              items: {
+                create: pesanan.items.map((it) => ({
+                  deskripsi: it.deskripsi,
+                  kuantitas: it.kuantitas,
+                  unit: it.unit,
+                  harga: it.harga,
+                  jumlah: it.jumlah,
+                })),
+              },
+              lampiran: data.lampiran ? { create: data.lampiran } : undefined,
+            },
+            include: { items: true },
+          });
+
+          for (const it of pesanan.items) {
+            if (it.produkId) {
+              const hargaEfektif = Number(it.harga) * (1 - Number(it.diskonPersen ?? 0) / 100);
+              await tx.riwayatStok.create({
+                data: {
+                  barangId: it.produkId,
+                  jenis: "MASUK",
+                  jumlah: Number(it.kuantitas),
+                  nilaiPerSatuan: hargaEfektif > 0 ? hargaEfektif : null,
+                  keterangan: `Terima barang via ${created.noPengiriman} (${pesanan.noDokumen})`,
+                  sumber: "PEMBELIAN",
+                  tanggal: data.tanggalPengiriman ?? new Date(),
+                },
+              });
+            }
+          }
+
+          await tx.dokumenPembelian.updateMany({
+            where: { id: data.pesananId, tipe: "PESANAN", status: { not: "SELESAI" } },
+            data: { status: "SELESAI" },
+          });
+          return created;
+        }, { isolationLevel: 'Serializable' });
+        break;
+      } catch (e: any) {
+        const isP2034 = e?.code === 'P2034' || e?.message?.includes('P2034');
+        if (isP2034 && attempt < MAX_RETRY - 1) {
+          await new Promise(r => setTimeout(r, 50));
+          continue;
         }
+        throw e;
       }
-      // Pesanan yang sudah diterima tidak lagi "Belum Ditagih" di tab Pesanan.
-      await tx.dokumenPembelian.updateMany({
-        where: { id: data.pesananId, tipe: "PESANAN", status: { not: "SELESAI" } },
-        data: { status: "SELESAI" },
-      });
-      return created;
-    });
-    return successResponse(pengiriman, "Pengiriman dibuat", 201);
+    }
+    return successResponse(pengirimanResult, "Pengiriman dibuat", 201);
   } catch (e) {
     return errorResponse(e instanceof Error ? e.message : "Gagal buat pengiriman", 400);
   }

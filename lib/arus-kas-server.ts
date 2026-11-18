@@ -18,7 +18,8 @@
 //   sumber, sama dengan logic Neraca). Saldo Akhir = Awal + Kenaikan.
 
 import { prisma } from "@/lib/prisma";
-import { kodeAkunByNama } from "@/lib/coa";
+import { getJurnalSnapshot } from "@/lib/jurnal-server";
+import { getNeracaSnapshot } from "@/lib/neraca-server";
 import type {
   ArusKasKelompok,
   ArusKasPeriode,
@@ -164,90 +165,105 @@ function susunKelompok(
   return { judul, baris, masuk, keluar, bersih: masuk - keluar };
 }
 
+function mapToJurnalPeriode(p: ArusKasPeriode): "hari-ini" | "minggu-ini" | "bulan-ini" | "tahun-ini" | "kemarin" | "minggu-lalu" | "bulan-lalu" | "tahun-lalu" | "custom" {
+  return p === "per-bulan-tahun-ini" ? "custom" : (p as any);
+}
+
 export async function getArusKasSnapshot(
   start: Date,
   end: Date,
   periode: ArusKasPeriode,
   label: string
 ): Promise<ArusKasSnapshot> {
-  const dalam = { gte: start, lte: end };
-  const sebelum = { lt: start };
+  const kasCodes = ["1101", "1103", "1104"];
+  const kasSet = new Set(kasCodes);
   const num = (v: unknown) => Math.round(Number(v ?? 0));
 
-  const [arus, awalSumber, awalTujuan, akhirSumber, akhirTujuan, asetKasIds, asetJualIds, akunDb] =
-    await Promise.all([
-      prisma.transaksiKas.findMany({
-        where: { tanggal: dalam },
-        select: { id: true, tipe: true, kodeAkun: true, kategori: true, jumlah: true, tagihanId: true },
-      }),
-      prisma.transaksiKas.groupBy({ by: ["sumberDana", "tipe"], where: { tanggal: sebelum }, _sum: { jumlah: true } }),
-      prisma.transaksiKas.groupBy({
-        by: ["sumberDanaTujuan", "tipe"],
-        where: { tanggal: sebelum },
-        _sum: { jumlah: true },
-      }),
-      prisma.transaksiKas.groupBy({ by: ["sumberDana", "tipe"], where: { tanggal: { lte: end } }, _sum: { jumlah: true } }),
-      prisma.transaksiKas.groupBy({
-        by: ["sumberDanaTujuan", "tipe"],
-        where: { tanggal: { lte: end } },
-        _sum: { jumlah: true },
-      }),
-      prisma.aset.findMany({ where: { transaksiKasId: { not: null } }, select: { transaksiKasId: true } }),
-      prisma.aset.findMany({ where: { transaksiKasJualId: { not: null } }, select: { transaksiKasJualId: true } }),
-      prisma.akunCOA.findMany({ where: { isActive: true }, select: { kode: true, nama: true } }),
-    ]);
+  const akunDb = await prisma.akunCOA.findMany({ where: { isActive: true }, select: { kode: true, nama: true } });
+  const namaAkun = (kode: string) => akunDb.find((a) => a.kode === kode)?.nama ?? kode;
 
-  const namaAkun = (kode: string) =>
-    akunDb.find((a) => a.kode === kode)?.nama ?? kode;
-  // Reverse lookup nama -> kode dari DB (akun baru tidak ada di statis).
-  const kodeByNama = new Map(akunDb.map((a) => [a.nama.trim().toLowerCase(), a.kode]));
-  const kodeOf = (kodeTersimpan: string | null | undefined, tipe: "PEMASUKAN" | "PENGELUARAN", kategori: string) =>
-    kodeTersimpan?.trim() ||
-    kodeAkunByNama(tipe, kategori) ||
-    kodeByNama.get(kategori.trim().toLowerCase()) ||
-    "(tanpa kode)";
-  // Resolve kode sistem dari NAMA akun (tahan terhadap penomoran ulang COA).
-  const KODE_LUNAS_HUTANG = kodeByNama.get("pelunasan hutang usaha") ?? "5501";
-  const asetKas = new Set(asetKasIds.map((a) => a.transaksiKasId));
-  const asetJual = new Set(asetJualIds.map((a) => a.transaksiKasJualId).filter(Boolean));
-  const catatan: string[] = [];
+  const openingEnd = new Date(start);
+  openingEnd.setDate(openingEnd.getDate() - 1);
+  openingEnd.setHours(23, 59, 59, 999);
+
+  const [periodSnap, openingSnap, neracaSnap] = await Promise.all([
+    getJurnalSnapshot(start, end, mapToJurnalPeriode(periode), label),
+    getJurnalSnapshot(new Date("2000-01-01"), openingEnd, "custom", "opening"),
+    getNeracaSnapshot(end, periode as any, label, start),
+  ]);
+
+  const saldoAwalMap = new Map<string, number>();
+  for (const v of openingSnap.voucher) {
+    for (const leg of v.legs) {
+      if (!kasSet.has(leg.kode)) continue;
+      const cur = saldoAwalMap.get(leg.kode) ?? 0;
+      saldoAwalMap.set(leg.kode, cur + num(leg.debit) - num(leg.kredit));
+    }
+  }
+
+  const netCashMap = new Map<string, number>();
+  kasCodes.forEach((k) => netCashMap.set(k, 0));
 
   const op = new Map<string, { nama: string; masuk: number; keluar: number }>();
   const inv = new Map<string, { nama: string; masuk: number; keluar: number }>();
   const keu = new Map<string, { nama: string; masuk: number; keluar: number }>();
-  const tambah = (
-    map: Map<string, { nama: string; masuk: number; keluar: number }>,
-    kode: string,
-    nama: string,
-    masuk: number,
-    keluar: number
-  ) => {
-    const cur = map.get(kode) ?? { nama, masuk: 0, keluar: 0 };
+  const catatan: string[] = [];
+
+  const addRow = (map: Map<string, { nama: string; masuk: number; keluar: number }>, key: string, nama: string, masuk: number, keluar: number) => {
+    const cur = map.get(key) ?? { nama, masuk: 0, keluar: 0 };
     cur.masuk += masuk;
     cur.keluar += keluar;
-    map.set(kode, cur);
+    map.set(key, cur);
   };
 
-  for (const t of arus) {
-    if (t.tipe === "TRANSFER") continue; // perpindahan internal
-    const nilai = num(t.jumlah);
-    if (nilai === 0) continue;
-    if (t.tipe === "PEMASUKAN") {
-      const kode = kodeOf(t.kodeAkun, "PEMASUKAN", t.kategori);
-      if (/^31/.test(kode)) tambah(keu, kode, namaAkun(kode), nilai, 0); // setoran modal
-      else if (/^12/.test(kode) || asetJual.has(t.id)) tambah(inv, kode, namaAkun(kode), nilai, 0); // hasil penjualan aset
-      else tambah(op, kode, kode.startsWith("(") ? t.kategori : namaAkun(kode), nilai, 0);
-    } else {
-      const kode = kodeOf(t.kodeAkun, "PENGELUARAN", t.kategori);
-      if (/^31/.test(kode)) {
-        tambah(keu, kode, namaAkun(kode), 0, nilai); // penarikan modal / prive
-      } else if (asetKas.has(t.id) || /^12/.test(kode)) {
-        const kunci = /^12/.test(kode) ? kode : "ASET";
-        tambah(inv, kunci, /^12/.test(kode) ? namaAkun(kode) : t.kategori, 0, nilai);
-      } else if (t.tagihanId || kode === KODE_LUNAS_HUTANG) {
-        tambah(keu, KODE_LUNAS_HUTANG, namaAkun(KODE_LUNAS_HUTANG), 0, nilai); // pelunasan utang
+  for (const v of periodSnap.voucher) {
+    const legs = v.legs;
+    const kasLegs = legs.filter((l) => kasSet.has(l.kode));
+    if (kasLegs.length === 0) continue;
+    if (kasLegs.length > 1) continue; // transfer antar kas
+    const kasLeg = kasLegs[0];
+    const lawanLegs = legs.filter((l) => !kasSet.has(l.kode));
+    if (lawanLegs.length === 0) continue;
+    let amount = 0;
+    let cashIn = false;
+    const d = num(kasLeg.debit);
+    const c = num(kasLeg.kredit);
+    if (d > 0) { cashIn = true; amount = d; }
+    else if (c > 0) { cashIn = false; amount = c; }
+    else continue;
+
+    const net = netCashMap.get(kasLeg.kode) ?? 0;
+    netCashMap.set(kasLeg.kode, net + (cashIn ? amount : -amount));
+
+    const lawan = lawanLegs[0];
+    const lawanKode = lawan.kode;
+    const lawanNama = namaAkun(lawanKode);
+
+    if (cashIn) {
+      if (lawanKode === "1102") {
+        addRow(op, "Penerimaan dari pelanggan (pelunasan piutang)", "Penerimaan dari pelanggan (pelunasan piutang)", amount, 0);
+      } else if (/^4/.test(lawanKode)) {
+        addRow(op, `Penerimaan dari ${lawanNama}`, `Penerimaan dari ${lawanNama}`, amount, 0);
+      } else if (/^12/.test(lawanKode)) {
+        addRow(inv, `Penjualan ${lawanNama}`, `Penjualan ${lawanNama}`, amount, 0);
+      } else if (lawanKode === "3101" || lawanKode === "3102") {
+        addRow(keu, "Setoran modal pemilik", "Setoran modal pemilik", amount, 0);
       } else {
-        tambah(op, kode, kode.startsWith("(") ? t.kategori : namaAkun(kode), 0, nilai);
+        addRow(op, "Lainnya", "Lainnya", amount, 0);
+      }
+    } else {
+      if (lawanKode === "2101") {
+        addRow(op, "Pembayaran kepada pemasok", "Pembayaran kepada pemasok", 0, amount);
+      } else if (/^5/.test(lawanKode)) {
+        addRow(op, `Pembayaran ${lawanNama}`, `Pembayaran ${lawanNama}`, 0, amount);
+      } else if (/^11(05|06|07)/.test(lawanKode)) {
+        addRow(op, "Pembayaran pembelian persediaan", "Pembayaran pembelian persediaan", 0, amount);
+      } else if (/^12/.test(lawanKode)) {
+        addRow(inv, `Pembelian ${lawanNama}`, `Pembelian ${lawanNama}`, 0, amount);
+      } else if (lawanKode === "3103") {
+        addRow(keu, "Prive / penarikan modal", "Prive / penarikan modal", 0, amount);
+      } else {
+        addRow(op, "Lainnya", "Lainnya", 0, amount);
       }
     }
   }
@@ -255,6 +271,7 @@ export async function getArusKasSnapshot(
   const operasional = susunKelompok("Arus Kas dari Aktivitas Operasional", op);
   const investasi = susunKelompok("Arus Kas dari Aktivitas Investasi", inv);
   const keuangan = susunKelompok("Arus Kas dari Aktivitas Keuangan", keu);
+
   if (operasional.baris.length === 0 && operasional.bersih === 0)
     catatan.push("Belum ada arus kas operasional pada periode ini.");
   if (investasi.baris.length === 0)
@@ -266,12 +283,40 @@ export async function getArusKasSnapshot(
   const totalKeluar = operasional.keluar + investasi.keluar + keuangan.keluar;
   const kenaikan = totalMasuk - totalKeluar;
   const revaluasi = 0;
-  catatan.push("Total Revaluasi Bank Rp 0 karena sistem tidak mencatat selisih kurs/valuta asing.");
 
-  const saldoAwalPerSumber = SUMBER.map((s) => saldoSumber(awalSumber, awalTujuan, s.key, namaAkun));
-  const saldoAkhirPerSumber = SUMBER.map((s) => saldoSumber(akhirSumber, akhirTujuan, s.key, namaAkun));
+  const saldoAwalPerSumber: SaldoSumber[] = SUMBER.map((s) => {
+    const nilai = saldoAwalMap.get(s.kode) ?? 0;
+    return { sumber: s.key, kode: s.kode, nama: namaAkun(s.kode), nilai };
+  });
+
+  // saldo akhir per sumber dari Jurnal kumulatif termasuk transfer
+  const saldoAkhirMap = new Map<string, number>();
+  kasCodes.forEach((k) => {
+    saldoAkhirMap.set(k, saldoAwalMap.get(k) ?? 0);
+  });
+  for (const v of periodSnap.voucher) {
+    for (const leg of v.legs) {
+      if (!kasSet.has(leg.kode)) continue;
+      const cur = saldoAkhirMap.get(leg.kode) ?? 0;
+      saldoAkhirMap.set(leg.kode, cur + num(leg.debit) - num(leg.kredit));
+    }
+  }
+  const saldoAkhirPerSumber: SaldoSumber[] = SUMBER.map((s) => {
+    const nilai = saldoAkhirMap.get(s.kode) ?? 0;
+    return { sumber: s.key, kode: s.kode, nama: namaAkun(s.kode), nilai };
+  });
   const saldoAwal = saldoAwalPerSumber.reduce((a, b) => a + b.nilai, 0);
-  const saldoAkhir = saldoAwalPerSumber.reduce((a, b) => a + b.nilai, 0) + kenaikan;
+  const saldoAkhir = saldoAkhirPerSumber.reduce((a, b) => a + b.nilai, 0);
+
+  // Validasi vs Neraca Kas+Bank+Tabungan
+  const kasNeraca = neracaSnap.aktivaLancar.baris
+    .filter((b) => kasCodes.includes(b.kode))
+    .reduce((s, b) => s + b.nilai, 0);
+  if (saldoAkhir !== kasNeraca) {
+    catatan.push(`Peringatan: Saldo Akhir Arus Kas Rp ${saldoAkhir.toLocaleString("id-ID")} ≠ Kas+Bank+Tabungan Neraca Rp ${kasNeraca.toLocaleString("id-ID")}.`);
+  }
+
+  catatan.push("Sumber data Jurnal; klasifikasi berdasarkan akun lawan; transfer antar kas dikecualikan.");
 
   return {
     periode,

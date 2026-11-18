@@ -2,7 +2,7 @@
 // PDF landscape detail per pelanggan + XLSX (termasuk umur & kategori aging),
 // memakai snapshot API yang sama dengan tampilan web.
 
-import type { UsiaPiutangSnapshot } from "@/lib/usia-piutang-types";
+import { KATEGORI_AGING, bucketAging, type UsiaPiutangSnapshot } from "@/lib/usia-piutang-types";
 
 export const USIA_PERUSAHAAN = "PT BUMI SURYA FARM";
 
@@ -71,14 +71,33 @@ type PdfLine =
   | { kind: "left"; text: string; size: number; bold: boolean }
   | { kind: "head" }
   | { kind: "grup"; text: string }
-  | { kind: "row"; tgl: string; trx: string; no: string; des: string; jml: string; sisa: string; bold: boolean };
+  | { kind: "row"; tgl: string; trx: string; no: string; des: string; jml: string; sisa: string; bold: boolean }
+  | { kind: "sumHead" }
+  | { kind: "sumRow"; label: string; nilai: string; bold: boolean };
 
 function snapshotKeLines(s: UsiaPiutangSnapshot): PdfLine[] {
+  const nilaiBucket = {
+    b0: s.totalB0,
+    b1: s.totalB1,
+    b2: s.totalB2,
+    b3: s.totalB3,
+    b4: s.totalB4,
+  };
   const lines: PdfLine[] = [
     { kind: "center", text: USIA_PERUSAHAAN, size: 12, bold: true },
-    { kind: "center", text: "Laporan Piutang Pelanggan", size: 12, bold: true },
+    { kind: "center", text: "Laporan Usia Piutang", size: 12, bold: true },
     { kind: "center", text: s.label, size: 9.5, bold: true },
     { kind: "center", text: "(dalam IDR)", size: 9.5, bold: true },
+    { kind: "left", text: "", size: 9, bold: false },
+    { kind: "left", text: "Ringkasan Aging", size: 9, bold: true },
+    { kind: "sumHead" },
+    ...KATEGORI_AGING.map<PdfLine>((k) => ({
+      kind: "sumRow",
+      label: k,
+      nilai: formatIDREkspor(nilaiBucket[bucketAging(k)]),
+      bold: false,
+    })),
+    { kind: "sumRow", label: "Total Piutang", nilai: formatIDREkspor(s.total), bold: true },
     { kind: "left", text: "", size: 9, bold: false },
     { kind: "head" },
   ];
@@ -123,6 +142,8 @@ export function buildUsiaPdf(snapshots: UsiaPiutangSnapshot[]): Buffer {
   const need = (l: PdfLine): number => {
     if (l.kind === "head") return 22;
     if (l.kind === "grup") return 14;
+    if (l.kind === "sumHead") return 16;
+    if (l.kind === "sumRow") return 7.5 * 1.5;
     if (l.kind === "center") return l.size * 1.5;
     if (l.kind === "row") return 7.5 * 1.5;
     return (l as { size: number }).size * 1.5;
@@ -198,6 +219,14 @@ export function buildUsiaPdf(snapshots: UsiaPiutangSnapshot[]): Buffer {
         stream += draw("Deskripsi", 7, true, X_DES, bot);
         stream += drawRight("Jumlah", 7, true, X_JML_R, bot);
         stream += drawRight("Sisa Piutang", 7, true, X_SISA_R, bot);
+      } else if (line.kind === "sumHead") {
+        const bot = yTop - 10.5;
+        stream += draw("Kelompok Umur", 7, true, X_TGL, bot);
+        stream += drawRight("Jumlah", 7, true, X_SISA_R, bot);
+      } else if (line.kind === "sumRow") {
+        const base = yTop - 7.5 - 2;
+        stream += draw(line.label, 7.5, line.bold, X_TGL, base);
+        stream += drawRight(line.nilai, 7.5, line.bold, X_SISA_R, base);
       } else {
         const size = 7.5;
         const base = yTop - size - 2;
@@ -248,12 +277,56 @@ export function buildUsiaPdf(snapshots: UsiaPiutangSnapshot[]): Buffer {
 // ---------------------------------------------------------------------------
 
 export type XlsxCell = { v: string | number; bold?: boolean; num?: boolean };
-export type XlsxSheet = { name: string; rows: XlsxCell[][] };
+export type XlsxSheet = { name: string; rows: XlsxCell[][]; widths?: number[] };
+
+/** Sheet ringkasan aging (sama persis dengan tabel web). */
+export function snapshotKeSheetUPRingkasan(s: UsiaPiutangSnapshot, sheetName: string): XlsxSheet {
+  const nilaiBucket = {
+    b0: s.totalB0,
+    b1: s.totalB1,
+    b2: s.totalB2,
+    b3: s.totalB3,
+    b4: s.totalB4,
+  };
+  const rows: XlsxCell[][] = [
+    [{ v: USIA_PERUSAHAAN, bold: true }],
+    [{ v: "Ringkasan Usia Piutang", bold: true }],
+    [{ v: s.label }],
+    [{ v: "(dalam IDR)" }],
+    [],
+    [
+      { v: "Customer", bold: true },
+      { v: "Total", bold: true },
+      ...KATEGORI_AGING.map<XlsxCell>((k) => ({ v: k, bold: true })),
+    ],
+  ];
+  for (const g of s.grup) {
+    rows.push([
+      { v: g.pelanggan },
+      { v: Math.round(g.total), num: true },
+      { v: Math.round(g.b0), num: true },
+      { v: Math.round(g.b1), num: true },
+      { v: Math.round(g.b2), num: true },
+      { v: Math.round(g.b3), num: true },
+      { v: Math.round(g.b4), num: true },
+    ]);
+  }
+  rows.push([
+    { v: "Total Piutang", bold: true },
+    { v: Math.round(s.total), bold: true, num: true },
+    ...KATEGORI_AGING.map<XlsxCell>((k) => ({
+      v: Math.round(nilaiBucket[bucketAging(k)]),
+      bold: true,
+      num: true,
+    })),
+  ]);
+  return { name: sheetName.slice(0, 31), rows, widths: [28, 16, 18, 14, 14, 14, 14] };
+}
 
 export function snapshotKeSheetUP(s: UsiaPiutangSnapshot, sheetName: string): XlsxSheet {
   const rows: XlsxCell[][] = [
     [{ v: USIA_PERUSAHAAN, bold: true }],
-    [{ v: "Laporan Piutang Pelanggan", bold: true }],
+    [{ v: "Laporan Usia Piutang", bold: true }],
     [{ v: s.label }],
     [{ v: "(dalam IDR)" }],
     [],
@@ -341,7 +414,8 @@ function sheetXml(sheet: XlsxSheet): string {
     });
     rows += `<row r="${ri + 1}">${cells}</row>`;
   });
-  const widths = [26, 14, 14, 22, 34, 18, 18, 14, 16]
+  const baseWidths = sheet.widths ?? [26, 14, 14, 22, 34, 18, 18, 14, 16];
+  const widths = baseWidths
     .slice(0, nCols)
     .map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`)
     .join("");

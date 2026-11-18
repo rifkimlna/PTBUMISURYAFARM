@@ -1,19 +1,14 @@
 // Service Laporan Buku Besar PT Bumi Surya Farm (KHUSUS modul ini).
 // JANGAN diimpor dari Client Component — hanya Server Component & API route.
 //
-// Sumber data (aktual database, tanpa sumber baru — konsisten dengan rute
-// detail COA /api/keuangan/coa/[kode]/transaksi):
-// - TransaksiKas berkode akun (kodeAkun): PEMASUKAN = penambah, PENGELUARAN
-//   = pengurang pada akun tersebut.
-// - Kas/Bank/Tabungan (1101/1103/1104): transfer-aware per sumberDana /
-//   sumberDanaTujuan (TRANSFER keluar = pengurang asal, TRANSFER masuk =
-//   penambah tujuan), konsisten dengan Neraca & Arus Kas.
-// - Saldo debit-normal (Aset/Beban): Debit menambah, Kredit mengurangi.
-//   Saldo kredit-normal (Kewajiban/Modal/Pendapatan): sebaliknya.
-// - Saldo awal = efek kumulatif sebelum periode; hanya akun bersaldo atau
-//   bermutasi yang ditampilkan (kecuali filter akun spesifik).
+// Sumber data: seluruh Jurnal (getJurnalSnapshot).
+// - Setiap kaki jurnal debit/kredit dipakai apa adanya, tanpa pembalikan.
+// - Saldo awal = akumulasi jurnal sebelum periode (sama seperti Neraca Saldo).
+// - Akun pseudo HPP & SALDO_AWAL ditampilkan.
+// - Akun tanpa COA ditampilkan di kelompok "Lainnya".
 
 import { prisma } from "@/lib/prisma";
+import { getJurnalSnapshot } from "@/lib/jurnal-server";
 import type {
   BukuBesarAkun,
   BukuBesarBaris,
@@ -24,24 +19,20 @@ import type {
 export { BUKU_BESAR_PERIODE, BUKU_BESAR_PERIODE_LABEL } from "@/lib/buku-besar-types";
 export type { BukuBesarAkun, BukuBesarBaris, BukuBesarPeriode, BukuBesarSnapshot } from "@/lib/buku-besar-types";
 
-// ---------- Rentang periode (kalender lokal, pola yang sama dengan laporan lain) ----------
-
+// ---------- Rentang periode ----------
 function startOfDay(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
-
 function endOfDay(d: Date) {
   const x = startOfDay(d);
   x.setHours(23, 59, 59, 999);
   return x;
 }
-
 function addDays(d: Date, n: number) {
   const x = new Date(d);
   x.setDate(x.getDate() + n);
   return x;
 }
-
 function fmtTgl(d: Date) {
   return d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
 }
@@ -62,7 +53,7 @@ export function resolveBukuBesarRange(
       return { start: y, end: endOfDay(y), label: fmtTgl(y) };
     }
     case "minggu-ini": {
-      const dow = (today.getDay() + 6) % 7; // Senin = 0
+      const dow = (today.getDay() + 6) % 7;
       const s = addDays(today, -dow);
       const e = addDays(s, 6);
       return { start: s, end: endOfDay(e), label: `${fmtTgl(s)} – ${fmtTgl(e)}` };
@@ -116,7 +107,6 @@ export function resolveBukuBesarRange(
   }
 }
 
-/** Rentang tiap bulan Januari s/d bulan berjalan (untuk "per-bulan-tahun-ini"). */
 export function monthRangesOfCurrentYear(): { start: Date; end: Date; label: string }[] {
   const now = new Date();
   const out: { start: Date; end: Date; label: string }[] = [];
@@ -132,292 +122,244 @@ export function monthRangesOfCurrentYear(): { start: Date; end: Date; label: str
   return out;
 }
 
-// ---------- Penyusunan buku besar ----------
-
-const KODE_KAS = new Set(["1101", "1103", "1104"]);
-const SUMBER_KE_KODE: Record<string, string> = { KAS: "1101", BANK: "1103", TABUNGAN: "1104" };
-const KELOMPOK_URUTAN = ["Aset", "Kewajiban", "Modal", "Pendapatan", "Beban"];
-const BATAS_BARIS = 20000;
-
-const NAMA_AKUN_FALLBACK: Record<string, string> = {
+// ---------- Helper ----------
+const AWAL_EPOCH = new Date(2000, 0, 1);
+const NAMA_FALLBACK: Record<string, string> = {
   "1101": "Kas",
   "1102": "Piutang",
   "1103": "Bank",
   "1104": "Tabungan",
 };
-
-type KasRow = {
-  tanggal: Date;
-  tipe: string;
-  kodeAkun: string | null;
-  kategori: string;
-  sumberDana: string;
-  sumberDanaTujuan: string | null;
-  jumlah: unknown;
-  keterangan: string | null;
-  noTransaksi: string | null;
-  pihak: string | null;
+const KELOMPOK_PSEUDO: Record<string, { nama: string; kelompok: string }> = {
+  HPP: { nama: "Harga Pokok Penjualan", kelompok: "HARGA POKOK PENJUALAN" },
+  SALDO_AWAL: { nama: "Saldo Awal Persediaan", kelompok: "Ekuitas" },
 };
 
-const num = (v: unknown) => Math.round(Number(v ?? 0));
-
 function isDebitNormal(kelompok: string) {
-  return kelompok === "Aset" || kelompok === "Beban";
+  return kelompok === "Aset" || kelompok === "Beban" || kelompok === "HARGA POKOK PENJUALAN";
 }
 
-/** Efek satu baris kas ke satu akun: { tambah, kurang } sebelum konversi debit/kredit. */
-function efekKeAkun(
-  r: KasRow,
-  kode: string,
-  awal: { tambah: number; kurang: number }
-): { tambah: number; kurang: number } {
-  const nilai = num(r.jumlah);
-  if (nilai === 0) return awal;
-  let { tambah, kurang } = awal;
-  // Kaki kode akun (selain kas — kas dilacak via kaki sumber dana).
-  if (r.kodeAkun === kode && !KODE_KAS.has(kode) && r.tipe !== "TRANSFER") {
-    if (r.tipe === "PEMASUKAN") tambah += nilai;
-    else if (r.tipe === "PENGELUARAN") kurang += nilai;
+function normalizeKelompok(kelompok: string) {
+  if (kelompok === "Modal") return "Ekuitas";
+  return kelompok;
+}
+
+const KELOMPOK_URUTAN = ["Aset", "Kewajiban", "Ekuitas", "Pendapatan", "HARGA POKOK PENJUALAN", "Beban", "Lainnya"];
+
+function getMetaAkun(kode: string, meta: Map<string, { kode: string; nama: string; kelompok: string; golongan: string }>) {
+  const m = meta.get(kode);
+  if (m) return m;
+  const pseudo = KELOMPOK_PSEUDO[kode];
+  if (pseudo) {
+    return { kode, nama: pseudo.nama, kelompok: pseudo.kelompok, golongan: "" };
   }
-  // Kaki sumber dana untuk Kas/Bank/Tabungan (transfer-aware).
-  const kodeSumber = SUMBER_KE_KODE[r.sumberDana];
-  if (kodeSumber === kode) {
-    if (r.tipe === "PEMASUKAN") tambah += nilai;
-    else kurang += nilai; // PENGELUARAN maupun TRANSFER keluar
+  return { kode, nama: NAMA_FALLBACK[kode] ?? `Akun ${kode}`, kelompok: "Lainnya", golongan: "" };
+}
+
+// ---------- Mapping periode ke JurnalPeriode ----------
+function mapBukuBesarPeriodeToJurnal(p?: BukuBesarPeriode): "hari-ini" | "minggu-ini" | "bulan-ini" | "tahun-ini" | "kemarin" | "minggu-lalu" | "bulan-lalu" | "tahun-lalu" | "custom" {
+  if (!p || p === "custom") return "custom";
+  if (p === "triwulan-ini" || p === "kuartal-lalu" || p === "per-bulan-tahun-ini") return "custom";
+  return p as any;
+}
+
+// ---------- Core ----------
+export async function getBukuBesar(
+  start: Date,
+  end: Date,
+  kodeAkun?: string,
+  periode?: BukuBesarPeriode,
+  label?: string
+): Promise<BukuBesarSnapshot> {
+  const [akunDb] = await Promise.all([
+    prisma.akunCOA.findMany({
+      select: { kode: true, nama: true, kelompok: true, golongan: true },
+    }),
+  ]);
+
+  const meta = new Map(akunDb.map(a => [a.kode, a]));
+
+  // Saldo awal
+  const beforeEnd = new Date(start.getTime() - 1);
+  let beforeVoucher: any[] = [];
+  if (beforeEnd >= AWAL_EPOCH) {
+    const beforeSnap = await getJurnalSnapshot(AWAL_EPOCH, beforeEnd, "custom", "before");
+    beforeVoucher = beforeSnap.voucher;
   }
-  if (r.tipe === "TRANSFER" && r.sumberDanaTujuan) {
-    if (SUMBER_KE_KODE[r.sumberDanaTujuan] === kode) tambah += nilai;
+
+  const periodLabel = label ?? `${fmtTgl(start)} – ${fmtTgl(end)}`;
+  const periodSnap = await getJurnalSnapshot(start, end, mapBukuBesarPeriodeToJurnal(periode), periodLabel);
+
+  // Agregat saldo awal
+  const saldoAwalMap = new Map<string, number>();
+  const namaMap = new Map<string, string>();
+
+  const agg = (vouchers: any[]) => {
+    for (const v of vouchers) {
+      for (const l of v.legs) {
+        const kode = l.kode;
+        const debit = Number(l.debit) || 0;
+        const kredit = Number(l.kredit) || 0;
+        const curNet = saldoAwalMap.get(kode) ?? 0;
+        saldoAwalMap.set(kode, curNet + debit - kredit);
+        if (!namaMap.has(kode)) namaMap.set(kode, l.nama);
+      }
+    }
+  };
+  agg(beforeVoucher);
+
+  // Kumpulkan kode yang terlibat
+  const kodeSet = new Set<string>([...saldoAwalMap.keys()]);
+  for (const v of periodSnap.voucher) {
+    for (const l of v.legs) kodeSet.add(l.kode);
   }
-  return { tambah, kurang };
-}
 
-function keDebitKredit(
-  tambah: number,
-  kurang: number,
-  debitNormal: boolean
-): { debit: number; kredit: number } {
-  return debitNormal ? { debit: tambah, kredit: kurang } : { debit: kurang, kredit: tambah };
-}
+  // Inisialisasi akun
+  type AkunData = {
+    kode: string;
+    nama: string;
+    kelompok: string;
+    golongan: string;
+    saldoNormal: "debit" | "kredit";
+    saldoAwal: number;
+    saldo: number;
+    baris: BukuBesarBaris[];
+    totalDebit: number;
+    totalKredit: number;
+    _sign: number;
+  };
+  const akunMap = new Map<string, AkunData>();
 
-function uraian(r: KasRow) {
-  const kat = r.kategori || (r.tipe === "TRANSFER" ? "Transfer" : r.tipe);
-  if (r.tipe === "TRANSFER") {
-    const tujuan = r.sumberDanaTujuan ?? "-";
-    return `${kat} (${r.sumberDana} → ${tujuan})`;
+  for (const kode of kodeSet) {
+    const metaInfo = getMetaAkun(kode, meta);
+    const nama = metaInfo.nama || namaMap.get(kode) || `Akun ${kode}`;
+    const kelompok = metaInfo.kelompok;
+    const golongan = metaInfo.golongan || "";
+    const saldoNormal = isDebitNormal(kelompok) ? "debit" : "kredit";
+    const sign = saldoNormal === "debit" ? 1 : -1;
+    const netAwal = saldoAwalMap.get(kode) ?? 0;
+    const saldoAwalNormal = netAwal * sign;
+    akunMap.set(kode, {
+      kode,
+      nama,
+      kelompok,
+      golongan,
+      saldoNormal,
+      saldoAwal: saldoAwalNormal,
+      saldo: saldoAwalNormal,
+      baris: [],
+      totalDebit: 0,
+      totalKredit: 0,
+      _sign: sign,
+    });
   }
-  return r.keterangan?.trim() ? `${kat} — ${r.keterangan.trim()}` : kat;
-}
 
-/** Kolom Transaksi: kategori asli / info transfer (data asli, tanpa dummy). */
-function transaksiLabel(r: KasRow) {
-  const kat = r.kategori?.trim() || r.tipe;
-  if (r.tipe === "TRANSFER") {
-    const tujuan = r.sumberDanaTujuan ?? "-";
-    return kat && kat !== "TRANSFER" ? `${kat} (${r.sumberDana} → ${tujuan})` : `Transfer (${r.sumberDana} → ${tujuan})`;
+  // Proses periode kronologis
+  for (const v of periodSnap.voucher) {
+    const tglIso = v.tanggal;
+    const noTransaksi = v.noTransaksi ?? null;
+    // Transaksi dipakai sebagai uraian jurnal, keterangan kosong
+    for (const l of v.legs) {
+      const kode = l.kode;
+      const data = akunMap.get(kode);
+      if (!data) continue;
+      const debit = Number(l.debit) || 0;
+      const kredit = Number(l.kredit) || 0;
+      if (debit === 0 && kredit === 0) continue;
+      data.totalDebit += debit;
+      data.totalKredit += kredit;
+      const delta = (debit - kredit) * data._sign;
+      data.saldo += delta;
+      data.baris.push({
+        tanggal: tglIso,
+        transaksi: v.uraian,
+        uraian: "",
+        noTransaksi,
+        keterangan: null,
+        debit,
+        kredit,
+        saldo: data.saldo,
+      });
+    }
   }
-  return kat;
+
+  // Bangun hasil
+  const akunList: BukuBesarAkun[] = [];
+  let totalDebit = 0;
+  let totalKredit = 0;
+
+  const kodeList = Array.from(akunMap.keys()).sort((a, b) => a.localeCompare(b));
+
+  for (const kode of kodeList) {
+    const d = akunMap.get(kode)!;
+    if (kodeAkun && kodeAkun !== "semua" && kode !== kodeAkun) continue;
+    const hasMutasi = d.totalDebit !== 0 || d.totalKredit !== 0 || d.baris.length > 0;
+    const hasSaldo = d.saldoAwal !== 0 || d.saldo !== d.saldoAwal;
+    if (!kodeAkun || kodeAkun === "semua") {
+      if (!hasSaldo && !hasMutasi) continue;
+    }
+    totalDebit += d.totalDebit;
+    totalKredit += d.totalKredit;
+    akunList.push({
+      kode: d.kode,
+      nama: d.nama,
+      kelompok: normalizeKelompok(d.kelompok),
+      golongan: d.golongan,
+      saldoNormal: d.saldoNormal,
+      saldoAwal: d.saldoAwal,
+      baris: d.baris,
+      totalDebit: d.totalDebit,
+      totalKredit: d.totalKredit,
+      saldoAkhir: d.saldo,
+    });
+  }
+
+  akunList.sort((a, b) => {
+    const ka = normalizeKelompok(a.kelompok);
+    const kb = normalizeKelompok(b.kelompok);
+    const ia = KELOMPOK_URUTAN.indexOf(ka);
+    const ib = KELOMPOK_URUTAN.indexOf(kb);
+    const orderA = ia === -1 ? 999 : ia;
+    const orderB = ib === -1 ? 999 : ib;
+    if (orderA !== orderB) return orderA - orderB;
+    return a.kode.localeCompare(b.kode);
+  });
+
+  const catatan: string[] = [
+    "Buku Besar bersumber dari seluruh Jurnal (transaksi kas, invoice penjualan, faktur pembelian, opname bernilai, HPP).",
+    "Saldo awal = akumulasi jurnal sebelum periode; Pergerakan = jurnal dalam periode; Saldo akhir = saldo awal + pergerakan.",
+    "Kolom Debit dan Kredit menampilkan sisi asli kaki jurnal tanpa pembalikan arah.",
+  ];
+  if (!kodeAkun || kodeAkun === "semua") {
+    catatan.push("Hanya akun bersaldo awal atau bermutasi pada periode ini yang ditampilkan.");
+  }
+
+  return {
+    periode: periode ?? "custom",
+    start: start.toISOString(),
+    end: end.toISOString(),
+    label: periodLabel,
+    akunFilter: kodeAkun && kodeAkun !== "semua" ? kodeAkun : "semua",
+    akun: akunList,
+    totalDebit,
+    totalKredit,
+    catatan,
+  };
 }
 
-/** Kolom Keterangan: keterangan asli + pihak bila ada (data asli, tanpa dummy). */
-function keteranganAsli(r: KasRow) {
-  const ket = r.keterangan?.trim() ?? "";
-  const pihak = r.pihak?.trim() ?? "";
-  if (ket && pihak) return `${ket} — ${pihak}`;
-  return ket || pihak || null;
-}
-
+// ---------- Snapshots batch ----------
 export async function getBukuBesarSnapshots(
   ranges: { start: Date; end: Date; label: string; periode: BukuBesarPeriode }[],
   akunFilter?: string
 ): Promise<BukuBesarSnapshot[]> {
-  const globalStart = ranges.reduce((a, r) => (r.start < a ? r.start : a), ranges[0].start);
-  const globalEnd = ranges.reduce((a, r) => (r.end > a ? r.end : a), ranges[0].end);
-
-  const [akunDb, awalKode, awalSumber, awalTujuan, rows] = await Promise.all([
-    prisma.akunCOA.findMany({
-      select: { kode: true, nama: true, kelompok: true, golongan: true },
-    }),
-    prisma.transaksiKas.groupBy({
-      by: ["kodeAkun", "tipe"],
-      where: { kodeAkun: { not: null }, tipe: { in: ["PEMASUKAN", "PENGELUARAN"] }, tanggal: { lt: globalStart } },
-      _sum: { jumlah: true },
-    }),
-    prisma.transaksiKas.groupBy({
-      by: ["sumberDana", "tipe"],
-      where: { tanggal: { lt: globalStart } },
-      _sum: { jumlah: true },
-    }),
-    prisma.transaksiKas.groupBy({
-      by: ["sumberDanaTujuan", "tipe"],
-      where: { tipe: "TRANSFER", tanggal: { lt: globalStart } },
-      _sum: { jumlah: true },
-    }),
-    prisma.transaksiKas.findMany({
-      where: { tanggal: { gte: globalStart, lte: globalEnd } },
-      select: {
-        tanggal: true,
-        tipe: true,
-        kodeAkun: true,
-        kategori: true,
-        sumberDana: true,
-        sumberDanaTujuan: true,
-        jumlah: true,
-        keterangan: true,
-        noTransaksi: true,
-        pihak: true,
-      },
-      orderBy: [{ tanggal: "asc" }],
-      take: BATAS_BARIS + 1,
-    }),
-  ]);
-
-  if (rows.length > BATAS_BARIS) {
-    throw new Error("Terlalu banyak mutasi pada periode ini — persempit rentang tanggal");
-  }
-
-  const meta = new Map(akunDb.map((a) => [a.kode, a]));
-  // Kode kas selalu tersedia walau belum ada di DB.
-  for (const [kode, nama] of Object.entries(NAMA_AKUN_FALLBACK)) {
-    if (!meta.has(kode)) {
-      meta.set(kode, { kode, nama, kelompok: "Aset", golongan: "Kas & Setara" });
-    }
-  }
-
-  const kodeList = [...meta.keys()].sort((a, b) => {
-    const ka = meta.get(a)!;
-    const kb = meta.get(b)!;
-    const ia = KELOMPOK_URUTAN.indexOf(ka.kelompok);
-    const ib = KELOMPOK_URUTAN.indexOf(kb.kelompok);
-    if (ia !== ib) return ia - ib;
-    return a.localeCompare(b);
-  });
-
-  if (akunFilter && akunFilter !== "semua" && !meta.has(akunFilter)) {
-    throw new Error(`Akun ${akunFilter} tidak terdaftar di Daftar Akun`);
-  }
-
-  const awalTambahKurang = (kode: string): { tambah: number; kurang: number } => {
-    let tambah = 0;
-    let kurang = 0;
-    if (!KODE_KAS.has(kode)) {
-      for (const g of awalKode) {
-        if (g.kodeAkun !== kode) continue;
-        if (g.tipe === "PEMASUKAN") tambah += num(g._sum.jumlah);
-        else if (g.tipe === "PENGELUARAN") kurang += num(g._sum.jumlah);
-      }
-    }
-    const sumber = Object.entries(SUMBER_KE_KODE).find(([, k]) => k === kode)?.[0];
-    if (sumber) {
-      for (const g of awalSumber) {
-        if (g.sumberDana !== sumber) continue;
-        if (g.tipe === "PEMASUKAN") tambah += num(g._sum.jumlah);
-        else kurang += num(g._sum.jumlah); // PENGELUARAN + TRANSFER keluar
-      }
-      for (const g of awalTujuan) {
-        if (g.sumberDanaTujuan !== sumber) continue;
-        tambah += num(g._sum.jumlah); // TRANSFER masuk
-      }
-    }
-    return { tambah, kurang };
-  };
-
-  // Saldo awal global (sebelum rentang pertama) per akun.
-  const saldoAwalGlobal = new Map<string, number>();
-  for (const kode of kodeList) {
-    const { tambah, kurang } = awalTambahKurang(kode);
-    saldoAwalGlobal.set(kode, tambah - kurang);
-  }
-
   const snapshots: BukuBesarSnapshot[] = [];
-  // Saldo berjalan antar rentang (untuk mode per-bulan).
-  const berjalan = new Map<string, number>(saldoAwalGlobal);
-
   for (const r of ranges) {
-    const akun: BukuBesarAkun[] = [];
-    let totalDebit = 0;
-    let totalKredit = 0;
-
-    for (const kode of kodeList) {
-      if (akunFilter && akunFilter !== "semua" && kode !== akunFilter) continue;
-      const m = meta.get(kode)!;
-      const debitNormal = isDebitNormal(m.kelompok);
-      const saldoAwal = berjalan.get(kode) ?? 0;
-      let saldo = saldoAwal;
-      const baris: BukuBesarBaris[] = [];
-      let td = 0;
-      let tk = 0;
-
-      for (const row of rows as KasRow[]) {
-        if (row.tanggal < r.start || row.tanggal > r.end) continue;
-        const { tambah, kurang } = efekKeAkun(row, kode, { tambah: 0, kurang: 0 });
-        if (tambah === 0 && kurang === 0) continue;
-        const { debit, kredit } = keDebitKredit(tambah, kurang, debitNormal);
-        saldo += tambah - kurang;
-        td += debit;
-        tk += kredit;
-        baris.push({
-          tanggal: row.tanggal.toISOString(),
-          transaksi: transaksiLabel(row),
-          uraian: uraian(row),
-          noTransaksi: row.noTransaksi,
-          keterangan: keteranganAsli(row),
-          debit,
-          kredit,
-          saldo,
-        });
-      }
-
-      const saldoAkhir = saldo;
-      berjalan.set(kode, saldoAkhir);
-      if (akunFilter && akunFilter !== "semua") {
-        // Filter spesifik selalu ditampilkan walau kosong.
-      } else if (saldoAwal === 0 && baris.length === 0) {
-        continue;
-      }
-      totalDebit += td;
-      totalKredit += tk;
-      akun.push({
-        kode,
-        nama: m.nama,
-        kelompok: m.kelompok,
-        golongan: m.golongan,
-        saldoNormal: debitNormal ? "debit" : "kredit",
-        saldoAwal,
-        baris,
-        totalDebit: td,
-        totalKredit: tk,
-        saldoAkhir,
-      });
-    }
-
-    const catatan: string[] = [];
-    catatan.push(
-      "Mutasi berasal dari TransaksiKas: PEMASUKAN = penambah, PENGELUARAN = pengurang; Kas/Bank/Tabungan (1101/1103/1104) memperhitungkan TRANSFER masuk/keluar."
-    );
-    if (!akunFilter || akunFilter === "semua") {
-      catatan.push("Hanya akun bersaldo awal atau bermutasi pada periode ini yang ditampilkan.");
-    }
-    catatan.push(
-      "Piutang (1102) & Utang Usaha (2101) mencerminkan mutasi kas bertagihan; pembentukan tagihan tercatat di modul Tagihan/Penjualan/Pembelian."
-    );
-
-    snapshots.push({
-      periode: r.periode,
-      start: r.start.toISOString(),
-      end: r.end.toISOString(),
-      label: r.label,
-      akunFilter: akunFilter && akunFilter !== "semua" ? akunFilter : "semua",
-      akun,
-      totalDebit,
-      totalKredit,
-      catatan,
-    });
+    const snap = await getBukuBesar(r.start, r.end, akunFilter, r.periode, r.label);
+    snapshots.push(snap);
   }
-
   return snapshots;
 }
 
-/** Snapshot bulanan (Januari s/d bulan berjalan) untuk "per-bulan-tahun-ini". */
 export async function getBukuBesarBulanan(akunFilter?: string): Promise<BukuBesarSnapshot[]> {
   const ranges = monthRangesOfCurrentYear().map((m) => ({ ...m, periode: "per-bulan-tahun-ini" as const }));
   return getBukuBesarSnapshots(ranges, akunFilter);

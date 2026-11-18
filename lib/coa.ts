@@ -138,5 +138,10 @@ export function getAkunGrouped(): Record<KelompokCOA, Record<string, AkunCOA[]>>
 // Label sumber dana, ex: "Kas". Kode akun tetap tersimpan di SUMBER_DANA (internal).
 export function labelSumberDana(key: string | null | undefined): string {
   const map = SUMBER_DANA[(key || "") as SumberDanaKey];
-  return map ? map.label : "—";
+  return map ? map.label : "-";
+}
+
+export function labelSumberDanaDenganKode(key: string | null | undefined): string {
+  const map = SUMBER_DANA[(key || "") as SumberDanaKey];
+  return map ? `${map.label} (${map.kode})` : "-";
 }

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { AnggaranLabaRugiContent } from "@/components/admin/anggaran-laba-rugi-content";
 
 // Anggaran Laba Rugi PT Bumi Surya Farm — pantau realisasi anggaran vs aktual

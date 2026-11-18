@@ -4,17 +4,24 @@
 // Sumber data (semuanya data aktual database, tanpa dummy):
 // - HANYA DokumenPenjualan tipe PENAGIHAN (= Faktur Penjualan) pada rentang
 //   tanggal. Penawaran, Pesanan, Pengiriman, Proforma, dan Tukar Faktur TIDAK
-//   dihitung.
+//   dihitung sebagai penjualan.
 // - Retur mengikuti konvensi Laporan Penjualan per Produk: item dokumen
 //   TUKAR_FAKTUR pada rentang tanggal mengurangi Qty dan Nilai.
-// - HPP per unit dari master Produk (PersediaanBarang): hargaBeli, fallback
-//   hargaSatuan mengikuti konvensi HPP Laba Rugi; item ketikan manual tanpa
-//   master (produkId null) HPP = Rp 0.
+// - HPP memakai fungsi bersama Laba Rugi (lib/hpp-stok-server.ts):
+//   mutasi RiwayatStok KELUAR sumber PENJUALAN x biaya perolehan rata-rata
+//   tertimbang kronologis dari MASUK (opname/pembelian). Harga jual TIDAK
+//   pernah dipakai sebagai HPP.
+// - Produk tanpa mutasi keluar/biaya perolehan valid: HPP, Profit, Margin,
+//   dan Harga Beli Rata-rata bernilai null (ditampilkan "-"), bukan Rp 0.
+// - Total HPP hanya menjumlahkan HPP valid (label "HPP Tercatat"). Bila ada
+//   HPP belum diketahui, total Profit/Margin juga null ("-").
+// - Qty total tidak dijumlahkan bila satuan produk berbeda.
 // - Pengelompokan per produk PERSIS seperti Penjualan per Produk (id produk
-//   bila ada, sonst teks deskripsi) agar totalnya identik.
+//   bila ada, selain itu teks deskripsi) agar total penjualannya identik.
 // - Total dihitung dari SELURUH baris terfilter (bukan halaman aktif).
 
 import { prisma } from "@/lib/prisma";
+import { getHppMutasiStok } from "@/lib/hpp-stok-server";
 import type {
   ProfitabilitasBaris,
   ProfitabilitasSnapshot,
@@ -35,6 +42,9 @@ function endOfDay(d: Date) {
   x.setHours(23, 59, 59, 999);
   return x;
 }
+
+const bulat2 = (v: number) => Math.round(v * 100) / 100;
+const bulat1 = (v: number) => Math.round(v * 10) / 10;
 
 export function resolveProfitRentang(dari?: string, sampai?: string): { start: Date; end: Date } {
   const now = new Date();
@@ -69,7 +79,6 @@ export async function getProfitabilitasSnapshot(
     }),
   ]);
 
-  // HPP master untuk produk yang punya produkId.
   const ids = [...new Set(
     [...penjualanDocs, ...returDocs]
       .flatMap((d) => d.items)
@@ -80,18 +89,42 @@ export async function getProfitabilitasSnapshot(
     ids.length > 0
       ? await prisma.persediaanBarang.findMany({
           where: { id: { in: ids } },
-          select: { id: true, hargaBeli: true, hargaSatuan: true, kategori: true },
+          select: { id: true, kategori: true },
         })
       : [];
   const masterById = new Map(master.map((m) => [m.id, m]));
-  const hppSatuan = (produkId: string): number => {
-    const m = masterById.get(produkId);
-    if (!m) return 0;
-    const beli = m.hargaBeli == null ? null : Number(m.hargaBeli);
-    if (beli != null && !Number.isNaN(beli)) return beli;
-    const satuan = Number(m.hargaSatuan ?? 0);
-    return Number.isNaN(satuan) ? 0 : satuan;
-  };
+
+  // Satu sumber HPP dengan Laba Rugi (mutasi stok + biaya perolehan kronologis).
+  const hppMutasi = await getHppMutasiStok(start, end, { barangIds: ids });
+
+  // Biaya perolehan rata-rata dari riwayat MASUK opname/penyesuaian & pembelian s/d akhir periode,
+  // independen dari adanya mutasi KELUAR penjualan.
+  const biayaPerolehanMap = new Map<string, number>();
+  if (ids.length > 0) {
+    const masuks = await prisma.riwayatStok.findMany({
+      where: {
+        barangId: { in: ids },
+        jenis: "MASUK",
+        sumber: { in: ["PENYESUAIAN", "PEMBELIAN"] },
+        nilaiPerSatuan: { gt: 0 },
+        tanggal: { lte: end },
+      },
+      select: { barangId: true, jumlah: true, nilaiPerSatuan: true },
+    });
+    const agg = new Map<string, { qty: number; nilai: number }>();
+    for (const r of masuks) {
+      const qty = Number(r.jumlah ?? 0);
+      const harga = Number(r.nilaiPerSatuan ?? 0);
+      if (qty <= 0 || harga <= 0) continue;
+      const cur = agg.get(r.barangId) ?? { qty: 0, nilai: 0 };
+      cur.qty += qty;
+      cur.nilai += qty * harga;
+      agg.set(r.barangId, cur);
+    }
+    for (const [id, v] of agg.entries()) {
+      if (v.qty > 0) biayaPerolehanMap.set(id, v.nilai / v.qty);
+    }
+  }
 
   type Agregat = {
     produkId: string;
@@ -155,15 +188,41 @@ export async function getProfitabilitasSnapshot(
     }
   }
 
-  let semua: ProfitabilitasBaris[] = [];
+  const semua: ProfitabilitasBaris[] = [];
   for (const [key, g] of grup.entries()) {
     if (cariProduk && !g.namaProduk.toLowerCase().includes(cariProduk)) continue;
     if (kategoriFilter && g.kategori !== kategoriFilter) continue;
-    const qty = Math.round((g.qtyJual - g.qtyRetur) * 100) / 100;
-    const nilai = Math.round((g.nilaiJual - g.nilaiRetur) * 100) / 100;
-    const hppUnit = g.produkId ? hppSatuan(g.produkId) : 0;
-    const totalHpp = Math.round(qty * hppUnit * 100) / 100;
-    const profit = Math.round((nilai - totalHpp) * 100) / 100;
+    const qty = bulat2(g.qtyJual - g.qtyRetur);
+    const nilai = bulat2(g.nilaiJual - g.nilaiRetur);
+    const hppBarang = g.produkId ? hppMutasi.perBarang.get(g.produkId) : undefined;
+
+    let alasanHpp: string | null = null;
+    if (!g.produkId) {
+      alasanHpp =
+        "item tidak tertaut master Produk sehingga mutasi stok keluar tidak dapat ditelusuri";
+    } else if (qty > 0) {
+      if (!hppBarang || hppBarang.qtyKeluar <= 0) {
+        alasanHpp =
+          "tidak ada mutasi stok KELUAR karena PENJUALAN pada periode ini (biaya opname belum dapat dialokasikan ke penjualan)";
+      } else if (!hppBarang.valid) {
+        alasanHpp = hppBarang.alasan ?? "biaya perolehan HPP belum valid";
+      } else if (hppBarang.qtyKeluar + 0.001 < qty) {
+        alasanHpp = `qty mutasi stok KELUAR (${hppBarang.qtyKeluar}) lebih kecil dari qty terjual (${qty})`;
+      }
+    }
+
+    const hppDiketahui = alasanHpp === null;
+    const totalHpp = hppDiketahui ? hppBarang?.hpp ?? 0 : null;
+    const profit = hppDiketahui && totalHpp != null ? bulat2(nilai - totalHpp) : null;
+    const marginPersen =
+      profit != null && nilai !== 0 ? bulat1((profit / nilai) * 100) : null;
+    // Harga beli rata-rata dari biaya perolehan riwayat MASUK, independen dari HPP penjualan
+    let hargaBeliRata: number | null = null;
+    if (g.produkId && biayaPerolehanMap.has(g.produkId)) {
+      const avg = biayaPerolehanMap.get(g.produkId)!;
+      if (Number.isFinite(avg) && avg > 0) hargaBeliRata = bulat2(avg);
+    }
+
     semua.push({
       id: key,
       namaProduk: g.namaProduk,
@@ -172,19 +231,46 @@ export async function getProfitabilitasSnapshot(
       nilaiPenjualan: nilai,
       totalHpp,
       profit,
-      marginPersen: nilai !== 0 ? Math.round((profit / nilai) * 1000) / 10 : 0,
-      hargaJualRata: qty !== 0 ? Math.round((nilai / qty) * 100) / 100 : 0,
-      hargaBeliRata: qty !== 0 ? Math.round((totalHpp / qty) * 100) / 100 : 0,
+      marginPersen,
+      hargaJualRata: qty !== 0 ? bulat2(nilai / qty) : 0,
+      hargaBeliRata,
       kategori: g.kategori,
+      hppDiketahui,
+      alasanHpp,
     });
   }
 
   semua.sort((a, b) => a.namaProduk.localeCompare(b.namaProduk, "id"));
 
-  const totalQty = Math.round(semua.reduce((s, b) => s + b.qtyTerjual, 0) * 100) / 100;
-  const totalPenjualan = Math.round(semua.reduce((s, b) => s + b.nilaiPenjualan, 0) * 100) / 100;
-  const totalHpp = Math.round(semua.reduce((s, b) => s + b.totalHpp, 0) * 100) / 100;
-  const totalProfit = Math.round(semua.reduce((s, b) => s + b.profit, 0) * 100) / 100;
+  const satuanUnik = [...new Set(semua.map((b) => b.satuan.trim()).filter(Boolean))];
+  const satuanTotal = satuanUnik.length === 1 ? satuanUnik[0] : null;
+  const totalQty =
+    satuanTotal !== null ? bulat2(semua.reduce((s, b) => s + b.qtyTerjual, 0)) : null;
+  const totalPenjualan = bulat2(semua.reduce((s, b) => s + b.nilaiPenjualan, 0));
+  const totalHpp = bulat2(semua.reduce((s, b) => s + (b.totalHpp ?? 0), 0));
+  const adaHppTidakDiketahui = semua.some((b) => !b.hppDiketahui);
+  const totalProfit = adaHppTidakDiketahui
+    ? null
+    : bulat2(semua.reduce((s, b) => s + (b.profit ?? 0), 0));
+  const marginTotalPersen =
+    totalProfit != null && totalPenjualan !== 0
+      ? bulat1((totalProfit / totalPenjualan) * 100)
+      : null;
+
+  const catatan: string[] = [];
+  if (semua.length > 0) {
+    catatan.push(
+      "HPP dihitung dari mutasi stok KELUAR PENJUALAN dengan biaya perolehan rata-rata tertimbang kronologis; HPP yang belum diketahui tidak dianggap nol."
+    );
+  }
+  for (const b of semua) {
+    if (!b.hppDiketahui) {
+      catatan.push(`${b.namaProduk}: HPP belum diketahui karena ${b.alasanHpp}.`);
+    }
+  }
+  if (semua.length > 0 && satuanTotal === null) {
+    catatan.push("Total Qty tidak dijumlahkan karena satuan produk berbeda.");
+  }
 
   const slice = paginate ? semua.slice((page - 1) * limit, page * limit) : semua;
 
@@ -195,10 +281,12 @@ export async function getProfitabilitasSnapshot(
     baris: slice,
     total: semua.length,
     totalQty,
+    satuanTotal,
     totalPenjualan,
     totalHpp,
     totalProfit,
-    marginTotalPersen:
-      totalPenjualan !== 0 ? Math.round((totalProfit / totalPenjualan) * 1000) / 10 : 0,
+    marginTotalPersen,
+    adaHppTidakDiketahui,
+    catatan,
   };
 }

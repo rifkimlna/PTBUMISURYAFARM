@@ -31,7 +31,7 @@ export async function getRingkasanStokSnapshot(
   const sampaiAkhir = new Date(tanggal);
   sampaiAkhir.setHours(23, 59, 59, 999);
 
-  const [barang, agg, fakturItems] = await Promise.all([
+  const [barang, agg, riwayatMasuk] = await Promise.all([
     prisma.persediaanBarang.findMany({
       orderBy: { namaBarang: "asc" },
       select: {
@@ -48,9 +48,14 @@ export async function getRingkasanStokSnapshot(
       where: { tanggal: { lte: sampaiAkhir } },
       _sum: { jumlah: true },
     }),
-    prisma.fakturPembelianItem.findMany({
-      where: { faktur: { tanggal: { lte: sampaiAkhir } } },
-      select: { produkId: true, kuantitas: true, harga: true },
+    prisma.riwayatStok.findMany({
+      where: {
+        tanggal: { lte: sampaiAkhir },
+        jenis: "MASUK",
+        sumber: { in: ["PENYESUAIAN", "PEMBELIAN"] },
+        nilaiPerSatuan: { not: null },
+      },
+      select: { barangId: true, jumlah: true, nilaiPerSatuan: true },
     }),
   ]);
 
@@ -61,14 +66,14 @@ export async function getRingkasanStokSnapshot(
     stokMap.set(a.barangId, entry);
   }
 
-  const hargaMap = new Map<string, { nilai: number; qty: number }>();
-  for (const it of fakturItems) {
-    if (!it.produkId) continue;
-    const qty = Number(it.kuantitas);
-    const acc = hargaMap.get(it.produkId) ?? { nilai: 0, qty: 0 };
-    acc.nilai += Number(it.harga) * qty;
+  const masukMap = new Map<string, { nilai: number; qty: number }>();
+  for (const r of riwayatMasuk) {
+    const qty = Number(r.jumlah);
+    const nilaiSatuan = Number(r.nilaiPerSatuan ?? 0);
+    const acc = masukMap.get(r.barangId) ?? { nilai: 0, qty: 0 };
+    acc.nilai += qty * nilaiSatuan;
     acc.qty += qty;
-    hargaMap.set(it.produkId, acc);
+    masukMap.set(r.barangId, acc);
   }
 
   const baris: RingkasanStokBaris[] = barang.map((b) => {
@@ -81,20 +86,15 @@ export async function getRingkasanStokSnapshot(
           { jenis: "KELUAR", jumlah: sums.KELUAR },
         ]);
 
-    const acc = hargaMap.get(b.id);
-    // Harga manual (diisi user di form Produk) mengalahkan perhitungan faktur.
-    const hargaManual =
-      b.hargaRataRataManual == null ? null : Number(b.hargaRataRataManual);
-    // Bila manual kosong: pakai rata-rata tertimbang faktur pembelian via
-    // produkId (sama seperti halaman Produk). Bila tidak ada → "—", bukan Rp 0.
+    const masuk = masukMap.get(b.id);
+    // Harga rata-rata dari nilai perolehan MASUK PENYESUAIAN/PEMBELIAN dengan nilaiPerSatuan
+    // sama dengan sumber Neraca/HPP. Jika tidak ada data perolehan → null
     const hargaRataRata =
-      hargaManual != null
-        ? Math.round(hargaManual * 100) / 100
-        : acc != null && acc.qty > 0
-          ? Math.round((acc.nilai / acc.qty) * 100) / 100
-          : null;
+      masuk != null && masuk.qty > 0
+        ? Math.round((masuk.nilai / masuk.qty) * 100) / 100
+        : null;
     const totalNilai =
-      stok != null && hargaRataRata != null
+      stok != null && stok > 0 && hargaRataRata != null
         ? Math.round(stok * hargaRataRata * 100) / 100
         : null;
 

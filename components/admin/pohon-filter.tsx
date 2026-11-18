@@ -85,9 +85,9 @@ export function PohonFilter({ q, blok, status, ukuran, blokRows, statusList }: P
           className="h-11 rounded-full border border-slate-200 bg-white px-4 text-sm cursor-pointer col-span-2 sm:col-span-1"
         >
           <option value="">Semua ukuran</option>
-          <option value="KECIL">Kecil (&lt;150cm)</option>
-          <option value="SEDANG">Sedang (150-400cm)</option>
-          <option value="BESAR">Besar (&gt;400cm)</option>
+          <option value="KECIL">Kecil (&lt;1.50m)</option>
+          <option value="SEDANG">Sedang (1.50-4.00m)</option>
+          <option value="BESAR">Besar (&gt;4.00m)</option>
           <option value="BELUM_UKUR">Belum ukur</option>
         </select>
       </div>

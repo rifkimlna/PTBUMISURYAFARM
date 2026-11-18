@@ -24,7 +24,7 @@ type Props = {
     hasilPanen: string;
     pemupukan: string;
     pengobatan: string;
-    tinggiCm: string;
+    tinggiM: string;
     lingkarBatangCm: string;
     phTanah: string;
     fotoGeotagUrl: string | null;
@@ -156,7 +156,7 @@ export function EditMasterForm({ pohon, riwayat, panenTerakhir }: Props) {
   // hasilPanen ikut payload master -> API hanya KOREKSI panen terakhir, tidak tambah baris
   const hasPanenChange = form.hasilPanen !== pohon.hasilPanen;
   const hasDimensiChange =
-    (form.tinggiCm || "") !== (pohon.tinggiCm || "") ||
+    (form.tinggiM || "") !== (pohon.tinggiM || "") ||
     (form.lingkarBatangCm || "") !== (pohon.lingkarBatangCm || "") ||
     (form.phTanah || "") !== (pohon.phTanah || "");
 
@@ -182,7 +182,7 @@ export function EditMasterForm({ pohon, riwayat, panenTerakhir }: Props) {
         if (form.status !== pohon.status) payload.status = form.status;
         // Koreksi panen: API master hanya ubah baris panen TERAKHIR, tidak tambah baru
         if (hasPanenChange) payload.hasilPanen = form.hasilPanen === "" ? null : Number(form.hasilPanen);
-        if ((form.tinggiCm || "") !== (pohon.tinggiCm || "")) payload.tinggiCm = form.tinggiCm === "" ? null : Number(form.tinggiCm);
+        if ((form.tinggiM || "") !== (pohon.tinggiM || "")) payload.tinggiM = form.tinggiM === "" ? null : Number(form.tinggiM);
         if ((form.lingkarBatangCm || "") !== (pohon.lingkarBatangCm || "")) payload.lingkarBatangCm = form.lingkarBatangCm === "" ? null : Number(form.lingkarBatangCm);
         if ((form.phTanah || "") !== (pohon.phTanah || "")) payload.phTanah = form.phTanah === "" ? null : Number(form.phTanah);
         const res = await fetch(`/api/pohon/${pohon.id}`, {
@@ -322,8 +322,8 @@ export function EditMasterForm({ pohon, riwayat, panenTerakhir }: Props) {
               <div className="text-xs font-semibold tracking-widest text-slate-500 mb-3">DIMENSI & TANAH</div>
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-2">
-                  <Label>Tinggi (cm)</Label>
-                  <Input type="number" step="1" min="0" max="3000" inputMode="numeric" value={(form as any).tinggiCm || ""} onChange={(e) => onChange("tinggiCm", e.target.value)} placeholder="180" />
+                  <Label>Tinggi (m)</Label>
+                  <Input type="number" step="0.01" min="0" max="30" inputMode="decimal" value={(form as any).tinggiM || ""} onChange={(e) => onChange("tinggiM", e.target.value)} placeholder="1.80" />
                 </div>
                 <div className="space-y-2">
                   <Label>Lingkar (cm)</Label>
@@ -334,7 +334,7 @@ export function EditMasterForm({ pohon, riwayat, panenTerakhir }: Props) {
                   <Input type="number" step="0.1" min="0" max="14" inputMode="decimal" value={(form as any).phTanah || ""} onChange={(e) => onChange("phTanah", e.target.value)} placeholder="6.5" />
                 </div>
               </div>
-              <p className="mt-2 text-xs text-slate-500">Kecil (&lt;150cm) / Sedang (150-400cm) / Besar (&gt;400cm) otomatis.</p>
+              <p className="mt-2 text-xs text-slate-500">Kecil (&lt;1.50m) / Sedang (1.50-4.00m) / Besar (&gt;4.00m) otomatis.</p>
             </div>
 
             <div className="border-t border-slate-100 pt-6">

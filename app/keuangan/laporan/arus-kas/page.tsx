@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { ArusKasContent } from "@/components/admin/arus-kas-content";
 
 // Laporan → Arus Kas PT Bumi Surya Farm (data aktual database, tanpa dummy).

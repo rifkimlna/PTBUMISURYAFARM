@@ -5,9 +5,12 @@ import { prisma } from "@/lib/prisma";
 import {
   PENJUALAN_PER_PRODUK_PERIODE,
   PENJUALAN_PER_PRODUK_PERIODE_LABEL,
-  awalUntukPeriode,
-  akhirUntukPeriode,
+  tanggalWIB,
+  rentangPeriode,
   resolvePeriodeTanggal,
+  formatTglWIB,
+  awalHariWIB,
+  akhirHariWIB,
   type PenjualanPerProdukPeriode,
   type PenjualanBaris,
   type PenjualanPerProdukSnapshot,
@@ -16,19 +19,18 @@ import {
 export {
   PENJUALAN_PER_PRODUK_PERIODE,
   PENJUALAN_PER_PRODUK_PERIODE_LABEL,
-  awalUntukPeriode,
-  akhirUntukPeriode,
+  tanggalWIB,
+  rentangPeriode,
   resolvePeriodeTanggal,
+  formatTglWIB,
+  awalHariWIB,
+  akhirHariWIB,
 };
 export type {
   PenjualanPerProdukPeriode,
   PenjualanBaris,
   PenjualanPerProdukSnapshot,
 };
-
-function formatTgl(d: Date) {
-  return d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
-}
 
 export async function getPenjualanPerProdukSnapshot(
   dari: Date,

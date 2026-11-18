@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionFromRequest, requireAuthAndRole } from "@/lib/auth";
 import { createFakturSchema } from "@/lib/validations/pembelianValidation";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
+import { isAkunDebitFakturValid, pilihAkunDefaultPembelian } from "@/lib/coa-pembelian";
 import { ZodError } from "zod";
 
 function hitungJumlah(kuantitas: number, harga: number, diskonPersen: number): number {
@@ -117,47 +118,38 @@ export async function POST(req: NextRequest) {
       const supplier = await tx.supplier.findUnique({ where: { id: parsed.supplierId } });
       if (!supplier) throw new Error("Supplier tidak ditemukan");
 
-      // Akun DEBIT tiap baris ditentukan otomatis terhadap COA database:
-      // - produk master persediaan → akun persediaannya (1105/1106/1107),
-      // - selain itu → 5402 (Beban Lain-lain/Belum Teridentifikasi).
-      // kodeAkun eksplisit hanya didukung untuk kompatibilitas lama.
+      // Akun DEBIT tiap baris dipilih dari COA aktif di database:
+      // - akun Persediaan (Aset) untuk barang yang masuk stok,
+      // - akun Beban untuk pengeluaran nyata.
+      // Tidak ada default paksa ke 5402.
+      const akunAktif = await tx.akunCOA.findMany({
+        where: { isActive: true },
+        select: { kode: true, nama: true, kelompok: true, golongan: true },
+      });
+      const akunByKode = new Map(akunAktif.map((a) => [a.kode, a]));
       const items = [];
       for (const it of parsed.items) {
         let kodeAkun = it.kodeAkun?.trim() || null;
         if (kodeAkun) {
-          const akun = await tx.akunCOA.findUnique({ where: { kode: kodeAkun } });
-          if (!akun || !akun.isActive) {
-            throw new Error(`Akun COA ${kodeAkun} tidak ditemukan atau nonaktif`);
-          }
-          const isPersediaan = ["1105", "1106", "1107"].includes(akun.kode);
-          if (akun.kelompok !== "Beban" && !isPersediaan) {
-            throw new Error(`Baris "${it.deskripsi}": akun harus persediaan (1105/1106/1107) atau Beban (dipilih ${kodeAkun} - ${akun.nama})`);
+          const akun = akunByKode.get(kodeAkun);
+          if (!akun) throw new Error(`Akun COA ${kodeAkun} tidak ditemukan atau nonaktif`);
+          if (!isAkunDebitFakturValid(akun)) {
+            throw new Error(
+              `Baris "${it.deskripsi}": akun ${kodeAkun} - ${akun.nama} bukan akun persediaan atau beban yang valid`
+            );
           }
         } else if (it.produkId) {
           const barang = await tx.persediaanBarang.findUnique({
             where: { id: it.produkId },
-            select: { id: true, kodeAkunCOA: true, kategori: true },
+            select: { id: true, kategori: true, kodeAkunCOA: true },
           });
           if (!barang) throw new Error(`Produk "${it.deskripsi}" tidak ditemukan di persediaan`);
-          kodeAkun = barang.kodeAkunCOA ?? null;
+          kodeAkun = pilihAkunDefaultPembelian(barang, akunAktif) || null;
           if (!kodeAkun) {
-            const fallback: Record<string, string> = {
-              "Pupuk & Obat-obatan": "1105",
-              "Pakan Ternak/Ikan": "1106",
-              "Bibit/Benih": "1107",
-            };
-            kodeAkun = fallback[barang.kategori] ?? "5402";
-          }
-          const akun = await tx.akunCOA.findUnique({ where: { kode: kodeAkun } });
-          if (!akun || !akun.isActive) {
-            throw new Error(`Akun COA ${kodeAkun} tidak ditemukan atau nonaktif`);
+            throw new Error(`Baris "${it.deskripsi}": pilih akun COA debit (persediaan/beban)`);
           }
         } else {
-          kodeAkun = "5402";
-          const akun = await tx.akunCOA.findUnique({ where: { kode: kodeAkun } });
-          if (!akun || !akun.isActive) {
-            throw new Error(`Akun COA ${kodeAkun} tidak ditemukan atau nonaktif`);
-          }
+          throw new Error(`Baris "${it.deskripsi}": pilih akun COA debit (persediaan/beban)`);
         }
         items.push({
           produkId: it.produkId?.trim() || null,

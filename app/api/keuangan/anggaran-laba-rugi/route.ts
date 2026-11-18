@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuthAndRole, getSessionFromRequest } from "@/lib/auth";
 import { successResponse, errorResponse, zodErrorResponse } from "@/lib/api-response";
+import { isNonLabaRugiTag } from "@/lib/anggaran-tag";
+import { getTagAkunNonLabaRugi } from "@/lib/anggaran-tag-server";
 import { z } from "zod";
 
 // Anggaran Laba Rugi: periode maksimal 6 bulan, akun mengacu ke kode AkunCOA
@@ -31,8 +33,6 @@ export function bulanPeriode(tahunMulai: number, bulanMulai: number, durasi: num
   return out;
 }
 
-const KODE_NON_LABA_RUGI = new Set(["4105"]); // Penerimaan Piutang: mutasi neraca, bukan pendapatan
-
 async function validasiItems(
   items: z.infer<typeof itemSchema>[],
   tahunMulai: number,
@@ -40,11 +40,12 @@ async function validasiItems(
   durasi: number
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const periode = new Set(bulanPeriode(tahunMulai, bulanMulai, durasi).map((b) => `${b.tahun}-${b.bulan}`));
+  const tagAkun = await getTagAkunNonLabaRugi();
   for (const it of items) {
     if (!periode.has(`${it.tahun}-${it.bulan}`)) {
       return { ok: false, message: `Item ${it.kodeAkun} di luar periode anggaran` };
     }
-    if (KODE_NON_LABA_RUGI.has(it.kodeAkun)) {
+    if (isNonLabaRugiTag(tagAkun.get(it.kodeAkun))) {
       return { ok: false, message: `Akun ${it.kodeAkun} bukan akun laba rugi` };
     }
   }

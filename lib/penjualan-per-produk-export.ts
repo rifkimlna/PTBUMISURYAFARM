@@ -17,22 +17,42 @@ export function fmtTglEkspor(iso: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// PDF (PDF 1.4, portrait A4, font base-14)
+// PDF (PDF 1.4, landscape A4, font base-14)
 // ---------------------------------------------------------------------------
 
-const PAGE_W = 595;
-const PAGE_H = 842;
+const PAGE_W = 842;
+const PAGE_H = 595;
 const MARGIN = 36;
 
-// Header positions
-const X_KODE = MARGIN;
-const X_NAMA = 80;
-const X_QTY_J = 220;
-const X_QTY_R = 280;
-const X_UNIT = 340;
-const X_NILAI_J_R = 440;
-const X_NILAI_R_R = 520;
-const X_HARGA_R = PAGE_W - MARGIN;
+// Column definition with measured widths for landscape, dengan gap 4pt antar kolom
+const GAP = 4;
+const COL = {
+  kode:   { left: MARGIN,                                    width: 60  },
+  nama:   { left: MARGIN + 60 + GAP,                         width: 190 },
+  qtyJ:   { left: MARGIN + 60 + GAP + 190 + GAP,             width: 50  },
+  qtyR:   { left: MARGIN + 60 + GAP + 190 + GAP + 50 + GAP,  width: 50  },
+  unit:   { left: MARGIN + 60 + GAP + 190 + GAP + 50 + GAP + 50 + GAP, width: 80 },
+  nilaiJ: { left: MARGIN + 60 + GAP + 190 + GAP + 50 + GAP + 50 + GAP + 80 + GAP, width: 110 },
+  nilaiR: { left: MARGIN + 60 + GAP + 190 + GAP + 50 + GAP + 50 + GAP + 80 + GAP + 110 + GAP, width: 110 },
+  harga:  { left: MARGIN + 60 + GAP + 190 + GAP + 50 + GAP + 50 + GAP + 80 + GAP + 110 + GAP + 110 + GAP, width: 90 },
+};
+
+// Helper for right edge
+const right = (c: keyof typeof COL) => COL[c].left + COL[c].width;
+
+const X_KODE = COL.kode.left;
+const X_NAMA = COL.nama.left;
+const X_QTY_J_L = COL.qtyJ.left;
+const X_QTY_J_R = right('qtyJ');
+const X_QTY_R_L = COL.qtyR.left;
+const X_QTY_R_R = right('qtyR');
+const X_UNIT = COL.unit.left;
+const X_NILAI_J_L = COL.nilaiJ.left;
+const X_NILAI_J_R = right('nilaiJ');
+const X_NILAI_R_L = COL.nilaiR.left;
+const X_NILAI_R_R = right('nilaiR');
+const X_HARGA_L = COL.harga.left;
+const X_HARGA_R = right('harga');
 
 const HELV_W: Record<string, number> = {
   " ": 278, "(": 333, ")": 333, ",": 333, "-": 333, ".": 278, "/": 278,
@@ -77,7 +97,7 @@ type PdfLine =
 function snapshotKeLines(s: PenjualanPerProdukSnapshot): PdfLine[] {
   const lines: PdfLine[] = [
     { kind: "center", text: PENJUALAN_PERUSAHAAN, size: 12, bold: true },
-    { kind: "center", text: "Penjualan dengan Product", size: 12, bold: true },
+    { kind: "center", text: "Penjualan per Produk", size: 12, bold: true },
     { kind: "center", text: s.label, size: 9.5, bold: true },
     { kind: "center", text: "(dalam IDR)", size: 9.5, bold: true },
     { kind: "left", text: "", size: 9, bold: false },
@@ -89,8 +109,8 @@ function snapshotKeLines(s: PenjualanPerProdukSnapshot): PdfLine[] {
   for (const b of s.baris) {
     lines.push({
       kind: "row",
-      kode: potong(b.kodeProduk, 15),
-      nama: potong(b.namaProduk, 30),
+      kode: potong(b.kodeProduk, 14),
+      nama: potong(b.namaProduk, 28),
       qtyJ: String(b.qtyPenjualan),
       qtyR: String(b.qtyRetur),
       unit: b.unit,
@@ -119,9 +139,9 @@ export function buildPenjualanPerProdukPdf(snapshots: PenjualanPerProdukSnapshot
   let cur: { line: PdfLine; yTop: number }[] = [];
   let y = PAGE_H - MARGIN;
   const need = (l: PdfLine): number => {
-    if (l.kind === "head") return 20;
+    if (l.kind === "head") return 22;
     if (l.kind === "center") return l.size * 1.5;
-    if (l.kind === "row") return 7.5 * 1.5;
+    if (l.kind === "row") return 7 * 1.6;
     return (l as { size: number }).size * 1.5;
   };
   const push = (line: PdfLine) => {
@@ -189,20 +209,20 @@ export function buildPenjualanPerProdukPdf(snapshots: PenjualanPerProdukSnapshot
         const bot = yTop - 13;
         stream += draw("Kode Produk", 7, true, X_KODE, bot);
         stream += draw("Nama Produk", 7, true, X_NAMA, bot);
-        stream += draw("Qty Penjualan", 7, true, X_QTY_J, bot);
-        stream += draw("Qty Retur", 7, true, X_QTY_R, bot);
+        stream += draw("Qty Penjualan", 7, true, X_QTY_J_L, bot);
+        stream += draw("Qty Retur", 7, true, X_QTY_R_L, bot);
         stream += draw("Unit", 7, true, X_UNIT, bot);
-        stream += drawRight("Nilai Penjualan", 7, true, X_NILAI_J_R, bot);
-        stream += drawRight("Nilai Retur", 7, true, X_NILAI_R_R, bot);
-        stream += drawRight("Harga Rata-rata", 7, true, X_HARGA_R, bot);
+        stream += draw("Nilai Penjualan", 7, true, X_NILAI_J_L, bot);
+        stream += draw("Nilai Retur", 7, true, X_NILAI_R_L, bot);
+        stream += draw("Harga Rata-rata", 7, true, X_HARGA_L, bot);
       } else {
-        const size = 7.5;
+        const size = 7;
         const base = yTop - size - 2;
         if (line.bold) {
-          stream += draw(line.nama, size, true, X_NAMA, base);
           stream += draw(line.kode, size, true, X_KODE, base);
-          stream += drawRight(line.qtyJ, size, true, X_QTY_J, base);
-          stream += drawRight(line.qtyR, size, true, X_QTY_R, base);
+          stream += draw(line.nama, size, true, X_NAMA, base);
+          stream += drawRight(line.qtyJ, size, true, X_QTY_J_R, base);
+          stream += drawRight(line.qtyR, size, true, X_QTY_R_R, base);
           stream += draw(line.unit, size, true, X_UNIT, base);
           stream += drawRight(line.nilaiJ, size, true, X_NILAI_J_R, base);
           stream += drawRight(line.nilaiR, size, true, X_NILAI_R_R, base);
@@ -210,8 +230,8 @@ export function buildPenjualanPerProdukPdf(snapshots: PenjualanPerProdukSnapshot
         } else {
           stream += draw(line.kode, size, false, X_KODE, base);
           stream += draw(line.nama, size, false, X_NAMA, base);
-          stream += drawRight(line.qtyJ, size, false, X_QTY_J, base);
-          stream += drawRight(line.qtyR, size, false, X_QTY_R, base);
+          stream += drawRight(line.qtyJ, size, false, X_QTY_J_R, base);
+          stream += drawRight(line.qtyR, size, false, X_QTY_R_R, base);
           stream += draw(line.unit, size, false, X_UNIT, base);
           stream += drawRight(line.nilaiJ, size, false, X_NILAI_J_R, base);
           stream += drawRight(line.nilaiR, size, false, X_NILAI_R_R, base);

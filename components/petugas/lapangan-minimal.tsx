@@ -13,7 +13,7 @@ export function PetugasLapanganMinimal({
   panenTerakhir,
   riwayatPanen,
 }: {
-  pohon: { id: string; pemupukan: string; pengobatan: string; status: string; tinggiCm?: string; lingkarBatangCm?: string; phTanah?: string };
+  pohon: { id: string; pemupukan: string; pengobatan: string; status: string; tinggiM?: string; lingkarBatangCm?: string; phTanah?: string };
   panenTerakhir: { kg: string; tanggal: string; petugas: string } | null;
   riwayatPanen: { id: string; kg: string; tanggal: string; petugas: string }[];
 }) {
@@ -23,7 +23,7 @@ export function PetugasLapanganMinimal({
     status: pohon.status,
     pemupukan: pohon.pemupukan,
     pengobatan: pohon.pengobatan,
-    tinggiCm: pohon.tinggiCm || "",
+    tinggiM: pohon.tinggiM || "",
     lingkarBatangCm: pohon.lingkarBatangCm || "",
     phTanah: pohon.phTanah || "",
   });
@@ -50,7 +50,7 @@ export function PetugasLapanganMinimal({
     form.pemupukan !== pohon.pemupukan ||
     form.pengobatan !== pohon.pengobatan ||
     form.status !== pohon.status ||
-    form.tinggiCm !== (pohon.tinggiCm || "") ||
+    form.tinggiM !== (pohon.tinggiM || "") ||
     form.lingkarBatangCm !== (pohon.lingkarBatangCm || "") ||
     form.phTanah !== (pohon.phTanah || "") ||
     gejala.trim().length >= 5 ||
@@ -83,10 +83,10 @@ export function PetugasLapanganMinimal({
       if (form.pemupukan !== pohon.pemupukan) payload.pemupukan = form.pemupukan || null;
       if (form.pengobatan !== pohon.pengobatan) payload.pengobatan = form.pengobatan || null;
       if (form.status !== pohon.status) payload.status = form.status;
-      if (form.tinggiCm !== (pohon.tinggiCm || "")) {
-        const n = Number(form.tinggiCm);
-        if (form.tinggiCm !== "" && (!Number.isFinite(n) || n < 0 || n > 3000)) throw new Error("Tinggi harus 0-3000 cm");
-        payload.tinggiCm = form.tinggiCm === "" ? null : n;
+      if (form.tinggiM !== (pohon.tinggiM || "")) {
+        const n = Number(form.tinggiM);
+        if (form.tinggiM !== "" && (!Number.isFinite(n) || n < 0 || n > 30)) throw new Error("Tinggi harus 0-30 m");
+        payload.tinggiM = form.tinggiM === "" ? null : n;
       }
       if (form.lingkarBatangCm !== (pohon.lingkarBatangCm || "")) {
         const n = Number(form.lingkarBatangCm);
@@ -233,8 +233,8 @@ export function PetugasLapanganMinimal({
           <p className="text-xs text-slate-500">Isi bila ukur hari ini — kosongkan bila tidak ukur.</p>
           <div className="grid grid-cols-3 gap-2">
             <div className="space-y-1.5">
-              <Label className="text-xs text-slate-600">Tinggi (cm)</Label>
-              <Input type="number" step="1" min="0" max="3000" inputMode="numeric" value={form.tinggiCm} onChange={(e) => setForm({ ...form, tinggiCm: e.target.value })} placeholder="180" className="h-12 bg-white text-center font-semibold" />
+              <Label className="text-xs text-slate-600">Tinggi (m)</Label>
+              <Input type="number" step="0.01" min="0" max="30" inputMode="decimal" value={form.tinggiM} onChange={(e) => setForm({ ...form, tinggiM: e.target.value })} placeholder="1.80" className="h-12 bg-white text-center font-semibold" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-slate-600">Lingkar (cm)</Label>

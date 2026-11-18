@@ -160,7 +160,7 @@ export default async function PertanianDashboard() {
             hasilPanen: p.hasilPanen?.toString?.() ?? p.hasilPanen,
             pemupukan: p.pemupukan,
             pengobatan: p.pengobatan,
-            tinggiCm: p.tinggiCm ?? null,
+            tinggiM: p.tinggiM == null ? null : Number(p.tinggiM),
             lingkarBatangCm: p.lingkarBatangCm?.toString?.() ?? null,
             phTanah: p.phTanah?.toString?.() ?? null,
             diukurPada: p.diukurPada?.toISOString?.() ?? null,

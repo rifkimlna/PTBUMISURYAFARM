@@ -16,30 +16,46 @@ export default async function TagihanPage({
   const tujuhHariLagi = new Date();
   tujuhHariLagi.setDate(tujuhHariLagi.getDate() + 7);
 
-  const [rows, sisaPerTipe, jatuhTempoDekat] = await Promise.all([
-    prisma.tagihan.findMany({
-      where: { tipe: tab },
-      orderBy: { createdAt: "desc" },
-      include: { admin: { select: { nama: true } } },
-    }),
-    prisma.tagihan.groupBy({
-      by: ["tipe"],
-      where: { status: { not: "LUNAS" } },
-      _sum: { sisa: true },
-    }),
-    prisma.tagihan.count({
-      where: {
-        status: { not: "LUNAS" },
-        jatuhTempo: { not: null, lte: tujuhHariLagi },
-      },
-    }),
-  ]);
+  let dbError = false;
+  let rows: any[] = [];
+  let sisaPerTipe: any[] = [];
+  let jatuhTempoDekat = 0;
+
+  try {
+    [rows, sisaPerTipe, jatuhTempoDekat] = await Promise.all([
+      prisma.tagihan.findMany({
+        where: { tipe: tab },
+        orderBy: { createdAt: "desc" },
+        include: { admin: { select: { nama: true } } },
+      }),
+      prisma.tagihan.groupBy({
+        by: ["tipe"],
+        where: { status: { not: "LUNAS" } },
+        _sum: { sisa: true },
+      }),
+      prisma.tagihan.count({
+        where: {
+          status: { not: "LUNAS" },
+          jatuhTempo: { not: null, lte: tujuhHariLagi },
+        },
+      }),
+    ]);
+  } catch (e) {
+    console.error("[keuangan/tagihan] database tidak terjangkau:", e instanceof Error ? e.message : e);
+    dbError = true;
+  }
 
   const sisaOf = (tipe: TipeTagihan) =>
     Number(sisaPerTipe.find((s) => s.tipe === tipe)?._sum.sisa ?? 0);
 
   return (
     <div className="space-y-6 min-w-0">
+      {dbError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <div className="text-sm font-medium text-red-800">⚠️ Database tidak terhubung — data tagihan mungkin kosong.</div>
+          <div className="mt-1 text-xs text-red-600">Cek DATABASE_URL di Vercel Environment Variables lalu redeploy.</div>
+        </div>
+      )}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900">Hutang & Piutang</h1>

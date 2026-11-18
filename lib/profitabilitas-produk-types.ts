@@ -19,14 +19,20 @@ export type ProfitabilitasBaris = {
   qtyTerjual: number;
   satuan: string;
   nilaiPenjualan: number;
-  totalHpp: number;
-  profit: number;
-  /** Persen, ex: 100 berarti 100%. */
-  marginPersen: number;
+  /** null = HPP belum diketahui (bukan nol). */
+  totalHpp: number | null;
+  /** null = profit belum dapat dihitung karena HPP belum diketahui. */
+  profit: number | null;
+  /** Persen, ex: 100 berarti 100%. null bila HPP/profit belum diketahui. */
+  marginPersen: number | null;
   hargaJualRata: number;
-  hargaBeliRata: number;
+  /** Biaya perolehan rata-rata tertimbang; null bila HPP belum diketahui. */
+  hargaBeliRata: number | null;
   /** Kategori master Produk; "—" bila item ketikan manual. */
   kategori: string;
+  hppDiketahui: boolean;
+  /** Alasan HPP belum diketahui; null bila HPP valid. */
+  alasanHpp: string | null;
 };
 
 export type ProfitabilitasSnapshot = {
@@ -36,12 +42,20 @@ export type ProfitabilitasSnapshot = {
   sampai: string;
   baris: ProfitabilitasBaris[];
   total: number;
-  totalQty: number;
+  /** null bila produk memiliki satuan berbeda (tidak boleh dijumlahkan). */
+  totalQty: number | null;
+  /** Satuan total bila seragam; null bila campuran. */
+  satuanTotal: string | null;
   totalPenjualan: number;
+  /** HPP Tercatat: hanya baris dengan HPP valid. */
   totalHpp: number;
-  totalProfit: number;
-  /** Margin dari total (bukan rata-rata margin). */
-  marginTotalPersen: number;
+  /** null bila masih ada HPP yang belum diketahui. */
+  totalProfit: number | null;
+  /** Margin dari total (bukan rata-rata margin); null bila profit belum diketahui. */
+  marginTotalPersen: number | null;
+  adaHppTidakDiketahui: boolean;
+  /** Catatan produk yang HPP-nya belum diketahui beserta alasannya. */
+  catatan: string[];
 };
 
 // ---------- Helper tanggal murni (aman untuk Client Component) ----------

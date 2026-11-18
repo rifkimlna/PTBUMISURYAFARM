@@ -645,13 +645,15 @@ export function AsetContent({
                           {r.akunPenerima && (
                             <span className="ml-1 text-[10px] text-slate-500">({r.akunPenerima})</span>
                           )}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">{dash(r.noTransaksiLepas)}</TableCell>
-                        <TableCell className="text-right text-sm whitespace-nowrap">{r.hargaJual == null ? "—" : `Rp ${formatRupiah(r.hargaJual)}`}</TableCell>
-                        <TableCell className={`text-right text-sm font-semibold whitespace-nowrap ${r.untungRugi == null ? "" : r.untungRugi >= 0 ? "text-green-700" : "text-red-600"}`}>
-                          {r.untungRugi == null ? "—" : `${r.untungRugi >= 0 ? "+" : "−"}Rp ${formatRupiah(Math.abs(r.untungRugi))}`}
-                        </TableCell>
-                        <TableCell>
+                         </TableCell>
+                         <TableCell className="text-right text-sm whitespace-nowrap">{r.hargaJual == null ? "—" : `Rp ${formatRupiah(r.hargaJual)}`}</TableCell>
+                         <TableCell className={`text-right text-sm font-semibold whitespace-nowrap ${r.untungRugi == null ? "" : r.untungRugi >= 0 ? "text-green-700" : "text-red-600"}`}>
+                           {r.untungRugi == null ? "—" : `${r.untungRugi >= 0 ? "+" : "−"}Rp ${formatRupiah(Math.abs(r.untungRugi))}`}
+                         </TableCell>
+                         <TableCell className="text-sm whitespace-nowrap">
+                           {r.statusPembayaran === "SUDAH_DIBAYAR" ? "Sudah Dibayar" : r.statusPembayaran === "BELUM_DIBAYAR" ? "Belum Dibayar" : r.statusPembayaran === "BELUM_DIKONFIRMASI" ? "Belum Dikonfirmasi" : "—"}
+                         </TableCell>
+                         <TableCell>
                           <div className="flex justify-end gap-1">
                             {r.caraLepas === "DIJUAL" && r.statusPembayaran === "BELUM_DIBAYAR" && (
                               <Button

@@ -5,14 +5,12 @@ import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/prisma";
 import { hitungStokSaatIni, tentukanStatusStok } from "@/lib/persediaan";
 import { formatRupiah } from "@/lib/utils";
-import { BIBIT_CONTOH, fotoBibit, waPesanBibit, type KatalogBibit } from "@/lib/katalog-bibit";
-import { Sprout, MessageCircle, ArrowRight } from "lucide-react";
-
+import { fotoBibit, waPesanBibit, BIBIT_CONTOH, type KatalogBibit } from "@/lib/katalog-bibit";
+import { ScanLine, MessageCircle } from "lucide-react";
+import { StatItem } from "@/components/public/stat-counter";
 
 export default async function LandingPage() {
   const stats = { pohon: 0, karyawan: 0, luas: "120 Ha", varietas: 4 };
-  let katalog: KatalogBibit[] = [];
-  let katalogContoh = false;
   try {
     // Karyawan kini dari master Kontak (tabel Karyawan hanya arsip baca).
     const [pohonCount, karyawanCount] = await Promise.all([prisma.pohon.count(), prisma.kontak.count({ where: { tipe: "KARYAWAN" } })]);
@@ -20,22 +18,27 @@ export default async function LandingPage() {
     stats.karyawan = karyawanCount;
   } catch {}
 
+  // Katalog bibit: kategori Bibit/Benih dari master persediaan
+  let bibit: KatalogBibit[] = [];
   try {
-    const [barang, agg] = await Promise.all([
-      prisma.persediaanBarang.findMany({ where: { kategori: "Bibit/Benih" }, orderBy: { createdAt: "desc" }, take: 8 }),
-      prisma.riwayatStok.groupBy({ by: ["barangId", "jenis"], _sum: { jumlah: true } }),
-    ]);
-    const map = new Map<string, { MASUK: number; KELUAR: number }>();
-    for (const a of agg) {
-      const entry = map.get(a.barangId) ?? { MASUK: 0, KELUAR: 0 };
-      entry[a.jenis] += a._sum.jumlah ?? 0;
-      map.set(a.barangId, entry);
-    }
-    katalog = barang.map((b) => {
-      const sums = map.get(b.id) ?? { MASUK: 0, KELUAR: 0 };
+    const rows = await prisma.persediaanBarang.findMany({
+      where: { kategori: "Bibit/Benih" },
+      orderBy: { createdAt: "desc" },
+      take: 3,
+    });
+    const agg = rows.length
+      ? await prisma.riwayatStok.groupBy({
+          by: ["barangId", "jenis"],
+          where: { barangId: { in: rows.map((r) => r.id) } },
+          _sum: { jumlah: true },
+        })
+      : [];
+    bibit = rows.map((b) => {
+      const masuk = agg.find((a) => a.barangId === b.id && a.jenis === "MASUK")?._sum.jumlah ?? 0;
+      const keluar = agg.find((a) => a.barangId === b.id && a.jenis === "KELUAR")?._sum.jumlah ?? 0;
       const stok = hitungStokSaatIni(b.stokAwal, [
-        { jenis: "MASUK", jumlah: sums.MASUK },
-        { jenis: "KELUAR", jumlah: sums.KELUAR },
+        { jenis: "MASUK", jumlah: masuk },
+        { jenis: "KELUAR", jumlah: keluar },
       ]);
       return {
         id: b.id,
@@ -49,197 +52,147 @@ export default async function LandingPage() {
       };
     });
   } catch {}
-  if (katalog.length === 0) {
-    katalog = BIBIT_CONTOH;
-    katalogContoh = true;
-  }
+  if (!bibit.length) bibit = BIBIT_CONTOH;
 
   return (
-    <div className="bg-[#FCFCFD] overflow-x-hidden">
-      {/* HERO - fluid height & typography untuk semua device */}
-      <section className="relative flex min-h-[520px] sm:min-h-[600px] md:min-h-[680px] lg:min-h-[760px] items-center justify-center overflow-hidden">
+    <div className="bg-white overflow-x-hidden">
+      {/* ===== HERO ala Eratani: headline besar di atas foto, garis hijau tebal ===== */}
+      <section className="relative min-h-[560px] sm:min-h-[640px] lg:min-h-[720px] flex items-center justify-center overflow-hidden bg-slate-900">
         <div className="absolute inset-0">
           <img
             src="https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=2560&q=80&auto=format&fit=crop&crop=center"
-            alt="Perkebunan"
+            alt="Perkebunan PT Bumi Surya Farm"
             className="h-full w-full object-cover object-center"
           />
-          <div className="absolute inset-0 bg-slate-900/50" />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 via-slate-900/10 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-900/55 to-slate-900/25" />
         </div>
-        <div className="relative mx-auto flex w-full max-w-[1280px] 2xl:max-w-[1440px] items-center justify-center px-4 sm:px-6 lg:px-8 py-10 sm:py-12">
-          <div className="mx-auto max-w-4xl text-center w-full">
-            <div className="inline-flex flex-wrap justify-center items-center gap-2 rounded-full bg-green-700 px-3 sm:px-4 py-1.5 text-[11px] sm:text-xs">
-              <span className="h-2 w-2 rounded-full bg-green-600 animate-pulse shrink-0" />
-              <span className="tracking-wide text-white font-medium">Traceability • Live</span>
-              <span className="hidden sm:inline h-3 w-px bg-white/20" />
-              <span className="hidden sm:inline text-white/80">1,240 pohon • Real-time</span>
-            </div>
-            <h1 className="mt-6 sm:mt-8 font-light leading-[0.95] tracking-[-0.04em] text-white text-[32px] xs:text-[36px] sm:text-[48px] md:text-[56px] lg:text-[68px] xl:text-[76px] 2xl:text-[84px] px-2">
-              Pertanian <span className="font-bold tracking-tight">presisi.</span>
-            </h1>
-            <p className="mx-auto mt-4 sm:mt-6 max-w-[560px] text-[14px] sm:text-[15px] md:text-base leading-6 sm:leading-7 text-white/85 px-4">
-              Setiap pohon punya ID digital — scan QR untuk verifikasi varietas, blok, dan kesehatan tanpa aplikasi.
-            </p>
-            <div className="mt-6 sm:mt-8 flex justify-center px-4">
-              <Link href="#produk" className="w-full sm:w-auto">
-                <Button size="lg" className="rounded-full bg-green-700 px-8 py-6 text-sm font-medium text-white hover:bg-green-800 shadow-lg w-full sm:w-auto cursor-pointer">Lihat Produk</Button>
-              </Link>
-            </div>
+        <div className="relative mx-auto w-full max-w-[1280px] 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8 py-24 sm:py-28 text-center">
+          <div className="inline-flex items-center justify-center gap-2 rounded-full bg-white/10 backdrop-blur px-4 py-1.5 text-[11px] sm:text-xs font-medium tracking-wide text-white border border-white/15">
+            <span className="h-2 w-2 rounded-full bg-green-300 animate-pulse" />
+            TRACEABILITY • LIVE
           </div>
-        </div>
-      </section>
-
-      {/* TENTANG - fluid container & stack perfectly on tablet/HP */}
-      <section id="tentang" className="bg-white border-y border-slate-100">
-        <div className="mx-auto max-w-[1280px] 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8 py-12 sm:py-16 md:py-20 space-y-12 sm:space-y-16 md:space-y-20">
-          {/* BARIS 1 — PERKEBUNAN */}
-          <div className="grid gap-6 sm:gap-8 lg:grid-cols-2 lg:gap-10 xl:gap-14 items-center">
-            <div className="order-2 lg:order-1 min-w-0">
-              <div className="text-[10px] sm:text-[11px] font-semibold tracking-[0.14em] text-green-700">PERKEBUNAN • 120 HA • BLOK A–D</div>
-              <h3 className="mt-2 text-[20px] sm:text-[22px] md:text-[26px] font-semibold leading-tight tracking-[-0.02em] text-slate-900">
-                PT Bumi Surya Farm
-                <br />
-                <span className="font-light text-slate-900">Makmur Agro Terintegrasi</span>
-              </h3>
-              <p className="mt-3 text-[13px] sm:text-sm leading-6 text-slate-500">
-                PT Bumi Surya Farm (“Perseroan”) merupakan perseroan yang menjalankan usaha di bidang perkebunan buah — Durian, Jambu, Alpukat dan 5+ komoditas lain — di 120 Ha Blok A–D. Kehadiran Perseroan adalah untuk kesinambungan produktivitas pertanian presisi dalam konsep agro terintegrasi, yang bersinergi dari hulu (pembibitan, pemetaan blok, monitoring kesehatan per pohon ID PHN-BLK-XXX) sampai hilir (panen, sortir grade, offtake). Foto lapangan → cloud (fotoUrl) dan scan QR tanpa aplikasi memastikan setiap pohon traceable dari tanam hingga panen.
-              </p>
-            </div>
-            <div className="order-1 lg:order-2 relative overflow-hidden border border-slate-100 bg-slate-50 rounded-tr-[24px] sm:rounded-tr-[32px] rounded-bl-[24px] sm:rounded-bl-[32px] rounded-tl-none rounded-br-none">
-              <img
-                src="https://images.unsplash.com/photo-1502082553048-f009c37129b9?w=800&q=80&auto=format&fit=crop&crop=center"
-                alt="Pohon Durian - Perkebunan PT Bumi Surya"
-                className="aspect-[4/3] w-full object-cover"
-                loading="lazy"
-              />
-            </div>
-          </div>
-
-          {/* BARIS 2 — PERIKANAN */}
-          <div className="grid gap-6 sm:gap-8 lg:grid-cols-2 lg:gap-10 xl:gap-14 items-center">
-            <div className="relative overflow-hidden border border-slate-100 bg-slate-50 rounded-none">
-              <img
-                src="https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=800&q=80&auto=format&fit=crop&crop=center"
-                alt="Budidaya ikan di kolam PT Bumi Surya"
-                className="aspect-[4/3] w-full object-cover"
-                loading="lazy"
-              />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[10px] sm:text-[11px] font-semibold tracking-[0.14em] text-green-700">PERIKANAN • KOLAM TERKELOLA</div>
-              <h3 className="mt-2 text-[20px] sm:text-[22px] md:text-[26px] font-semibold tracking-[-0.02em] text-slate-900">
-                Budidaya Ikan
-                <br />
-                <span className="font-light">Panen Terjadwal & Terukur</span>
-              </h3>
-              <p className="mt-3 text-[13px] sm:text-sm leading-6 text-slate-500">
-                Unit perikanan mengelola kolam budidaya terkelola — monitoring pakan, kualitas air, dan jadwal panen tercatat harian. Hasil panen terhubung ke sistem yang sama dengan perkebunan, mendukung ketahanan pangan dan pasokan protein hewani yang berkelanjutan untuk mitra dan offtaker. Dari benih hingga panen, semua tercatat.
-              </p>
-            </div>
-          </div>
-
-          {/* BARIS 3 — PETERNAKAN */}
-          <div className="grid gap-6 sm:gap-8 lg:grid-cols-2 lg:gap-10 xl:gap-14 items-center">
-            <div className="order-2 lg:order-1 min-w-0">
-              <div className="text-[10px] sm:text-[11px] font-semibold tracking-[0.14em] text-green-700">PETERNAKAN • AYAM & KAMBING</div>
-              <h3 className="mt-2 text-[20px] sm:text-[22px] md:text-[26px] font-semibold tracking-[-0.02em] text-slate-900">
-                Peternakan Terdata
-                <br />
-                <span className="font-light">Kandang & Kesehatan Terpantau</span>
-              </h3>
-              <p className="mt-3 text-[13px] sm:text-sm leading-6 text-slate-500">
-                Unit peternakan Ayam & Kambing dikelola dengan kandang terdata dan riwayat kesehatan terpantau — pakan, vaksinasi, dan pertumbuhan tercatat harian. Terintegrasi dengan perkebunan (pupuk organik) dan perikanan dalam satu ekosistem 120 Ha yang sirkular dan efisien, dari hulu hingga hilir.
-              </p>
-            </div>
-            <div className="order-1 lg:order-2 relative overflow-hidden border border-slate-100 bg-slate-50 rounded-none">
-              <img
-                src="https://images.unsplash.com/photo-1527153857715-3908f2bae5e8?w=800&q=80&auto=format&fit=crop&crop=center"
-                alt="Peternakan Ayam & Kambing PT Bumi Surya"
-                className="aspect-[4/3] w-full object-cover"
-                loading="lazy"
-              />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* KATALOG BIBIT - kotak-kotak, data asli gudang (fallback contoh bila kosong) */}
-      <section id="produk" className="scroll-mt-16 bg-[#FCFCFD]">
-        <div className="mx-auto max-w-[1280px] 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8 py-12 sm:py-16 md:py-20">
-          <div className="flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-[10px] sm:text-[11px] font-semibold tracking-[0.14em] text-green-700">KATALOG BIBIT • STOK TERKINI</div>
-              <h2 className="mt-2 text-[20px] sm:text-[22px] md:text-[26px] font-semibold tracking-[-0.02em] text-slate-900">
-                Bibit Unggul <span className="font-light">Siap Tanam</span>
-              </h2>
-              <p className="mt-2 text-[13px] sm:text-sm text-slate-500">Stok langsung dari gudang pembibitan — harga transparan, pesan via WhatsApp.</p>
-            </div>
-            <Link href="/#kontak" className="hidden sm:inline-flex shrink-0 items-center gap-1 text-xs font-medium text-green-800 hover:underline">
-              Butuh partai besar? <ArrowRight className="h-3.5 w-3.5" />
+          <h1 className="mt-5 sm:mt-7 mx-auto max-w-3xl text-[34px] xs:text-[40px] sm:text-[52px] md:text-[60px] leading-[1.05] tracking-[-0.03em] font-bold text-white">
+            Pertanian presisi, dari hulu ke hilir.
+          </h1>
+          <p className="mt-4 sm:mt-5 mx-auto max-w-lg text-[14px] sm:text-base leading-6 sm:leading-7 text-white/75">
+            Setiap pohon punya ID digital — scan QR untuk verifikasi, tanpa aplikasi.
+          </p>
+          <div className="mt-7 sm:mt-9 flex flex-wrap justify-center gap-3">
+            <Link href="#produk" className="w-full sm:w-auto">
+              <Button size="lg" className="rounded-full bg-white text-green-900 hover:bg-green-50 hover:text-green-900 px-8 py-6 text-sm font-semibold w-full sm:w-auto cursor-pointer">
+                Jelajahi Solusi
+              </Button>
+            </Link>
+            <Link href="/scan" className="w-full sm:w-auto">
+              <Button size="lg" variant="outline" className="rounded-full px-8 py-6 text-sm font-semibold bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white w-full sm:w-auto cursor-pointer">
+                <ScanLine className="h-4 w-4" /> Scan QR
+              </Button>
             </Link>
           </div>
+        </div>
+      </section>
 
-          {katalogContoh && (
-            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-              Katalog contoh — stok asli menyusul. Admin dapat tambah bibit di <span className="font-semibold">Perkebunan → Bibit Dijual</span>.
-            </div>
-          )}
+      {/* ===== HEADLINE STATISTIK ===== */}
+      <section className="bg-white">
+        <div className="flex justify-center mx-auto max-w-[1280px] 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8 pt-12 sm:pt-16 md:pt-20 pb-8 sm:pb-10 md:pb-12">
+          <h2 className="text-center text-[14px] sm:text-[15px] md:text-[16px] font-bold tracking-[-0.01em] leading-[1.2] text-green-900 whitespace-nowrap">
+            Mengintegrasikan Teknologi dan Inovasi untuk Masa Depan{" "}
+            <span className="text-green-900">Perkebunan Indonesia.</span>
+          </h2>
+        </div>
+      </section>
 
-          <div className="mt-6 sm:mt-8 grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
-            {katalog.map((b) => (
-              <div key={b.id} className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(16,24,40,0.04),0_8px_24px_rgba(16,24,40,0.04)]">
-                <Link href={b.id.startsWith("CONTOH") ? "/#produk" : `/bibit/${b.id}`} className="relative block aspect-[4/3] bg-slate-50 overflow-hidden">
-                  <img src={fotoBibit(b)} alt={b.nama} className="h-full w-full object-cover" loading="lazy" />
-                  <span className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${b.status === "Tersedia" ? "bg-green-700 text-white" : b.status === "Stok Menipis" ? "bg-amber-400 text-amber-950" : "bg-slate-900/70 text-white"}`}>
-                    {b.status}
-                  </span>
-                </Link>
-                <div className="p-3 sm:p-4">
-                  <Link href={b.id.startsWith("CONTOH") ? "/#produk" : `/bibit/${b.id}`} className="block truncate text-sm font-medium text-slate-900 hover:text-green-800">
-                    {b.nama}
-                  </Link>
-                  <div className="mt-1 text-sm font-semibold text-green-800">
-                    Rp {formatRupiah(b.harga)} <span className="text-xs font-normal text-slate-400">/{b.satuan}</span>
-                  </div>
-                  <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500">
-                    <Sprout className="h-3 w-3" /> Stok: {b.stok} {b.satuan}
-                  </div>
-                  {b.status === "Habis" ? (
-                    <Button size="sm" disabled className="mt-3 w-full rounded-full h-9 text-xs">
-                      Stok Habis
-                    </Button>
-                  ) : (
-                    <a href={waPesanBibit(b.nama, b.id)} target="_blank" rel="noopener noreferrer" className="block mt-3">
-                      <Button size="sm" className="w-full rounded-full h-9 text-xs bg-green-700 hover:bg-green-800 cursor-pointer">
-                        <MessageCircle className="h-3.5 w-3.5" /> Pesan
-                      </Button>
-                    </a>
-                  )}
-                </div>
-              </div>
-            ))}
+      {/* ===== STATISTIK ala Eratani: strip angka besar dengan counter ===== */}
+      <section className="border-b border-slate-100 bg-white">
+        <div className="mx-auto max-w-[1280px] 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-slate-100 border-y border-slate-100">
+            <div className="bg-white"><StatItem target={stats.pohon || 1240} suffix="+" label="Pohon Terdata" /></div>
+            <div className="bg-white"><StatItem target={120} suffix=" Ha" label="Lahan Dikelola" /></div>
+            <div className="bg-white"><StatItem target={stats.karyawan || 40} suffix="+" label="Karyawan & Mitra" /></div>
+            <div className="bg-white"><StatItem target={9} suffix="+" label="Komoditas Unggul" /></div>
           </div>
         </div>
       </section>
 
-      {/* CTA - responsive stack */}
-      <section id="kontak" className="mx-auto max-w-[1280px] 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8 pb-12 sm:pb-16">
-        <div className="relative overflow-hidden rounded-2xl border border-green-300 bg-gradient-to-br from-green-700 to-green-800 px-5 sm:px-6 py-6 md:px-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/10 blur-2xl pointer-events-none" />
-          <div className="relative min-w-0">
-            <div className="text-sm font-semibold tracking-tight text-white">Butuh demo atau kunjungan kebun?</div>
-            <div className="mt-1 text-xs leading-5 text-green-50">Hubungi tim PT BUMI SURYA FARM — respon cepat via WhatsApp.</div>
+      {/* ===== COMPANY PROFILE + VIDEO ===== */}
+      <section id="profil" className="scroll-mt-16 bg-green-800 border-b border-green-900">
+        <div className="mx-auto max-w-[1280px] 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8 py-12 sm:py-16 md:py-20">
+          <div className="mx-auto max-w-3xl text-center">
+            <div className="text-[11px] font-semibold tracking-[0.16em] text-green-100">COMPANY PROFILE</div>
+            <h2 className="mt-3 text-[22px] sm:text-[30px] md:text-[36px] font-bold tracking-[-0.03em] leading-[1.12] text-white">
+              Company Profile PT Bumi Surya Farm 2026
+            </h2>
+            <p className="mt-4 text-[13px] sm:text-sm leading-6 sm:leading-7 text-green-50">
+              Sebagai pionir dalam industri agro terintegrasi di Indonesia, PT Bumi Surya Farm menyediakan solusi terintegrasi dan komprehensif yang mencakup seluruh rantai pertanian, dari hulu hingga hilir, melalui pendekatan Agri-Management, Agri-Input, dan Agri-Output. Perseroan terus mendorong inovasi untuk membangun ekosistem perkebunan yang lebih modern, inklusif, dan berkelanjutan.
+            </p>
           </div>
-          <div className="relative flex gap-2 sm:gap-3 flex-wrap shrink-0">
-            <a href="https://wa.me/628123456789" target="_blank" rel="noopener noreferrer" className="flex-1 sm:flex-none">
-              <Button size="sm" className="rounded-full bg-white text-green-800 hover:bg-green-50 shadow-sm w-full sm:w-auto cursor-pointer">
-                WhatsApp
-              </Button>
-            </a>
-            <Link href="/login" className="flex-1 sm:flex-none">
-              <Button size="sm" variant="ghost" className="rounded-full bg-white text-green-800 hover:bg-green-50 hover:text-green-800 w-full sm:w-auto cursor-pointer">
-                Login →
+
+          <div className="mt-8 sm:mt-10 mx-auto max-w-4xl overflow-hidden rounded-2xl border border-green-800/50 shadow-[0_4px_12px_rgba(0,0,0,0.2),0_20px_48px_rgba(0,0,0,0.25)] bg-black">
+            <div className="relative aspect-video">
+              <iframe
+                className="absolute inset-0 h-full w-full"
+                src="https://www.youtube-nocookie.com/embed/v9RQKL-zRkM"
+                title="Company Profile PT Bumi Surya Farm"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                loading="lazy"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== KATALOG BIBIT: minimalis, kuning gelap & hijau tua ===== */}
+      <section id="produk" className="scroll-mt-16 bg-[#14532d]">
+        <div className="mx-auto max-w-[1280px] 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8 py-12 sm:py-16 md:py-20">
+          <div className="mx-auto max-w-lg text-center">
+            <div className="inline-block rounded-md bg-[#a16207] px-2.5 py-1 text-[9px] font-bold tracking-[0.18em] text-white">KATALOG BIBIT</div>
+            <h2 className="mt-3 text-[20px] sm:text-[26px] font-bold tracking-[-0.03em] leading-[1.12] text-white">
+              Bibit Unggul, Siap Tanam
+            </h2>
+          </div>
+
+          <div className="mt-7 sm:mt-8 mx-auto max-w-4xl grid gap-4 grid-cols-2 lg:grid-cols-3">
+            {bibit.map((b) => {
+              const habis = b.status === "Habis";
+              return (
+                <div key={b.id} className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm">
+                  <div className="relative">
+                    <img src={fotoBibit(b)} alt={b.nama} className="aspect-[5/4] w-full object-cover" />
+                    <span
+                      className={`absolute left-2.5 top-2.5 rounded-md px-2 py-0.5 text-[9px] font-bold tracking-wide text-white ${
+                        habis ? "bg-slate-600" : b.status === "Stok Menipis" ? "bg-[#a16207]" : "bg-green-700"
+                      }`}
+                    >
+                      {b.status.toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex flex-1 flex-col gap-2 p-3.5">
+                    <h3 className="text-[13px] sm:text-sm font-semibold leading-snug text-[#14532d]">{b.nama}</h3>
+                    <div className="flex-1" />
+                    <div className="text-[15px] font-bold text-[#a16207]">
+                      Rp {formatRupiah(b.harga)}
+                      <span className="text-[10px] font-normal text-slate-400">/{b.satuan}</span>
+                    </div>
+                    {habis ? (
+                      <span className="block rounded-full bg-slate-100 py-1.5 text-center text-[11px] font-semibold text-slate-500">Stok Habis</span>
+                    ) : (
+                      <a href={waPesanBibit(b.nama, b.id)} target="_blank" rel="noopener noreferrer" className="block">
+                        <span className="flex items-center justify-center gap-1.5 rounded-full bg-[#14532d] py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-[#1d6b3c] cursor-pointer">
+                          <MessageCircle className="h-3 w-3" /> Pesan via WhatsApp
+                        </span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-7 text-center">
+            <Link href="/bibit">
+              <Button variant="outline" className="rounded-full bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white cursor-pointer">
+                Lihat Semua Bibit
               </Button>
             </Link>
           </div>

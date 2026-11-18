@@ -146,6 +146,7 @@ export const createRiwayatStokSchema = z.object({
   tanggal: z.coerce.date().optional(), // default now()
   // Asal catatan (tanpa efek Kas/Bank): PENYESUAIAN = hasil stock opname.
   sumber: z.enum(["PENYESUAIAN", "PEMBELIAN", "MANUAL"]).optional().nullable(),
+  nilaiPerSatuan: z.coerce.number().nonnegative().optional().nullable(),
 });
 
 // Schema untuk Pembelian/Barang Masuk Terintegrasi (Stok + Kas + COA)

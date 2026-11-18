@@ -1,14 +1,14 @@
-// Klasifikasi ukuran pohon otomatis dari tinggi (cm).
+// Klasifikasi ukuran pohon otomatis dari tinggi (m).
 // Threshold global untuk Durian / Alpukat / Jambu (MVP simpel).
-// KECIL <150, SEDANG 150-400, BESAR >400. Null = belum ukur.
+// KECIL <1.50, SEDANG 1.50-4.00, BESAR >4.00. Null = belum ukur.
 
 export type KategoriUkuran = "BELUM_UKUR" | "KECIL" | "SEDANG" | "BESAR";
 
-export function klasifikasiUkuran(tinggiCm: number | null | undefined): KategoriUkuran {
-  if (tinggiCm == null || !Number.isFinite(Number(tinggiCm))) return "BELUM_UKUR";
-  const t = Number(tinggiCm);
-  if (t < 150) return "KECIL";
-  if (t <= 400) return "SEDANG";
+export function klasifikasiUkuran(tinggiM: number | null | undefined): KategoriUkuran {
+  if (tinggiM == null || !Number.isFinite(Number(tinggiM))) return "BELUM_UKUR";
+  const t = Number(tinggiM);
+  if (t < 1.5) return "KECIL";
+  if (t <= 4) return "SEDANG";
   return "BESAR";
 }
 

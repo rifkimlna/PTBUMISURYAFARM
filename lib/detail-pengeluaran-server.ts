@@ -124,7 +124,7 @@ export async function getDetailPengeluaranSnapshot(
   const dalam = { gte: start, lte: end };
   const num = (v: unknown) => Math.round(Number(v ?? 0));
 
-  const [biayaList, kasKeluar, asetKasIds, biayaKasIds, akunDb] = await Promise.all([
+  const [biayaList, kasKeluar, asetKasIds, biayaKasIds, akunDb, fakturItems] = await Promise.all([
     prisma.biaya.findMany({
       where: { tanggal: dalam },
       select: {
@@ -157,6 +157,13 @@ export async function getDetailPengeluaranSnapshot(
     prisma.akunCOA.findMany({
       where: { isActive: true },
       select: { kode: true, nama: true, golongan: true },
+    }),
+    prisma.fakturPembelianItem.findMany({
+      where: {
+        faktur: { tanggal: dalam },
+        kodeAkun: { startsWith: "5" },
+      },
+      select: { jumlah: true },
     }),
   ]);
 
@@ -232,11 +239,17 @@ export async function getDetailPengeluaranSnapshot(
   const grandTotal = kategori.reduce((s, k) => s + k.subtotal, 0);
   const jumlahTransaksi = kategori.reduce((s, k) => s + k.baris.length, 0);
 
+  const bebanFaktur = fakturItems.reduce((s, i) => s + num(i.jumlah), 0);
+  const totalBebanLabaRugi = grandTotal + bebanFaktur;
+
   if (kategoriMap.has("(tanpa kode)")) {
     catatan.push("Ada pengeluaran tanpa mapping COA — disajikan sebagai kelompok “(tanpa kode)”.");
   }
+  catatan.push("Laporan ini menampilkan rincian pengeluaran biaya/kas yang tercatat. Bukan seluruh beban akuntansi.");
   catatan.push("Pelunasan hutang usaha (kas bertagihan), pembelian persediaan, dan akuisisi aset tetap tidak termasuk pengeluaran di laporan ini.");
   catatan.push("Satu pengeluaran dihitung tepat satu kali (tanpa transaksi ganda).");
+  catatan.push(`Rekonsiliasi ke Laba Rugi: Total biaya dalam laporan Rp ${grandTotal.toLocaleString("id-ID")}, beban faktur pembelian belum tercakup Rp ${bebanFaktur.toLocaleString("id-ID")}, total beban sesuai Laba Rugi Rp ${totalBebanLabaRugi.toLocaleString("id-ID")}.`);
+  catatan.push("Beban faktur pembelian diakui akrual pada tanggal faktur dan tercermin di Laba Rugi, namun tidak termasuk dalam rincian pengeluaran kas/biaya ini.");
 
   return {
     periode,

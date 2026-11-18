@@ -25,6 +25,7 @@
 import { prisma } from "@/lib/prisma";
 import { kodeAkunByNama } from "@/lib/coa";
 import { AKUN_PENDAPATAN_BY_JENIS } from "@/lib/penjualan-server";
+import { getLabaRugi } from "@/lib/laba-rugi-common";
 import type {
   LabaRugiBaris,
   LabaRugiKelompok,
@@ -158,7 +159,7 @@ export async function getLabaRugiSnapshot(
   const dalam = { gte: start, lte: end };
   const num = (v: unknown) => Math.round(Number(v ?? 0));
 
-  const [penagihan, kasMasuk, stokKeluar, faktur, biayaList, kasKeluar, asetKasIds, asetTagihanIds, biayaKasIds, hutangLepas, akunDb] =
+  const [penagihan, kasMasuk, stokKeluar, stokMasuk, faktur, biayaList, kasKeluar, asetKasIds, asetTagihanIds, biayaKasIds, hutangLepas, akunDb, asetLepas] =
     await Promise.all([
       prisma.dokumenPenjualan.findMany({
         where: { tipe: "PENAGIHAN", tanggal: dalam },
@@ -176,15 +177,26 @@ export async function getLabaRugiSnapshot(
         where: { jenis: "KELUAR", tanggal: dalam },
         select: {
           jumlah: true,
-          barang: { select: { hargaSatuan: true, hargaBeli: true } },
+          barangId: true,
+          barang: { select: { hargaSatuan: true, hargaBeli: true, hargaRataRataManual: true } },
         },
+      }),
+      prisma.riwayatStok.findMany({
+        where: { jenis: "MASUK", tanggal: { lte: end } },
+        select: { barangId: true, jumlah: true, nilaiPerSatuan: true },
       }),
       prisma.fakturPembelian.findMany({
         where: { tanggal: dalam },
         select: { items: { select: { kuantitas: true, harga: true, diskonPersen: true } } },
       }),
       prisma.biaya.findMany({
-        where: { tanggal: dalam },
+        // Biaya tunai selalu punya transaksiKasId dan biaya hutang punya
+        // tagihanId. Baris dengan keduanya null adalah sisa data yatim
+        // (kasnya sudah dihapus via ON DELETE SET NULL) -> jangan dihitung.
+        where: {
+          tanggal: dalam,
+          OR: [{ transaksiKasId: { not: null } }, { tagihanId: { not: null } }],
+        },
         select: { kodeAkun: true, kategori: true, jumlah: true },
       }),
       prisma.transaksiKas.findMany({
@@ -201,6 +213,13 @@ export async function getLabaRugiSnapshot(
       prisma.akunCOA.findMany({
         where: { isActive: true },
         select: { kode: true, nama: true, golongan: true, kelompok: true },
+      }),
+      prisma.aset.findMany({
+        where: {
+          OR: [{ statusAset: "DIJUAL" }, { statusAset: "DILEPAS" }],
+          tanggalLepas: dalam,
+        },
+        select: { untungRugi: true },
       }),
     ]);
 
@@ -220,14 +239,14 @@ export async function getLabaRugiSnapshot(
   const golOf = (kode: string) => coa.get(kode)?.golongan ?? "";
   // Resolve kode sistem dari NAMA akun (tahan terhadap penomoran ulang COA).
   const KODE_TERIMA_PIUTANG = kodeByNama.get("penerimaan piutang usaha") ?? "4105";
-  const KODE_LUNAS_HUTANG = kodeByNama.get("pelunasan hutang usaha") ?? "5501";
+  const KODE_LUNAS_HUTANG = kodeByNama.get("pelunasan hutang usaha");
   const KODE_PENDAPATAN: Record<string, string> = {
     HASIL_KEBUN: kodeByNama.get("pendapatan penjualan hasil kebun") ?? AKUN_PENDAPATAN_BY_JENIS.HASIL_KEBUN,
     TERNAK: kodeByNama.get("pendapatan penjualan ternak (ayam)") ?? AKUN_PENDAPATAN_BY_JENIS.TERNAK,
     LAINNYA: kodeByNama.get("pendapatan lain-lain") ?? AKUN_PENDAPATAN_BY_JENIS.LAINNYA,
   };
 
-  const catatan: string[] = [];
+  let catatan: string[] = [];
   const tambah = (map: Map<string, { nama: string; nilai: number }>, kode: string, nama: string, nilai: number) => {
     const cur = map.get(kode) ?? { nama, nilai: 0 };
     cur.nilai += nilai;
@@ -248,7 +267,17 @@ export async function getLabaRugiSnapshot(
 
   const pendapatanLainMap = new Map<string, { nama: string; nilai: number }>();
   let piutangTertagih = 0;
+  // Tambahkan untung/rugi pelepasan aset ke Pendapatan Lainnya
+  let untungRugiAset = 0;
+  for (const a of asetLepas) {
+    untungRugiAset += Number(a.untungRugi ?? 0);
+  }
+  if (untungRugiAset !== 0) {
+    tambah(pendapatanLainMap, "4109", "Lain-lain - Untung/Rugi Pelepasan Aset", untungRugiAset);
+  }
   for (const k of kasMasuk) {
+    // Hindari double counting penjualan aset yang sudah diakui via untung/rugi
+    if (k.kategori?.includes("Penjualan Aset Tetap")) continue;
     const kode = kodeOf(k.kodeAkun, "PEMASUKAN", k.kategori);
     const nilai = num(k.jumlah);
     // Setoran modal 31xx bukan pendapatan — dikecualikan (masuk Perubahan Modal).
@@ -267,15 +296,34 @@ export async function getLabaRugiSnapshot(
   const penjualan = kelompok("Pendapatan dari Penjualan", penjualanMap);
   const returPenjualan = 0;
   catatan.push("Retur penjualan disajikan Rp 0 karena belum ada pencatatan retur di sistem.");
-  const totalPendapatan = penjualan.total - diskonPenjualan - returPenjualan;
+  let totalPendapatan = penjualan.total - diskonPenjualan - returPenjualan;
 
-  // --- HPP ---
+  // --- HPP berdasarkan biaya perolehan dari RiwayatStok MASUK ---
+  const avgCostMap = new Map<string, { qty: number; nilai: number }>();
+  for (const m of stokMasuk) {
+    if (!m.nilaiPerSatuan) continue;
+    const key = m.barangId;
+    const qty = Number(m.jumlah);
+    const nilai = qty * Number(m.nilaiPerSatuan);
+    const cur = avgCostMap.get(key) ?? { qty: 0, nilai: 0 };
+    cur.qty += qty;
+    cur.nilai += nilai;
+    avgCostMap.set(key, cur);
+  }
   let hppNilai = 0;
   let hppItem = 0;
   for (const r of stokKeluar) {
-    const harga = Number(r.barang?.hargaSatuan ?? r.barang?.hargaBeli ?? 0);
-    hppNilai += Math.round(Number(r.jumlah) * harga);
-    hppItem += Number(r.jumlah);
+    const key = r.barangId;
+    const qty = Number(r.jumlah);
+    hppItem += qty;
+    const avg = avgCostMap.get(key);
+    let harga = 0;
+    if (avg && avg.qty > 0) {
+      harga = avg.nilai / avg.qty;
+    } else {
+      harga = Number(r.barang?.hargaRataRataManual ?? r.barang?.hargaSatuan ?? r.barang?.hargaBeli ?? 0);
+    }
+    hppNilai += Math.round(qty * harga);
   }
   let diskonPembelian = 0;
   for (const f of faktur) {
@@ -284,14 +332,14 @@ export async function getLabaRugiSnapshot(
     }
   }
   diskonPembelian = Math.round(diskonPembelian);
-  const hpp = kelompok(
+  let hpp = kelompok(
     "Harga Pokok Penjualan",
     new Map(hppNilai !== 0 ? [["HPP", { nama: "Harga Pokok Penjualan", nilai: hppNilai }]] : [])
   );
   if (hppItem > 0) catatan.push(`HPP dihitung dari ${hppItem} satuan barang keluar x harga satuan.`);
   else catatan.push("Belum ada barang keluar pada periode ini sehingga HPP Rp 0.");
-  const totalHpp = hpp.total - diskonPembelian;
-  const labaKotor = totalPendapatan - totalHpp;
+  let totalHpp = hpp.total - diskonPembelian;
+  let labaKotor = totalPendapatan - totalHpp;
 
   // --- Biaya (sekali hitung per kejadian) ---
   const asetKas = new Set(asetKasIds.map((a) => a.transaksiKasId));
@@ -343,30 +391,69 @@ export async function getLabaRugiSnapshot(
     );
   }
 
-  const biayaOperasional = kelompok("Biaya Operasional", operasionalMap);
+  let biayaOperasional = kelompok("Biaya Operasional", operasionalMap);
   if (biayaOperasional.baris.length === 0) catatan.push("Belum ada biaya operasional pada periode ini.");
-  const totalBiayaOperasional = biayaOperasional.total;
-  const operasionalBersih = labaKotor - totalBiayaOperasional;
+  let totalBiayaOperasional = biayaOperasional.total;
+  let operasionalBersih = labaKotor - totalBiayaOperasional;
 
-  const pendapatanLainnya = kelompok("Pendapatan Lainnya", pendapatanLainMap);
+  let pendapatanLainnya = kelompok("Pendapatan Lainnya", pendapatanLainMap);
   if (pendapatanLainnya.baris.length === 0) catatan.push("Belum ada pendapatan lainnya pada periode ini.");
   if (piutangTertagih > 0) {
     catatan.push(
       `Penerimaan piutang Rp ${piutangTertagih.toLocaleString("id-ID")} tidak dihitung sebagai pendapatan baru (sudah diakui saat penagihan).`
     );
   }
-  const totalPendapatanLainnya = pendapatanLainnya.total;
+  let totalPendapatanLainnya = pendapatanLainnya.total;
 
   const biayaLainnya = kelompok("Biaya Lainnya", lainnyaMap);
   if (biayaLainnya.baris.length === 0) catatan.push("Belum ada biaya lainnya pada periode ini.");
-  else if (lainnyaMap.has(KODE_LUNAS_HUTANG)) {
-    catatan.push(`Akun Pelunasan Hutang Usaha (${KODE_LUNAS_HUTANG}) disajikan di Biaya Lainnya sebagai pelunasan kewajiban.`);
-  }
   const totalBiayaLainnya = biayaLainnya.total;
 
   const labaBersih = operasionalBersih + totalPendapatanLainnya - totalBiayaLainnya;
   const totalKomprehensif = labaBersih;
   catatan.push("Sistem belum mencatat pendapatan komprehensif lain, sehingga total komprehensif sama dengan laba bersih.");
+
+  // Samakan dengan perhitungan Neraca via fungsi bersama
+  const { totalPendapatan: tpShared, totalHpp: hppShared, totalBeban: bebanShared, labaBersih: labaShared, pendapatanDetails, bebanDetails, missingHppItems = [] } = await getLabaRugi(start, end) as any;
+  // Override totals agar sama dengan Neraca
+  totalPendapatan = tpShared;
+  totalHpp = hppShared;
+  labaKotor = totalPendapatan - totalHpp;
+  totalBiayaOperasional = bebanShared;
+  operasionalBersih = labaKotor - totalBiayaOperasional;
+  const labaBersihFinal = labaShared;
+
+  // Rapikan rincian agar sejalan dengan getLabaRugi
+  // HPP dikosongkan
+  hpp = kelompok("Harga Pokok Penjualan", new Map());
+  // Pendapatan Lainnya dikosongkan
+  pendapatanLainMap.clear();
+  pendapatanLainnya = kelompok("Pendapatan Lainnya", pendapatanLainMap);
+  totalPendapatanLainnya = 0;
+  // Biaya Operasional dibangun dari bebanDetails
+  const biayaOperasionalMap = new Map<string, { nama: string; nilai: number }>();
+  for (const [key, v] of bebanDetails.entries()) {
+    biayaOperasionalMap.set(key, { nama: v.nama, nilai: v.nilai });
+  }
+  biayaOperasional = kelompok("Biaya Operasional", biayaOperasionalMap);
+  totalBiayaOperasional = biayaOperasional.total;
+  operasionalBersih = labaKotor - totalBiayaOperasional;
+  // Hapus catatan HPP lama
+  catatan = catatan.filter(c => !c.includes("HPP dihitung dari"));
+
+  catatan.push("Dikecualikan: penjualan aset (belum ada nilai buku).");
+  // Catatan HPP hanya bila ada barang terjual tanpa nilai perolehan
+  if (missingHppItems && missingHppItems.length > 0) {
+    const uniq = new Map<string, number>();
+    for (const it of missingHppItems) {
+      const key = it.nama || it.barangId;
+      uniq.set(key, (uniq.get(key) ?? 0) + it.qty);
+    }
+    for (const [nama, qty] of uniq.entries()) {
+      catatan.push(`HPP belum dapat dihitung untuk ${nama}, qty ${qty}, belum ada nilai perolehan.`);
+    }
+  }
+  catatan.push(`Laba Rugi disamakan dengan Laba Periode Berjalan Neraca: ${labaBersihFinal.toLocaleString("id-ID")}`);
 
   return {
     periode,
@@ -388,8 +475,8 @@ export async function getLabaRugiSnapshot(
     totalPendapatanLainnya,
     biayaLainnya,
     totalBiayaLainnya,
-    labaBersih,
-    totalKomprehensif,
+    labaBersih: labaBersihFinal,
+    totalKomprehensif: labaBersihFinal,
     catatan: [...new Set(catatan)],
   };
 }
